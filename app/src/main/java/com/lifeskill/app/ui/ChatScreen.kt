@@ -53,15 +53,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val tutor = scope.mode == ChatMode.TUTOR
     val pending = history.lastOrNull()?.takeIf { it.speaker == Speaker.USER }
     var draft by remember(scope) { mutableStateOf("") }
+    val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     val footerVisible = status.working || pending != null || status.error != null
-
-    fun send(text: String) {
-        keyboard?.hide()
-        chat.send(text)
-        draft = ""
-    }
 
     LaunchedEffect(history.lastOrNull()?.id, footerVisible) {
         if (history.isNotEmpty()) {
@@ -92,7 +87,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     )
                     if (tutor && !status.working) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Action("开始学习", Glyph.SPARK, { send("请引导我开始学习这个技能点。") })
+                            Action("开始学习", Glyph.SPARK, {
+                                keyboard?.hide()
+                                chat.send("请引导我开始学习这个技能点。")
+                            })
                         }
                     }
                 }
@@ -125,15 +123,23 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { if (it.length <= ConversationRepository.INPUT_LIMIT) draft = it },
+                    onValueChange = { draft = it },
                     modifier = Modifier.weight(1f).testTag("chat-input"),
                     label = { Text(if (tutor) "输入学习问题" else "描述你想学什么") },
                     minLines = 1, maxLines = 4, shape = RoundedCornerShape(13.dp),
                     enabled = !status.working && pending == null,
+                    isError = exceedsLimit,
+                    supportingText = if (exceedsLimit) {
+                        { Text("每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符") }
+                    } else null,
                 )
                 GlyphButton(
-                    Glyph.SEND, "发送", { send(draft) },
-                    tint = Gold, enabled = draft.isNotBlank() && !status.working && pending == null,
+                    Glyph.SEND, "发送", {
+                        keyboard?.hide()
+                        chat.send(draft)
+                        draft = ""
+                    },
+                    tint = Gold, enabled = draft.isNotBlank() && !exceedsLimit && !status.working && pending == null,
                 )
             }
         }

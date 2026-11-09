@@ -56,7 +56,7 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
     }
 }
 
-class RuleViolation(message: String) : IllegalArgumentException(message)
+open class RuleViolation(message: String) : IllegalArgumentException(message)
 
 object LibraryRules {
     const val NAME_LIMIT = 48

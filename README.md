@@ -4,7 +4,7 @@ LifeSkill 是一款原生 Android 技能树应用。按学习方向组织技能�
 
 ## 安装与使用
 
-1. 安装 `release/LifeSkill-0.1.0-debug.apk`。支持 Android 8.0（API 26）及以上。
+1. 安装 `release/LifeSkill-0.1.1-debug.apk`。支持 Android 8.0（API 26）及以上。
 2. 从首页选择方向，新增技能树与技能点。前置连线用于提示学习顺序，可直接打开任意技能点。
 3. 使用 AI 前，打开「模型设置」，选择 DeepSeek 或 MiniMax，填入对应的 API Key。也可选「自定义」，填写 OpenAI 兼容服务的 HTTPS Base URL、模型名和 Key。「测试连接」验证当前表单，「保存」将其设为当前模型。
 4. 从首页、方向或技能树进入 AI 生成。AI 会在目标明确后直接新增内容，结果消息可跳转到对应项目。

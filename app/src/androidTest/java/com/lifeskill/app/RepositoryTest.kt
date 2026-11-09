@@ -1,10 +1,18 @@
 package com.lifeskill.app
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.lifeskill.app.ai.ModelSettings
+import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.LocalSettings
+import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
@@ -17,6 +25,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -189,6 +198,120 @@ class RepositoryTest {
             context.deleteDatabase(file)
         }
         Unit
+    }
+
+    @Test fun invalidInputAndMalformedReplyDoNotWriteLibraryOrLoseTheDraft() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val original = container.library.snapshot()
+        val atLimit = "测".repeat(ConversationRepository.INPUT_LIMIT)
+        for (input in listOf("", "　\n ", atLimit + "试")) {
+            expectRule { container.conversations.send(scope, input) }
+        }
+        assertTrue(container.conversations.watch(scope).first().isEmpty())
+
+        ai.enqueue { messages ->
+            assertEquals(atLimit, messages.last().text)
+            """{"kind":"create","reply":"返回截断"""
+        }
+        expectRule { container.conversations.send(scope, " $atLimit ") }
+        assertEquals(original, container.library.snapshot())
+        val pending = container.conversations.watch(scope).first().single()
+        assertEquals(atLimit, pending.text)
+        container.conversations.discardPending(scope, pending.id)
+        ai.reply("""{"kind":"message","reply":"可以从小练习开始。"}""")
+        container.conversations.send(scope, "请先给建议")
+        assertEquals(listOf("请先给建议", "可以从小练习开始。"), container.conversations.watch(scope).first().map { it.text })
+        assertEquals(original, container.library.snapshot())
+    }
+
+    @Test fun overLimitGenerationRepairsOnceBeforeWriting() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "边界数量")
+        val scope = ChatScope(ChatMode.GENERATE, tree.id)
+        val request = "新增 30 个独立技能点"
+        val before = container.library.snapshot()
+        ai.reply(skillBatch(31))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("数组数量超过上限"))
+            assertEquals(request, messages.last().text)
+            assertEquals(before, container.library.snapshot())
+            skillBatch(30)
+        }
+        container.conversations.send(scope, request)
+        assertEquals(30, container.library.snapshot().childrenOf(tree.id).size)
+        assertEquals(TurnKind.CREATED, container.conversations.watch(scope).first().last().kind)
+
+        val after = container.library.snapshot()
+        ai.reply(skillBatch(31))
+        ai.reply(skillBatch(31))
+        expectRule { container.conversations.send(scope, "再新增一批") }
+        assertEquals(after, container.library.snapshot())
+        assertEquals("再新增一批", container.conversations.watch(scope).first().last().text)
+    }
+
+    @Test fun savedModelSettingsKeepKeysSeparateAndEncrypted() = runBlocking {
+        val file = "verification-${UUID.randomUUID()}"
+        val isolated = object : ContextWrapper(context) {
+            override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+                baseContext.getSharedPreferences(file, mode)
+        }
+        val preset = ModelSettings(Provider.MINIMAX, apiKey = "test-preset-key")
+        val custom = ModelSettings(Provider.CUSTOM, "https://example.com/v1", "test-model", "test-custom-key")
+        try {
+            val first = LocalSettings(isolated, SecretBox("lifeskill-tests"))
+            first.save(preset)
+            first.save(custom)
+            val reopened = LocalSettings(isolated, SecretBox("lifeskill-tests"))
+            assertEquals(custom, reopened.active())
+            assertEquals(preset, reopened.load(Provider.MINIMAX))
+            expectRule { reopened.save(custom.copy(baseUrl = "http://example.com")) }
+            assertEquals(custom, reopened.active())
+            val stored = context.getSharedPreferences(file, Context.MODE_PRIVATE).all.values
+            assertFalse(stored.any { it == preset.apiKey || it == custom.apiKey })
+            reopened.save(custom.copy(apiKey = ""))
+            assertEquals("", reopened.active().apiKey)
+            assertEquals(preset, reopened.load(Provider.MINIMAX))
+        } finally {
+            context.deleteSharedPreferences(file)
+        }
+        Unit
+    }
+
+    private fun skillBatch(count: Int): String {
+        val skills = JSONArray().apply {
+            repeat(count) { index ->
+                put(JSONObject().put("ref", "skill_$index").put("name", "技能$index")
+                    .put("goal", "能说明概念").put("requires", JSONArray()))
+            }
+        }
+        return JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills).toString()
+    }
+
+    @Test fun assessmentCannotOverwriteManualProgressChangedWhileWaiting() = runBlocking {
+        withTimeout(10_000) {
+            val direction = container.library.snapshot().childrenOf(null).first()
+            val tree = add(direction, EntryKind.TREE, "进度优先")
+            val skill = add(tree, EntryKind.SKILL, "点亮状态")
+            val scope = ChatScope(ChatMode.TUTOR, skill.id)
+            ai.reply("""{"kind":"exercise","reply":"你如何核对结果？"}""")
+            container.conversations.send(scope, "", check = true)
+            val exercise = container.conversations.watch(scope).first().last()
+            val waiting = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            ai.enqueue {
+                waiting.complete(Unit)
+                release.await()
+                verdict("passed", "答对了。", exercise.id)
+            }
+            val answer = async { container.conversations.send(scope, "用源记录对照。") }
+            waiting.await()
+            container.library.setLit(skill.id, true)
+            container.library.setLit(skill.id, false)
+            release.complete(Unit)
+            answer.await()
+            assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+            assertEquals("答对了。", container.conversations.watch(scope).first().last().text)
+        }
     }
 
     private suspend fun <T> withDiskDatabase(file: String, action: suspend (LifeSkillDatabase) -> T): T {

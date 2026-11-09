@@ -39,6 +39,8 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     var goal by remember(initial) { mutableStateOf(initial.goal) }
     var selected by remember(initial) { mutableStateOf(initial.prerequisites) }
     var showPrerequisites by remember(initial) { mutableStateOf(initial.prerequisites.isNotEmpty()) }
+    val nameTooLong = name.trim().length > LibraryRules.NAME_LIMIT
+    val goalTooLong = goal.trim().length > LibraryRules.GOAL_LIMIT
 
     AlertDialog(
         onDismissRequest = app::closeEditor,
@@ -46,13 +48,17 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 OutlinedTextField(
-                    name, { if (it.length <= LibraryRules.NAME_LIMIT) name = it }, Modifier.fillMaxWidth(),
+                    name, { name = it }, Modifier.fillMaxWidth(),
                     label = { Text("名称") }, singleLine = true, enabled = !editor.saving,
+                    isError = nameTooLong,
+                    supportingText = if (nameTooLong) { { Text("名称最多 ${LibraryRules.NAME_LIMIT} 个字符") } } else null,
                 )
                 if (skill) {
                     OutlinedTextField(
-                        goal, { if (it.length <= LibraryRules.GOAL_LIMIT) goal = it }, Modifier.fillMaxWidth(),
+                        goal, { goal = it }, Modifier.fillMaxWidth(),
                         label = { Text("学习目标") }, minLines = 2, maxLines = 5, enabled = !editor.saving,
+                        isError = goalTooLong,
+                        supportingText = if (goalTooLong) { { Text("学习目标最多 ${LibraryRules.GOAL_LIMIT} 个字符") } } else null,
                     )
                     if (siblings.isNotEmpty()) {
                         Row(
@@ -91,7 +97,8 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
         confirmButton = {
             TextButton(
                 onClick = { app.saveEntry(initial.copy(name = name, goal = goal, prerequisites = selected)) },
-                enabled = !editor.saving && name.isNotBlank() && (!skill || goal.isNotBlank()),
+                enabled = !editor.saving && name.isNotBlank() && !nameTooLong &&
+                    (!skill || goal.isNotBlank() && !goalTooLong),
             ) { Text(if (editor.saving) "正在保存" else "保存") }
         },
         dismissButton = { TextButton(onClick = app::closeEditor, enabled = !editor.saving) { Text("取消") } },

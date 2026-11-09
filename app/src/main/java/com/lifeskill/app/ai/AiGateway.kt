@@ -17,14 +17,16 @@ internal interface AiGateway {
     suspend fun complete(settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean): String
 }
 
-internal class OpenAiGateway : AiGateway {
+internal class OpenAiGateway(
+    private val openConnection: (URI) -> HttpsURLConnection = { it.toURL().openConnection() as HttpsURLConnection },
+) : AiGateway {
     override suspend fun complete(
         settings: ModelSettings,
         messages: List<ModelMessage>,
         structured: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val valid = settings.validated()
-        val connection = URI("${valid.baseUrl}/chat/completions").toURL().openConnection() as HttpsURLConnection
+        val connection = openConnection(URI("${valid.baseUrl}/chat/completions"))
         try {
             connection.requestMethod = "POST"
             connection.instanceFollowRedirects = false
@@ -87,23 +89,36 @@ internal class OpenAiGateway : AiGateway {
         }
 
     private fun readCompletion(raw: String): String {
-        val response = runCatching { JSONObject(raw) }.getOrNull()
+        val response = AiJson.objectOrNull(raw)
             ?: throw RuleViolation("模型服务返回的格式有误，请重试。")
-        when (response.optJSONObject("base_resp")?.optInt("status_code")) {
-            null, 0 -> Unit
-            1002 -> throw httpError(429)
-            1004 -> throw httpError(401)
-            1008 -> throw RuleViolation("模型账户余额不足，请检查服务商账户。")
-            else -> throw RuleViolation("模型服务暂时无法处理请求，请检查模型配置后重试。")
-        }
+        checkMiniMaxStatus(response.optJSONObject("base_resp")?.optInt("status_code"))
         val choice = response.optJSONArray("choices")?.optJSONObject(0)
-        if (choice?.optString("finish_reason") == "length") {
-            throw RuleViolation("模型回复未完成，请缩小本次请求后重试。")
+        when (choice?.optString("finish_reason")) {
+            "length" -> throw RuleViolation("模型回复未完成，请缩小本次请求后重试。")
+            "content_filter" -> throw RuleViolation("模型服务拦截了这次回复，请调整输入后重试。")
+            "tool_calls", "function_call" -> throw RuleViolation("模型返回了工具调用，请检查模型设置后重试。")
         }
         val text = (choice?.optJSONObject("message")?.opt("content") as? String)
             ?.replace(Regex("(?is)^\\s*(?:<think>.*?</think>\\s*)+"), "")
             ?.trim()
         return text?.takeIf(String::isNotEmpty) ?: throw RuleViolation("模型没有返回文字，请检查配置后重试。")
+    }
+
+    private fun checkMiniMaxStatus(status: Int?) {
+        when (status) {
+            null, 0 -> return
+            1001, 2066 -> throw httpError(408)
+            1002, 2045, 2046, 2047, 2062 -> throw httpError(429)
+            1004, 2049 -> throw httpError(401)
+            1008 -> throw httpError(402)
+            1026, 1027 -> throw RuleViolation("模型服务拦截了这次请求，请调整输入后重试。")
+            1039 -> throw RuleViolation("请求或回复超过模型的长度限制，请缩小本次请求。")
+            1042 -> throw RuleViolation("输入可能含有过多不可见字符，请清理后重试。")
+            2022, 2061, 2068, 2069 -> throw RuleViolation("当前账户无法使用此模型，请检查模型名和权限。")
+            2053, 2056, 2067 -> throw RuleViolation("MiniMax 套餐额度或积分不足，请检查账户。")
+            1000, 1024, 1033, 2064 -> throw httpError(503)
+            else -> throw RuleViolation("模型服务暂时无法处理请求，请检查模型配置后重试。")
+        }
     }
 
     private fun httpError(status: Int) = RuleViolation(when (status) {

@@ -2,18 +2,27 @@ package com.lifeskill.app
 
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.click
 import androidx.core.view.ViewCompat
@@ -36,6 +45,18 @@ class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
 
+    @Test fun chatKeepsComposerVisibleWithKeyboardAndBackClosesItFirst() {
+        await("AI 生成技能树")
+        ui.onNodeWithText("AI 生成技能树").performClick()
+        await("AI 生成")
+        ui.onNodeWithTag("chat-input").performTouchInput { click() }
+        ui.waitUntil(8_000) { imeVisible() }
+        ui.onNodeWithContentDescription("发送").assertIsDisplayed()
+        pressBack()
+        ui.waitUntil(8_000) { !imeVisible() }
+        ui.onNodeWithText("AI 生成").assertIsDisplayed()
+    }
+
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
         await("本职工作")
         ui.onNodeWithContentDescription("模型设置").performClick()
@@ -51,7 +72,11 @@ class MvpFlowTest {
         pressBack()
         await("本职工作")
         ui.onNodeWithText("新增方向").performClick()
-        fill("名称", "模拟器验证")
+        val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
+        nameInput.performTextInput("测".repeat(49))
+        await("名称最多 48 个字符")
+        ui.onNodeWithText("保存").assertIsNotEnabled()
+        nameInput.performTextReplacement("模拟器验证")
         ui.onNodeWithText("保存").performClick()
         await("模拟器验证")
         ui.onNodeWithText("模拟器验证").performClick()
@@ -68,7 +93,37 @@ class MvpFlowTest {
         ui.onNodeWithContentDescription("手动技能点").performTouchInput { click() }
         ui.onNodeWithText("手动点亮").performClick()
         await("已点亮 · 手动")
+        ui.onNodeWithText("取消点亮").performClick()
+        await("待学习")
+        ui.onNodeWithText("手动点亮").performClick()
+        await("已点亮 · 手动")
+        ui.onNodeWithContentDescription("更多操作").performClick()
+        ui.onNodeWithText("编辑技能点").performClick()
+        ui.onNode(hasSetTextAction() and hasText("名称")).performTextReplacement("已编辑技能点")
+        ui.onNodeWithText("保存").performClick()
+        await("已编辑技能点")
         pressBack()
+        await("1 / 1 已点亮")
+        ui.onNodeWithText("新增技能点").performClick()
+        fill("名称", "练习依赖")
+        val goalInput = ui.onNode(hasSetTextAction() and hasText("学习目标"))
+        goalInput.performTextInput("练".repeat(321))
+        await("学习目标最多 320 个字符")
+        ui.onNodeWithText("保存").assertIsNotEnabled()
+        goalInput.performTextReplacement("使用前置概念完成一项练习")
+        ui.onNodeWithText("前置节点").performClick()
+        ui.onNode(hasText("已编辑技能点") and isToggleable()).performClick()
+        ui.onNodeWithText("保存").performClick()
+        await("1 / 2 已点亮")
+        ui.onNodeWithContentDescription("练习依赖").performTouchInput { click() }
+        await("建议先学")
+        ui.onNodeWithContentDescription("更多操作").performClick()
+        ui.onNodeWithText("删除技能点").performClick()
+        ui.onNodeWithText("取消").performClick()
+        await("建议先学")
+        ui.onNodeWithContentDescription("更多操作").performClick()
+        ui.onNodeWithText("删除技能点").performClick()
+        ui.onNodeWithText("删除").performClick()
         await("1 / 1 已点亮")
         pressBack()
         await("新增技能树")
@@ -79,13 +134,12 @@ class MvpFlowTest {
         fixture.ai.reply("""{"kind":"message","reply":"你想用什么主题？"}""")
         fixture.ai.reply(RepositoryTest.CREATED)
         ui.onNodeWithText("AI 生成技能树").performClick()
-        ui.onNodeWithTag("chat-input").performClick()
-        ui.waitUntil(8_000) { imeVisible() }
-        ui.onNodeWithContentDescription("发送").assertIsDisplayed()
-        pressBack()
-        ui.waitUntil(8_000) { !imeVisible() }
-        ui.onNodeWithText("AI 生成").assertIsDisplayed()
+        await("AI 生成")
+        ui.onNodeWithTag("chat-input").performTextInput("测".repeat(4001))
+        await("每条消息最多 4000 个字符")
+        ui.onNodeWithContentDescription("发送").assertIsNotEnabled()
         send("我想搭一个新技能树")
+        await("我想搭一个新技能树")
         await("模型服务请求过于频繁，请稍后重试。")
         ui.onNodeWithText("重试").performClick()
         await("你想用什么主题？")
@@ -104,10 +158,13 @@ class MvpFlowTest {
         assertTrue(moved.center.x > before.center.x + 10)
         assertTrue(moved.center.y > before.center.y + 10)
         ui.onNodeWithContentDescription("重置地图视图").performClick()
+        val pivot = root.fetchSemanticsNode().boundsInRoot.center - map.fetchSemanticsNode().boundsInRoot.topLeft
         map.performTouchInput {
+            val inner = Offset(width * .06f, 0f)
+            val outer = Offset(width * .10f, 0f)
             pinch(
-                Offset(width * .42f, height * .17f), Offset(width * .26f, height * .17f),
-                Offset(width * .58f, height * .17f), Offset(width * .74f, height * .17f),
+                pivot - inner, pivot - outer,
+                pivot + inner, pivot + outer,
             )
         }
         assertTrue(root.fetchSemanticsNode().boundsInRoot.width > before.width)
@@ -134,8 +191,9 @@ class MvpFlowTest {
     }
 
     private fun send(text: String) {
-        ui.onNodeWithTag("chat-input").performTextInput(text)
-        ui.onNodeWithContentDescription("发送").performClick()
+        ui.onNodeWithTag("chat-input").performTextReplacement(text)
+        // 文本测试会唤起键盘。用发送语义避免把按键测试和键盘动画的坐标变化混在一起。
+        ui.onNodeWithContentDescription("发送").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
     }
 
     private fun fill(label: String, value: String) {
@@ -143,7 +201,11 @@ class MvpFlowTest {
     }
 
     private fun await(text: String, substring: Boolean = false) {
-        ui.waitUntil(8_000) { ui.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
+        try {
+            ui.waitUntil(8_000) { ui.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
+        } catch (error: ComposeTimeoutException) {
+            throw AssertionError("未显示「$text」\n${ui.onRoot().printToString(maxDepth = 6)}", error)
+        }
     }
 
     private fun pressBack() {

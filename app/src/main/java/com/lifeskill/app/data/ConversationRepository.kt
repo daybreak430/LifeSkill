@@ -3,6 +3,7 @@ package com.lifeskill.app.data
 import androidx.room.withTransaction
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.AiProtocol
+import com.lifeskill.app.ai.GenerationLimitExceeded
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.model.ChatMode
@@ -87,7 +88,25 @@ internal class ConversationRepository(
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
         val raw = gateway.complete(config, context.messages, structured = true)
+        try {
+            persistResponse(scope, requestId, context, raw)
+        } catch (error: GenerationLimitExceeded) {
+            // 首次回复未落库。仅对数量越界补做一次，保留原始请求与会话意图。
+            if (lastPending(scope)?.id != requestId) return
+            val system = context.messages.first()
+            val instruction = """
+                上一次回复的数组数量超过上限：${error.message}
+                请重新回答最后一条用户消息。按原请求和当前入口的上限核对每个数组的实际长度，使用连续编号的 ref，达到指定数量后结束。
+                若用户要的数量超过上限、要求预览或尚未确认，返回仅含 kind 和 reply 的 message，说明分批办法。
+            """.trimIndent()
+            val messages = listOf(system.copy(text = "${system.text}\n\n$instruction")) + context.messages.drop(1)
+            val corrected = gateway.complete(config, messages, structured = true)
+            persistResponse(scope, requestId, context, corrected)
+        }
+    }
 
+    private suspend fun persistResponse(scope: ChatScope, requestId: String, context: Request, raw: String) {
+        val replyId = "reply:$requestId"
         database.withTransaction {
             // 请求、回复标识固定。并发重试与取消都不能二次落库或复活已删除的内容。
             if (dao.turn(scope.id, replyId) != null || lastPending(scope)?.id != requestId) return@withTransaction
