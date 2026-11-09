@@ -1,0 +1,254 @@
+package com.lifeskill.app.ui
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.lifeskill.app.AppContainer
+import com.lifeskill.app.ai.ModelMessage
+import com.lifeskill.app.ai.ModelSettings
+import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.data.EntryEdit
+import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.Turn
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+internal enum class Page { HOME, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS }
+
+internal data class Route(val page: Page, val id: String? = null) {
+    fun encode() = "${page.name}:${id.orEmpty()}"
+
+    companion object {
+        fun decode(value: String) = Route(
+            Page.valueOf(value.substringBefore(':')), value.substringAfter(':').ifEmpty { null },
+        )
+        fun entry(entry: Entry) = Route(
+            when (entry.kind) {
+                EntryKind.DIRECTION -> Page.DIRECTION
+                EntryKind.TREE -> Page.TREE
+                EntryKind.SKILL -> Page.SKILL
+            },
+            entry.id,
+        )
+    }
+}
+
+internal data class Editor(val initial: EntryEdit, val saving: Boolean = false, val error: String? = null)
+
+internal class AppViewModel(private val container: AppContainer, private val state: SavedStateHandle) : ViewModel() {
+    private val routes = state.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
+    val route = routes.map { Route.decode(it.last()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Route.decode(routes.value.last()))
+    private val _library = MutableStateFlow<Library?>(null)
+    val library = _library.asStateFlow()
+    private val _editor = MutableStateFlow<Editor?>(null)
+    val editor = _editor.asStateFlow()
+    private val _delete = MutableStateFlow<Entry?>(null)
+    val deletion = _delete.asStateFlow()
+    private val _deleting = MutableStateFlow(false)
+    val deleting = _deleting.asStateFlow()
+    private val _notice = MutableStateFlow<String?>(null)
+    val notice = _notice.asStateFlow()
+    private val _loadError = MutableStateFlow<String?>(null)
+    val loadError = _loadError.asStateFlow()
+
+    init { load() }
+
+    fun load() {
+        _loadError.value = null
+        viewModelScope.launch {
+            try {
+                container.library.initialize()
+                container.library.library.collect {
+                    _library.value = it
+                    discardMissingRoutes(it)
+                }
+            } catch (error: Exception) {
+                _loadError.value = readable(error, "无法读取本机技能库。")
+            }
+        }
+    }
+
+    fun open(route: Route) {
+        val stack = routes.value
+        if (stack.last() != route.encode()) state["routes"] = ArrayList(stack + route.encode())
+    }
+
+    fun back() {
+        if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
+    }
+
+    private fun discardMissingRoutes(library: Library) {
+        val stack = routes.value
+        val valid = stack.filter { encoded -> Route.decode(encoded).id?.let { it in library.byId } ?: true }
+        if (valid != stack) state["routes"] = ArrayList(valid)
+    }
+
+    fun add(kind: EntryKind, parentId: String? = null) {
+        _editor.value = Editor(EntryEdit(null, parentId, kind, ""))
+    }
+
+    fun edit(entry: Entry) {
+        val requirements = library.value?.prerequisitesOf(entry.id).orEmpty()
+        _editor.value = Editor(EntryEdit(entry.id, entry.parentId, entry.kind, entry.name, entry.goal, requirements))
+    }
+
+    fun closeEditor() {
+        if (_editor.value?.saving != true) _editor.value = null
+    }
+
+    fun saveEntry(edit: EntryEdit) {
+        val editor = _editor.value?.takeUnless { it.saving } ?: return
+        _editor.value = editor.copy(saving = true, error = null)
+        viewModelScope.launch {
+            try {
+                container.library.save(edit)
+                _editor.value = null
+            } catch (error: Exception) {
+                _editor.value = editor.copy(error = readable(error, "保存失败，请重试。"))
+            }
+        }
+    }
+
+    fun confirmDelete(entry: Entry) {
+        _delete.value = entry
+    }
+
+    fun cancelDelete() {
+        if (!_deleting.value) _delete.value = null
+    }
+
+    fun deleteEntry() {
+        val entry = _delete.value?.takeUnless { _deleting.value } ?: return
+        _deleting.value = true
+        viewModelScope.launch {
+            try {
+                container.library.delete(entry.id)
+                _delete.value = null
+                _notice.value = "已删除${entry.kind.label}"
+            } catch (error: Exception) {
+                _notice.value = readable(error, "删除失败，请重试。")
+            } finally {
+                _deleting.value = false
+            }
+        }
+    }
+
+    fun setLit(entry: Entry, lit: Boolean) {
+        viewModelScope.launch {
+            try {
+                container.library.setLit(entry.id, lit)
+            } catch (error: Exception) {
+                _notice.value = readable(error, "技能状态更新失败，请重试。")
+            }
+        }
+    }
+
+    fun consumeNotice(text: String) {
+        if (_notice.value == text) _notice.value = null
+    }
+}
+
+internal data class ChatStatus(val working: Boolean = false, val error: String? = null)
+
+internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
+    private val repository = container.conversations
+    private val _status = MutableStateFlow(ChatStatus())
+    val status = _status.asStateFlow()
+    val history = repository.watch(scope)
+        .catch { error ->
+            if (error is CancellationException) throw error
+            _status.value = ChatStatus(error = "无法读取本机对话记录。")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun send(text: String, check: Boolean = false) = run { repository.send(scope, text, check) }
+    fun retry() = run { repository.retry(scope) }
+    fun discard(turn: Turn) = run { repository.discardPending(scope, turn.id) }
+
+    private fun run(action: suspend () -> Unit) {
+        if (_status.value.working) return
+        _status.value = ChatStatus(working = true)
+        viewModelScope.launch {
+            try {
+                action()
+                _status.value = ChatStatus()
+            } catch (error: Exception) {
+                _status.value = ChatStatus(error = readable(error, "本次请求失败，请重试。"))
+            }
+        }
+    }
+}
+
+internal data class SettingsStatus(
+    val config: ModelSettings? = null,
+    val working: Boolean = false,
+    val message: String? = null,
+    val error: Boolean = false,
+)
+
+internal class SettingsViewModel(private val container: AppContainer) : ViewModel() {
+    private val _status = MutableStateFlow(SettingsStatus())
+    val status = _status.asStateFlow()
+
+    fun load(provider: Provider? = null) {
+        run {
+            val config = withContext(Dispatchers.IO) {
+                if (provider == null) container.settings.active() else container.settings.load(provider)
+            }
+            SettingsStatus(config)
+        }
+    }
+
+    fun edit(config: ModelSettings) {
+        _status.value = _status.value.copy(config = config, message = null, error = false)
+    }
+
+    fun save() {
+        val config = _status.value.config ?: return
+        run {
+            withContext(Dispatchers.IO) { container.settings.save(config) }
+            SettingsStatus(config.validated(requireKey = false), message = "已保存为当前模型")
+        }
+    }
+
+    fun test() {
+        val config = _status.value.config ?: return
+        run {
+            val input = listOf(ModelMessage("user", "请简短回复「连接成功」。"))
+            container.gateway.complete(config.validated(), input, structured = false)
+            SettingsStatus(config, message = "连接成功")
+        }
+    }
+
+    private fun run(action: suspend () -> SettingsStatus) {
+        if (_status.value.working) return
+        _status.value = _status.value.copy(working = true, message = null, error = false)
+        viewModelScope.launch {
+            try {
+                _status.value = action()
+            } catch (error: Exception) {
+                _status.value = _status.value.copy(working = false, message = readable(error, "模型设置操作失败。"), error = true)
+            }
+        }
+    }
+}
+
+private fun readable(error: Exception, fallback: String): String = when (error) {
+    is CancellationException -> throw error
+    is RuleViolation -> error.message ?: fallback
+    else -> fallback
+}
