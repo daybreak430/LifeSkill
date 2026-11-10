@@ -235,6 +235,7 @@ class RepositoryTest {
         val library = container.library.snapshot()
         val trees = library.childrenOf(direction.id)
         assertEquals(listOf("基础", "实践"), trees.map(Entry::name))
+        assertEquals(listOf(EntryIcon.BOOK, EntryIcon.TOOLS), trees.map(Entry::icon))
         val (base, follow) = library.childrenOf(trees.last().id)
         assertEquals(EntryIcon.BOOK, base.icon)
         assertEquals(EntryIcon.EXPLORE, follow.icon)
@@ -289,7 +290,7 @@ class RepositoryTest {
     @Test fun directionScopedDraftCanBeConfirmedInADifferentDirection() = runBlocking {
         val (source, destination) = container.library.snapshot().childrenOf(null)
         val scope = ChatScope(ChatMode.GENERATE, source.id)
-        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","skills":[{"ref":"intro","name":"认识信息系统","goal":"能说明用途","requires":[],"icon":"CODE"}]}]}""")
+        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","icon":"TREE","skills":[{"ref":"intro","name":"认识信息系统","goal":"能用 SQL 查询数据","requires":[],"icon":"CODE"}]}]}""")
         container.conversations.send(scope, "生成信息化技能树")
         val draft = container.conversations.watch(scope).first().last()
         assertEquals(source.id, draft.preview?.suggestedDirectionId)
@@ -299,6 +300,7 @@ class RepositoryTest {
         assertTrue(library.childrenOf(source.id).isEmpty())
         val tree = library.childrenOf(destination.id).single()
         assertEquals("信息化基础", tree.name)
+        assertEquals(EntryIcon.CHART, tree.icon)
         assertEquals(EntryIcon.CODE, library.childrenOf(tree.id).single().icon)
     }
 
@@ -633,7 +635,7 @@ class RepositoryTest {
     }
 
     companion object {
-        const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[],"icon":"CHART"},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"],"icon":"UNKNOWN"}]}]}"""
+        const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","icon":"TARGET","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[],"icon":"CHART"},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"],"icon":"UNKNOWN"}]}]}"""
 
         fun verdict(kind: String, text: String, id: String): String =
             JSONObject().put("kind", kind).put("reply", text).put("exerciseId", id).toString()

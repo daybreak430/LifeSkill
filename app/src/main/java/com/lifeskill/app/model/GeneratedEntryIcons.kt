@@ -1,13 +1,15 @@
 package com.lifeskill.app.model
 
-internal object GeneratedSkillIcons {
-    private val topics = listOf(
+internal object GeneratedEntryIcons {
+    private val subjects = listOf(
         EntryIcon.CODE to listOf("编程", "代码", "脚本", "算法", "python", "kotlin", "javascript"),
         EntryIcon.CHART to listOf("数据", "统计", "图表", "指标", "sql", "excel"),
         EntryIcon.SPEECH to listOf("演讲", "口语", "表达", "访谈", "沟通", "提问", "辩论"),
         EntryIcon.CAMERA to listOf("摄影", "拍摄", "镜头", "构图", "视频"),
         EntryIcon.MUSIC to listOf("音乐", "乐理", "节奏", "和弦", "乐器"),
         EntryIcon.LEAF to listOf("生态", "植物", "园艺", "自然"),
+    )
+    private val topics = subjects + listOf(
         EntryIcon.TREE to listOf("流程", "架构", "分支", "思维导图"),
         EntryIcon.PRACTICAL to listOf("清单", "核对", "步骤", "盘点", "整理", "计划"),
         EntryIcon.BOOK to listOf("阅读", "概念", "原理", "基础", "术语", "规则"),
@@ -17,12 +19,18 @@ internal object GeneratedSkillIcons {
     )
     private val general = listOf(EntryIcon.EXPLORE, EntryIcon.PRACTICAL, EntryIcon.BOOK, EntryIcon.TARGET)
 
-    // 标题比说明更能代表技能。无法从文本区分时，优先用当前树中较少见的通用图标。
-    fun fallback(name: String, goal: String, used: Map<EntryIcon, Int>): EntryIcon =
-        match(name) ?: match(goal) ?: general.minBy { used[it] ?: 0 }
+    fun forSkill(name: String, goal: String, used: Map<EntryIcon, Int>): EntryIcon =
+        match(name, topics) ?: match(goal, topics) ?: general.minBy { used[it] ?: 0 }
 
-    private fun match(text: String): EntryIcon? {
+    // 树名里的“基础”等通用词优先级低于树内反复出现的主题。
+    fun forTree(name: String, skillTexts: Sequence<String>, used: Map<EntryIcon, Int>): EntryIcon =
+        match(name, subjects)
+            ?: skillTexts.mapNotNull { match(it, subjects) }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            ?: match(name, topics)?.takeUnless { it == EntryIcon.TREE }
+            ?: general.minBy { used[it] ?: 0 }
+
+    private fun match(text: String, catalog: List<Pair<EntryIcon, List<String>>>): EntryIcon? {
         val normalized = text.lowercase()
-        return topics.firstOrNull { (_, keywords) -> keywords.any { it in normalized } }?.first
+        return catalog.firstOrNull { (_, keywords) -> keywords.any { it in normalized } }?.first
     }
 }

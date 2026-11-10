@@ -8,7 +8,7 @@ import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
-import com.lifeskill.app.model.GeneratedSkillIcons
+import com.lifeskill.app.model.GeneratedEntryIcons
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.Mastery
@@ -161,12 +161,18 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             }
             EntryKind.SKILL -> invalidScope()
         }
-        val existingTreeNames = current.childrenOf(target.id).map(Entry::name).toMutableList()
+        val existingTrees = current.childrenOf(target.id)
+        val existingTreeNames = existingTrees.map(Entry::name).toMutableList()
+        val usedTreeIcons = (existingTrees.mapNotNull(Entry::icon) + draft.trees.mapNotNull(TreeDraft::icon))
+            .groupingBy { it }.eachCount().toMutableMap()
         val newTrees = draft.trees.map { tree ->
             val name = LibraryRules.name(tree.name)
             LibraryRules.checkUnique(name, existingTreeNames)
             existingTreeNames.add(name)
-            create(target.id, EntryKind.TREE, name).also { skills += addSkills(it, tree.skills, current) }
+            val icon = tree.icon ?: usedTreeIcons.recordFallback(
+                GeneratedEntryIcons.forTree(name, tree.skills.asSequence().flatMap { sequenceOf(it.name, it.goal) }, usedTreeIcons),
+            )
+            create(target.id, EntryKind.TREE, name, icon).also { skills += addSkills(it, tree.skills, current) }
         }
         return Creation(newTrees.singleOrNull() ?: target, directions, newTrees.size, skills)
     }
@@ -206,9 +212,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             LibraryRules.checkUnique(name, names)
             names.add(name)
             val goal = LibraryRules.goal(draft.goal)
-            val icon = draft.icon ?: GeneratedSkillIcons.fallback(name, goal, usedIcons).also {
-                usedIcons[it] = usedIcons.getOrDefault(it, 0) + 1
-            }
+            val icon = draft.icon ?: usedIcons.recordFallback(GeneratedEntryIcons.forSkill(name, goal, usedIcons))
             Entry(newId(), treeId, EntryKind.SKILL, name, goal, icon = icon, shortName = draft.shortName).also {
                 refIds[draft.ref] = it.id
             }
@@ -228,8 +232,12 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         return additions to addedEdges
     }
 
-    private suspend fun create(parentId: String?, kind: EntryKind, name: String): Entry =
-        Entry(newId(), parentId, kind, name).also { dao.insertEntry(it.row(dao.nextPosition())) }
+    private fun MutableMap<EntryIcon, Int>.recordFallback(icon: EntryIcon): EntryIcon = icon.also {
+        this[icon] = getOrDefault(icon, 0) + 1
+    }
+
+    private suspend fun create(parentId: String?, kind: EntryKind, name: String, icon: EntryIcon? = null): Entry =
+        Entry(newId(), parentId, kind, name, icon = icon).also { dao.insertEntry(it.row(dao.nextPosition())) }
 
     private fun Entry.row(position: Long) = EntryRow(
         id, parentId, kind.name, secret.seal(name, "$id:name"), secret.seal(goal, "$id:goal"),

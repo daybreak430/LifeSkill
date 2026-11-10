@@ -5,6 +5,7 @@ internal data class LessonFlow(
     val labels: Map<String, String>,
     val tiers: List<List<String>>,
     val arrows: List<LessonArrow>,
+    val returnArrows: List<LessonArrow>,
     val decisions: Set<String>,
 ) {
     companion object {
@@ -14,7 +15,7 @@ internal data class LessonFlow(
 
         // 只识别可在本地绘制的纵向步骤图，其他语法交给代码块展示。
         fun parse(source: String): LessonFlow? {
-            val lines = source.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+            val lines = source.lineSequence().map { it.trim().removeSuffix(";").trimEnd() }.filter(String::isNotEmpty).toList()
             if (lines.size !in 2..17 || !header.matches(lines.first())) return null
             val nodes = linkedMapOf<String, String?>()
             val edges = mutableListOf<LessonArrow>()
@@ -40,10 +41,30 @@ internal data class LessonFlow(
                     edges.add(LessonArrow(from, to, connection.groups[1]?.value))
                 }
             }
-            if (nodes.size !in 2..8 || edges.isEmpty()) return null
-            val tiers = runCatching { SkillGraph.tiers(nodes.keys.toList(), edges.map { Edge(it.to, it.from) }) }
-                .getOrNull() ?: return null
-            return LessonFlow(nodes.mapValues { (id, label) -> label ?: id }, tiers, edges.distinct(), decisions)
+            if (nodes.size !in 1..8 || edges.isEmpty()) return null
+            val arrows = edges.distinct()
+            val returns = findReturnArrows(nodes.keys, arrows)
+            val forward = arrows.filterNot { it in returns }
+            val tiers = SkillGraph.tiers(nodes.keys.toList(), forward.map { Edge(it.to, it.from) })
+            return LessonFlow(nodes.mapValues { (id, label) -> label ?: id }, tiers, forward, arrows.filter { it in returns }, decisions)
+        }
+
+        private fun findReturnArrows(ids: Set<String>, arrows: List<LessonArrow>): Set<LessonArrow> {
+            val outgoing = arrows.groupBy(LessonArrow::from)
+            val visited = mutableSetOf<String>()
+            val path = mutableSetOf<String>()
+            val returns = mutableSetOf<LessonArrow>()
+            // 指向当前路径祖先的边沿图侧边绘制，不参与分层。
+            fun visit(id: String) {
+                if (!visited.add(id)) return
+                path.add(id)
+                for (edge in outgoing[id].orEmpty()) {
+                    if (edge.to in path) returns.add(edge) else visit(edge.to)
+                }
+                path.remove(id)
+            }
+            ids.forEach(::visit)
+            return returns
         }
     }
 }

@@ -341,6 +341,7 @@ class MvpFlowTest {
         fixture.ai.reply("""{"kind":"message","reply":"你想用什么主题？"}""")
         fixture.ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("按每个技能点的名称和学习目标选择 icon"))
+            assertTrue(messages.first().text.contains("树的 icon 应代表树名及整棵树的学习主题"))
             RepositoryTest.CREATED
         }
         ui.onNodeWithText("AI 生成技能树").performClick()
@@ -371,6 +372,7 @@ class MvpFlowTest {
         await("打开技能树 · 数据质量")
         ui.onNodeWithText("打开技能树 · 数据质量").performClick()
         await("技能地图")
+        assertEquals(EntryIcon.TARGET, iconOf("数据质量"))
         assertEquals(EntryIcon.CHART, iconOf("基础"))
         assertEquals(EntryIcon.TOOLS, iconOf("实践"))
 
@@ -411,12 +413,13 @@ class MvpFlowTest {
         masteryCheck.assertDoesNotExist()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
-            "${fence}mermaid\nflowchart TD\nA{读取} --> B[核对]\n$fence"
+            "$fence\nflowchart TD\nA{读取} --> B[核对]\nB -->|继续迭代| A\n$fence"
         fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", lesson).toString())
         ui.onNodeWithText("开始学习").performClick()
         await("数据核对 💡")
         await("原样")
         await("读取")
+        await("继续迭代")
         masteryCheck.assertDoesNotExist()
         fixture.ai.reply("没有按 JSON 格式输出的讲解。")
         fixture.ai.enqueue { messages ->

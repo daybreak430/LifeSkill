@@ -1,6 +1,7 @@
 package com.lifeskill.app
 
 import com.lifeskill.app.model.LessonFlow
+import com.lifeskill.app.model.LessonArrow
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.Speaker
@@ -13,14 +14,30 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class LessonFlowTest {
-    @Test fun parsesBranchesAndRejectsUnsupportedOrCyclicFlows() {
+    @Test fun parsesBranchesAndRejectsUnsupportedSyntax() {
         val flow = LessonFlow.parse("flowchart TD\nA{核对} -->|通过| B[保存]\nA -->|失败| C[修正]")!!
         assertEquals(listOf(listOf("A"), listOf("B", "C")), flow.tiers)
         assertEquals("核对", flow.labels["A"])
         assertEquals(setOf("A"), flow.decisions)
         assertEquals(listOf("通过", "失败"), flow.arrows.map { it.label })
-        assertNull(LessonFlow.parse("flowchart TD\nA[核对] --> B[保存]\nB --> A"))
         assertNull(LessonFlow.parse("flowchart TD\nA --> B\nclick A \"https://example.com\""))
+    }
+
+    @Test fun laysOutFeedbackLoopsWithoutLosingBranches() {
+        val flow = LessonFlow.parse("""
+            flowchart TD
+            A[策划写玩法规则] --> B[程序实现功能]
+            A --> C[美术产出素材]
+            B --> D[整合成可玩版本]
+            C --> D
+            D --> E[测试反馈]
+            E -->|继续迭代| A;
+        """.trimIndent())!!
+        assertEquals(listOf(listOf("A"), listOf("B", "C"), listOf("D"), listOf("E")), flow.tiers)
+        assertEquals(5, flow.arrows.size)
+        assertEquals(listOf(LessonArrow("E", "A", "继续迭代")), flow.returnArrows)
+        assertEquals(listOf(LessonArrow("A", "A", null)),
+            LessonFlow.parse("graph TB\nA[复查] --> A")?.returnArrows)
     }
 
     @Test fun compactLabelsKeepFullNameSeparate() {

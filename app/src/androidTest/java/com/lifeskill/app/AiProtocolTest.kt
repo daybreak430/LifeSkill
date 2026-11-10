@@ -58,6 +58,15 @@ class AiProtocolTest {
         val reply = JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills)
         assertEquals(listOf(EntryIcon.SPEECH, null, null, null, null),
             AiProtocol.generation(reply.toString()).draft?.skills?.map { it.icon })
+
+        val trees = JSONArray()
+        listOf(" chart ", "TREE", "UNKNOWN", JSONObject.NULL).forEachIndexed { index, icon ->
+            trees.put(JSONObject().put("name", "技能树$index").put("icon", icon))
+        }
+        reply.remove("skills")
+        reply.put("trees", trees)
+        assertEquals(listOf(EntryIcon.CHART, null, null, null),
+            AiProtocol.generation(reply.toString()).draft?.trees?.map { it.icon })
     }
 
     @Test fun acceptsExactLimitsAndRejectsOneOver() {

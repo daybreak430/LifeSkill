@@ -16,7 +16,7 @@ internal data class SkillDraft(
     val ref: String, val name: String, val goal: String, val requires: List<String>, val shortName: String?,
     val icon: EntryIcon?,
 )
-internal data class TreeDraft(val name: String, val skills: List<SkillDraft>)
+internal data class TreeDraft(val name: String, val skills: List<SkillDraft>, val icon: EntryIcon?)
 internal data class GenerationDraft(
     val directionId: String?,
     val directionName: String?,
@@ -78,7 +78,7 @@ internal object AiProtocol {
                 }
             })
         val exampleSkill = """{"ref":"budget","name":"列出固定支出","shortName":"固定支出","goal":"学习识别每月重复的账单项目，并能归纳三项固定支出。","requires":[],"icon":"PRACTICAL"}"""
-        val exampleTree = """{"name":"家庭预算","skills":[$exampleSkill]}"""
+        val exampleTree = """{"name":"家庭预算","icon":"CHART","skills":[$exampleSkill]}"""
         // 仅展示当前入口接受的结构，避免模型把首页字段带到方向或技能树的回复。
         val format = when (owner?.kind) {
             null -> """
@@ -107,6 +107,7 @@ internal object AiProtocol {
             追问或建议示例：{"kind":"message","reply":"你想先学习哪一类工作流？"}
             $format
             示例只说明结构，实际名称、数量、标识和目标均来自用户需求及 App 数据。只输出当前入口允许的字段。
+            ${if (owner?.kind != EntryKind.TREE) "每棵树包含 name、icon、skills。树的 icon 应代表树名及整棵树的学习主题，从下方图标库选择，避开默认的 TREE。" else ""}
             每个 skill 包含 ref、name、goal、requires、icon，可加 shortName（地图简称，2–5 个字，保留技能的核心词）。goal 用简短句子说明本节要学的内容和可检验的目标。
             按每个技能点的名称和学习目标选择 icon，从以下图标库原样填写英文标识。相近的技能可以复用同一个图标，不同类型的技能应选各自贴切的图标。图标库：${iconCatalog(EntryIcon.entries.filterNot { it == EntryIcon.DIAMOND })}
             ref 是同批同树唯一的简短英文标识；requires 引用同树 ref，无前置填 []。不要引用自己或形成循环。
@@ -139,7 +140,7 @@ internal object AiProtocol {
             根据当前技能目标和实际教学进度判断是否适合检验。讲完足以检验目标的内容后，可用 offer_check 替代 teach，reply 写讲解或小结。App 会在回复下方提示并显示「检验掌握」。当前是否允许邀请检验：${if (canInviteCheck) "是，由你判断时机" else "否"}。
             用户说「${TutorRules.CONTINUE_REPLY}」时，继续讲解、补充提示或推进下一步。这是继续教学的请求，不是练习答案，不得判定 passed 或 retry。用户明确要求练习或 App 发起检验时可以出题。
             收到 App 发起重新学习的消息时，以当前技能说明和本次学习要求为准，从头安排讲解并直接开始第一小节。不要假设用户已经学过旧课。只有用户明确要求先出题时才以练习开场。
-            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。流程适合用 mermaid 围栏，首行写 flowchart TD，每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式、循环、子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
+            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。流程适合用 mermaid 围栏，首行写 flowchart TD，每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
             只输出一个完整的 json 对象，不在对象外输出文字。Markdown 只写在 reply 字符串里，换行写成 \n，英文双引号用 \" 转义。每次讲清一个步骤，通常控制在 800 个中文字以内。讲解例：{"kind":"teach","reply":"**核心概念**：先从实际例子看起。"}。
             kind 为 teach、offer_check、exercise、passed、retry、off_topic 中的一个。邀请检验例：{"kind":"offer_check","reply":"以上就是核对账单的三个步骤。"}。exercise 一次只出一道可检验的题，优先单选，提供 3 或 4 个同类选项，不透露答案，reply 只写题干，choices 只写选项文字（App 会加 A、B 等按钮）。例：{"kind":"exercise","reply":"哪一步应先做？","choices":["核对输入","提交结果","归档文件"]}。需要实际演示或开放作答时可省略 choices。
             收到 App 发起检验的消息时返回 exercise。用户第一次申请检验或尚未回答时绝不返回 passed。选择题作答可以是选项字母或完整选项，正确选择即可通过，无需要求再解释。retry 提示后保留原题和选项，不另出一道题。
@@ -165,8 +166,8 @@ internal object AiProtocol {
                         directionId = json.optionalText("directionId", 128),
                         directionName = json.optionalText("directionName", LibraryRules.NAME_LIMIT),
                         trees = json.objects("trees", TREE_LIMIT).map { tree ->
-                            tree.only("name", "skills")
-                            TreeDraft(tree.text("name", LibraryRules.NAME_LIMIT), tree.skills())
+                            tree.only("name", "skills", "icon")
+                            TreeDraft(tree.text("name", LibraryRules.NAME_LIMIT), tree.skills(), tree.generatedIcon(EntryKind.TREE))
                         },
                         skills = json.skills(),
                     ),
@@ -219,10 +220,13 @@ internal object AiProtocol {
             skill.text("goal", LibraryRules.GOAL_LIMIT),
             skill.array("requires", SKILL_LIMIT).map { (it as? String)?.takeIf { ref -> ref.length in 1..140 } ?: invalid() },
             (skill.opt("shortName") as? String)?.let { runCatching { LibraryRules.shortName(it) }.getOrNull() },
-            // 图标缺失或不在图标库内时由本地补齐，旧草稿仍可确认。
-            EntryIcon.fromId((skill.opt("icon") as? String)?.trim()?.uppercase())?.takeUnless { it == EntryIcon.DIAMOND },
+            skill.generatedIcon(EntryKind.SKILL),
         )
     }
+
+    // 图标缺失或不在图标库内时由本地补齐，旧草稿仍可确认。
+    private fun JSONObject.generatedIcon(kind: EntryKind): EntryIcon? =
+        EntryIcon.fromId((opt("icon") as? String)?.trim()?.uppercase())?.takeUnless { it == EntryIcon.default(kind) }
 
     private fun JSONObject.objects(key: String, max: Int): List<JSONObject> =
         array(key, max).map { it as? JSONObject ?: invalid() }
