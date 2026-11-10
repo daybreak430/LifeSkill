@@ -27,6 +27,7 @@ import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.TurnKind
+import com.lifeskill.app.model.TutorRules
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -390,6 +391,40 @@ class RepositoryTest {
             context.deleteDatabase(file)
         }
         Unit
+    }
+
+    @Test fun examShortcutCountsCurrentTeachingRepliesAndRequiresANewAnswer() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "快捷考试")
+        val skill = add(tree, EntryKind.SKILL, "核对账单")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        val conversations = container.conversations
+        suspend fun teach(text: String) {
+            ai.reply("""{"kind":"teach","reply":"核对账单中的记录。"}""")
+            conversations.send(scope, text)
+        }
+
+        teach("开始学习")
+        ai.reply("""{"kind":"off_topic","reply":"请回到学习目标。"}""")
+        conversations.send(scope, "换个话题")
+        teach(TutorRules.CONTINUE_REPLY)
+        expectRule { conversations.send(scope, TutorRules.EXAM_REPLY, check = true) }
+        assertEquals(6, conversations.watch(scope).first().size)
+        teach(TutorRules.CONTINUE_REPLY)
+        ai.reply("""{"kind":"exercise","reply":"应该核对什么？","choices":["核对金额","忽略金额"]}""")
+        conversations.send(scope, TutorRules.EXAM_REPLY, check = true)
+        val history = conversations.watch(scope).first()
+        assertEquals(TurnKind.CHECK, history[history.lastIndex - 1].kind)
+        assertEquals(TutorRules.EXAM_REPLY, history[history.lastIndex - 1].text)
+        assertEquals(TurnKind.EXERCISE, history.last().kind)
+        assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+        expectRule { conversations.send(scope, TutorRules.EXAM_REPLY, check = true) }
+        assertEquals(history, conversations.watch(scope).first())
+
+        ai.reply("""{"kind":"teach","reply":"从新例子开始。"}""")
+        conversations.restartLesson(scope, "用另一个例子")
+        expectRule { conversations.send(scope, TutorRules.EXAM_REPLY, check = true) }
+        assertEquals(2, conversations.watch(scope).first().size)
     }
 
     @Test fun invalidInputAndMalformedReplyDoNotWriteLibraryOrLoseTheDraft() = runBlocking {

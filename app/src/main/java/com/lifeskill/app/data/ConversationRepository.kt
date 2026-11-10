@@ -44,7 +44,7 @@ internal class ConversationRepository(
         if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内检验掌握。")
         if (!check && input.length !in 1..INPUT_LIMIT) throw RuleViolation("请输入 1–${INPUT_LIMIT} 个字符。")
         val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
-        queueAndRespond(scope, kind, if (check) "检验掌握" else input)
+        queueAndRespond(scope, kind, if (check && input != TutorRules.EXAM_REPLY) "检验掌握" else input)
     }
 
     suspend fun restartLesson(scope: ChatScope, requirements: String) {
@@ -67,7 +67,15 @@ internal class ConversationRepository(
                 if (last?.speaker == Speaker.USER.name) throw RuleViolation("请先处理上一条待回复消息。")
                 if (kind == TurnKind.CHECK) {
                     checkNotNull(owner)
-                    if (last?.kind != TurnKind.CHECK_OFFER.name || last.contentVersion != owner.contentVersion) {
+                    val lastReply = last?.takeIf { it.speaker == Speaker.ASSISTANT.name && it.contentVersion == owner.contentVersion }
+                        ?.let { TurnKind.valueOf(it.kind) }
+                    if (input == TutorRules.EXAM_REPLY) {
+                        val rounds = dao.teachingReplies(scope.id, owner.contentVersion,
+                            TutorRules.teachingReplyKinds.map { it.name }, TutorRules.EXAM_TEACHING_ROUNDS)
+                        if (!TutorRules.canStartExam(lastReply, rounds)) {
+                            throw RuleViolation("请先完成 3 轮讲解，或答完当前练习后再发起考试。")
+                        }
+                    } else if (lastReply != TurnKind.CHECK_OFFER) {
                         throw RuleViolation("等 AI 老师提示后再检验掌握。")
                     }
                 }

@@ -48,9 +48,21 @@ fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
     const val CONTINUE_REPLY = "好的，继续"
+    const val EXAM_REPLY = "感觉已经会了，来考试吧"
+    internal const val EXAM_TEACHING_ROUNDS = 3
+    internal val teachingReplyKinds = setOf(TurnKind.MESSAGE, TurnKind.CHECK_OFFER)
 
     fun currentLesson(history: List<Turn>): List<Turn> =
         history.drop(history.indexOfLast { it.kind == TurnKind.RESTART }.coerceAtLeast(0))
+
+    internal fun canStartExam(lesson: List<Turn>): Boolean =
+        canStartExam(
+            lesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }?.kind,
+            lesson.count { it.speaker == Speaker.ASSISTANT && it.kind in teachingReplyKinds },
+        )
+
+    internal fun canStartExam(lastReply: TurnKind?, teachingReplies: Int): Boolean =
+        lastReply in teachingReplyKinds && teachingReplies >= EXAM_TEACHING_ROUNDS
 
     fun pendingExercise(history: List<Turn>): Exercise? {
         val last = history.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
@@ -63,7 +75,7 @@ object TutorRules {
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
         if (reply != TurnKind.PASSED && reply != TurnKind.RETRY) return
         if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
-            input.text.isBlank() || input.text == CONTINUE_REPLY
+            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == EXAM_REPLY
         ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")
         }

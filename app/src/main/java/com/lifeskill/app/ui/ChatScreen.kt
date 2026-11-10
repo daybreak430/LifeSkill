@@ -70,7 +70,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
     val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     val latestReply = currentLesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }
-    val checkOffered = !locked && latestReply?.kind == TurnKind.CHECK_OFFER
+    val examAvailable = !locked && TutorRules.canStartExam(currentLesson)
+    val checkOffered = !locked && !examAvailable && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -155,11 +156,23 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                             )
                         }
                         if (choices.isEmpty()) {
-                            ChatPill(
-                                TutorRules.CONTINUE_REPLY,
-                                onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
-                                modifier = Modifier.padding(start = ReplyInset, top = 4.dp), enabled = canSend,
-                            )
+                            FlowRow(
+                                Modifier.padding(start = ReplyInset, top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                ChatPill(
+                                    TutorRules.CONTINUE_REPLY,
+                                    onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
+                                    enabled = canSend,
+                                )
+                                if (examAvailable) {
+                                    ChatPill(
+                                        TutorRules.EXAM_REPLY,
+                                        onClick = { keyboard?.hide(); chat.send(TutorRules.EXAM_REPLY, check = true) },
+                                        enabled = canSend, glyph = Glyph.TARGET,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

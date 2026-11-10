@@ -78,6 +78,9 @@ class RulesTest {
         assertThrows(RuleViolation::class.java) {
             TutorRules.validateVerdict(TurnKind.PASSED, exercise.id, exercise, input.copy(kind = TurnKind.CHECK))
         }
+        assertThrows(RuleViolation::class.java) {
+            TutorRules.validateVerdict(TurnKind.PASSED, exercise.id, exercise, input.copy(text = TutorRules.EXAM_REPLY))
+        }
         TutorRules.validateVerdict(TurnKind.PASSED, exercise.id, exercise, input)
     }
 

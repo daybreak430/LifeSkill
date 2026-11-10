@@ -49,6 +49,7 @@ import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.TutorRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -432,12 +433,24 @@ class MvpFlowTest {
         }
         ui.onNodeWithTag("chat-messages").performScrollToNode(hasText("好的，继续"))
         val continueReply = ui.onNode(hasText("好的，继续") and hasClickAction())
+        val examReply = ui.onNode(hasText(TutorRules.EXAM_REPLY) and hasClickAction())
+        examReply.assertDoesNotExist()
         continueReply.assertIsEnabled().performTouchInput { click() }
         await("可以试试「检验掌握」")
-        fixture.ai.reply("""{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}""")
-        masteryCheck.assertIsEnabled().performTouchInput { click() }
+        masteryCheck.assertIsEnabled()
+        examReply.assertDoesNotExist()
+        fixture.ai.reply("""{"kind":"teach","reply":"核对必填字段是最后一步。"}""")
+        continueReply.performTouchInput { click() }
+        await(TutorRules.EXAM_REPLY)
+        continueReply.assertIsDisplayed()
+        fixture.ai.enqueue { messages ->
+            assertTrue(messages.last().text.contains("App 发起检验掌握"))
+            """{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}"""
+        }
+        examReply.assertIsEnabled().performTouchInput { click() }
         await("怎样识别异常记录？")
         masteryCheck.assertDoesNotExist()
+        examReply.assertDoesNotExist()
         continueReply.assertDoesNotExist()
         val exerciseId = runBlocking {
             val practice = fixture.container.library.snapshot().entries.single { it.kind == EntryKind.SKILL && it.name == "实践" }
@@ -449,6 +462,7 @@ class MvpFlowTest {
         }
         ui.onNode(hasText("A. 直接删除") and hasClickAction()).performTouchInput { click() }
         await("先判断记录缺少什么。")
+        examReply.assertDoesNotExist()
         continueReply.assertDoesNotExist()
         fixture.ai.enqueue { messages ->
             assertEquals("B. 核对必填字段", messages.last().text)
@@ -478,6 +492,7 @@ class MvpFlowTest {
         await("新一轮学习")
         await("从核对账单开始讲。")
         continueReply.assertIsDisplayed()
+        examReply.assertDoesNotExist()
         ui.onNodeWithText("已点亮技能点", substring = true).assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
