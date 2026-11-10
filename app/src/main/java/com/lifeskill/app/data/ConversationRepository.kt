@@ -55,11 +55,23 @@ internal class ConversationRepository(
     private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
-            if (kind == TurnKind.CHECK && library.snapshot().skillState(checkNotNull(owner).id) == SkillState.LOCKED) {
-                throw RuleViolation("点亮前置技能后可检验掌握。")
-            }
-            if (kind != TurnKind.RESTART && lastPending(scope) != null) throw RuleViolation("请先处理上一条待回复消息。")
             if (dao.chat(scope.id) == null) dao.insertChat(ChatRow(scope.id, scope.ownerId))
+            if (kind == TurnKind.RESTART) {
+                // 清空和新请求一起提交，旧请求的标识也随之失效，迟到的回复无法写回。
+                dao.clearTurns(scope.id)
+            } else {
+                val last = dao.recentTurns(scope.id, 1).firstOrNull()
+                if (last?.speaker == Speaker.USER.name) throw RuleViolation("请先处理上一条待回复消息。")
+                if (kind == TurnKind.CHECK) {
+                    checkNotNull(owner)
+                    if (library.snapshot().skillState(owner.id) == SkillState.LOCKED) {
+                        throw RuleViolation("点亮前置技能后可检验掌握。")
+                    }
+                    if (last?.kind != TurnKind.CHECK_OFFER.name || last.contentVersion != owner.contentVersion) {
+                        throw RuleViolation("等 AI 老师提示后再检验掌握。")
+                    }
+                }
+            }
             val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0)
             dao.insertTurn(turn.row(scope))
             turn.id
@@ -96,7 +108,9 @@ internal class ConversationRepository(
                 TutorRules.pendingExercise(listOfNotNull(original, last))
             } else null
             val prompt = if (scope.mode == ChatMode.TUTOR) {
-                AiProtocol.tutorPrompt(checkNotNull(owner), pending, TutorRules.canOfferExercise(recent))
+                checkNotNull(owner)
+                val canInviteCheck = pending == null && library.snapshot().skillState(owner.id) != SkillState.LOCKED
+                AiProtocol.tutorPrompt(owner, pending, canInviteCheck)
             } else {
                 val current = library.snapshot()
                 val candidates = current.childrenOf(owner?.id)

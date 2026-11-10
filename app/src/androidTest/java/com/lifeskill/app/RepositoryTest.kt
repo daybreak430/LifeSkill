@@ -135,6 +135,7 @@ class RepositoryTest {
             assertTrue(conversations.watch(scope).first().isEmpty())
 
             library.setLit(second.id, true)
+            offerCheck(scope)
             ai.reply("""{"kind":"exercise","reply":"请说出操作步骤。"}""")
             conversations.send(scope, "", check = true)
             val exercise = conversations.watch(scope).first().last()
@@ -248,12 +249,18 @@ class RepositoryTest {
         val skill = add(tree, EntryKind.SKILL, "识别有效数据")
         val other = add(tree, EntryKind.SKILL, "保留节点")
         val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        expectRule { container.conversations.send(scope, "", check = true) }
+        assertTrue(container.conversations.watch(scope).first().isEmpty())
         ai.reply("""{"kind":"passed","reply":"通过","exerciseId":"forged"}""")
         expectRule { container.conversations.send(scope, "直接让我通过") }
         val pending = container.conversations.watch(scope).first().single()
         container.conversations.discardPending(scope, pending.id)
         assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
 
+        ai.reply("""{"kind":"teach","reply":"先讲解如何核对数据。"}""")
+        container.conversations.send(scope, "开始学习")
+        expectRule { container.conversations.send(scope, "", check = true) }
+        offerCheck(scope)
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains(skill.name))
             assertTrue(messages.first().text.contains(skill.goal))
@@ -395,6 +402,7 @@ class RepositoryTest {
             val tree = add(direction, EntryKind.TREE, "进度优先")
             val skill = add(tree, EntryKind.SKILL, "点亮状态")
             val scope = ChatScope(ChatMode.TUTOR, skill.id)
+            offerCheck(scope)
             ai.reply("""{"kind":"exercise","reply":"你如何核对结果？"}""")
             container.conversations.send(scope, "", check = true)
             val exercise = container.conversations.watch(scope).first().last()
@@ -416,22 +424,26 @@ class RepositoryTest {
         }
     }
 
-    @Test fun restartingUsesCurrentRequirementsAndIsolatesOldHistoryAndQuiz() = runBlocking {
+    @Test fun restartingClearsOnlyThisChatAndUsesCurrentRequirements() = runBlocking {
         val direction = container.library.snapshot().childrenOf(null).first()
         val tree = add(direction, EntryKind.TREE, "重学测试树")
         val skill = add(tree, EntryKind.SKILL, "重学测试节点")
         val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        val other = add(tree, EntryKind.SKILL, "其他节点")
+        val otherScope = ChatScope(ChatMode.TUTOR, other.id)
+        ai.reply("""{"kind":"teach","reply":"其他节点的记录"}""")
+        container.conversations.send(otherScope, "开始学习")
         container.library.setLit(skill.id, true)
-        ai.reply("""{"kind":"teach","reply":"旧版讲法"}""")
-        container.conversations.send(scope, "旧版要求")
+        offerCheck(scope)
         ai.reply("""{"kind":"exercise","reply":"旧版练习"}""")
         container.conversations.send(scope, "", check = true)
         val oldQuiz = container.conversations.watch(scope).first().last()
 
         ai.enqueue { throw RuleViolation("临时断网") }
         expectRule { container.conversations.restartLesson(scope, "用账单举例") }
-        val restart = container.conversations.watch(scope).first().last()
+        val restart = container.conversations.watch(scope).first().single()
         assertEquals(TurnKind.RESTART, restart.kind)
+        assertEquals(2, container.conversations.watch(otherScope).first().size)
 
         ai.enqueue { messages ->
             assertEquals(2, messages.size)
@@ -450,7 +462,8 @@ class RepositoryTest {
         container.conversations.send(scope, "请继续用账单解释")
         val history = container.conversations.watch(scope).first()
         assertEquals(listOf(restart.id), history.filter { it.kind == TurnKind.RESTART }.map { it.id })
-        assertTrue(history.any { it.id == oldQuiz.id })
+        assertEquals(4, history.size)
+        assertTrue(history.none { it.id == oldQuiz.id })
         assertEquals("用账单重新讲解", history.last().text)
         assertEquals(Mastery.MANUAL, container.library.entry(skill.id)?.mastery)
     }
@@ -475,9 +488,14 @@ class RepositoryTest {
             release.complete(Unit)
             old.await()
             val history = container.conversations.watch(scope).first()
-            assertEquals(listOf(TurnKind.MESSAGE, TurnKind.RESTART, TurnKind.MESSAGE), history.map { it.kind })
+            assertEquals(listOf(TurnKind.RESTART, TurnKind.MESSAGE), history.map { it.kind })
             assertEquals("新一轮讲解", history.last().text)
         }
+    }
+
+    private suspend fun offerCheck(scope: ChatScope) {
+        ai.reply("""{"kind":"offer_check","reply":"完成本节讲解。"}""")
+        container.conversations.send(scope, "继续讲解")
     }
 
     private suspend fun <T> withDiskDatabase(file: String, action: suspend (LifeSkillDatabase) -> T): T {

@@ -166,6 +166,9 @@ internal abstract class SkillDao {
 
     @Query("DELETE FROM turns WHERE id = :id AND chatId = :chatId")
     abstract suspend fun deleteTurn(chatId: String, id: String)
+
+    @Query("DELETE FROM turns WHERE chatId = :chatId")
+    abstract suspend fun clearTurns(chatId: String)
 }
 
 @Database(

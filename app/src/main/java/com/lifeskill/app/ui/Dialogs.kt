@@ -195,7 +195,7 @@ internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Uni
         title = { Text("重新学习") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("开启新一轮讲解，保留学习记录和点亮进度。")
+                Text("开始后将清空此技能的旧对话，且无法恢复。点亮进度会保留。")
                 OutlinedTextField(
                     requirements, { requirements = it }, Modifier.fillMaxWidth().testTag("restart-requirements"),
                     label = { Text("本次学习要求（选填）") },

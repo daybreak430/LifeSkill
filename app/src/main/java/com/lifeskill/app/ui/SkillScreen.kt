@@ -18,10 +18,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -30,20 +26,17 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.SkillState
 
 @Composable
-internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tutor: ChatViewModel) {
-    val chatStatus by tutor.status.collectAsStateWithLifecycle()
+internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
     val state = library.skillState(skill.id)
     val lit = state == SkillState.LIT
     val halo = state.tint()
     val hasLitDependent = lit && library.hasLitDependent(skill.id)
-    var showRestart by rememberSaveable { mutableStateOf(false) }
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
     val mastery = when {
         lit && skill.mastery == Mastery.MANUAL -> "已点亮 · 手动"
@@ -119,27 +112,12 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tuto
                 "学习技能", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
                 Modifier.fillMaxWidth(), primary = true,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    onClick = { app.setLit(skill, !lit) },
-                    enabled = state != SkillState.LOCKED && !hasLitDependent,
-                ) {
-                    Text(if (lit) "取消点亮" else "手动点亮")
-                }
-                TextButton(onClick = { showRestart = true }, enabled = !chatStatus.working) {
-                    Text("重新学习")
-                }
+            TextButton(
+                onClick = { app.setLit(skill, !lit) },
+                enabled = state != SkillState.LOCKED && !hasLitDependent,
+            ) {
+                Text(if (lit) "取消点亮" else "手动点亮")
             }
         }
-    }
-    if (showRestart) {
-        RestartLessonDialog(
-            onDismiss = { showRestart = false },
-            onStart = { requirements ->
-                showRestart = false
-                tutor.restartLesson(requirements)
-                app.open(Route(Page.TUTOR, skill.id))
-            },
-        )
     }
 }

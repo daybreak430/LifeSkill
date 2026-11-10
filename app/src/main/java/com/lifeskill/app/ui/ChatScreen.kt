@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
@@ -63,12 +64,15 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     }
     val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
     val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
+    val latestReply = currentLesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }
+    val checkOffered = !locked && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     val footerVisible = status.working || pending != null || status.error != null
+    val canSend = !status.working && pending == null
 
     LaunchedEffect(history.lastOrNull()?.id, footerVisible) {
         if (history.isNotEmpty()) {
@@ -110,18 +114,32 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             }
             items(history, key = Turn::id) { turn ->
                 val active = exercise != null && turn.id == lastQuizTurn?.id && turn.exerciseId == exercise.id
-                ChatBubble(
-                    turn = turn,
-                    result = library.byId[turn.resultId],
-                    choices = if (active) exercise.choices else turn.choices,
-                    active = active,
-                    canAnswer = !status.working && pending == null,
-                    onAnswer = { answer ->
-                        keyboard?.hide()
-                        chat.send(answer)
-                    },
-                    open = { app.open(Route.entry(it)) },
-                )
+                Column {
+                    ChatBubble(
+                        turn = turn,
+                        result = library.byId[turn.resultId],
+                        choices = if (active) exercise.choices else turn.choices,
+                        active = active,
+                        canAnswer = canSend,
+                        onAnswer = { answer ->
+                            keyboard?.hide()
+                            chat.send(answer)
+                        },
+                        open = { app.open(Route.entry(it)) },
+                    )
+                    if (turn.id == latestReply?.id) {
+                        if (checkOffered) {
+                            Text(
+                                "可以试试「检验掌握」", Modifier.padding(top = 8.dp),
+                                style = MaterialTheme.typography.bodySmall, color = Muted,
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
+                            enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
+                        ) { Text(TutorRules.CONTINUE_REPLY) }
+                    }
+                }
             }
             if (footerVisible) {
                 item(key = "chat-status") {
@@ -141,12 +159,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     "点亮前置技能后可检验掌握", Modifier.padding(vertical = 6.dp),
                     style = MaterialTheme.typography.labelMedium, color = Muted,
                 )
-            } else if (tutor) {
-                TextButton(
+            } else if (checkOffered) {
+                OutlinedButton(
                     onClick = { keyboard?.hide(); chat.send("", check = true) },
-                    enabled = !status.working && pending == null,
+                    enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
                 ) {
-                    Mark(Glyph.TARGET, if (status.working || pending != null) Line else Gold, Modifier.size(16.dp))
+                    Mark(Glyph.TARGET, if (canSend) Gold else Line, Modifier.size(16.dp))
                     Text("检验掌握", Modifier.padding(start = 6.dp))
                 }
             }
@@ -157,7 +175,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     modifier = Modifier.weight(1f).testTag("chat-input"),
                     label = { Text(if (tutor) "输入学习问题" else "描述你想学什么") },
                     minLines = 1, maxLines = 4, shape = RoundedCornerShape(13.dp),
-                    enabled = !status.working && pending == null,
+                    enabled = canSend,
                     isError = exceedsLimit,
                     supportingText = if (exceedsLimit) {
                         { Text("每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符") }
@@ -169,7 +187,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         chat.send(draft)
                         draft = ""
                     },
-                    tint = Gold, enabled = draft.isNotBlank() && !exceedsLimit && !status.working && pending == null,
+                    tint = Gold, enabled = draft.isNotBlank() && !exceedsLimit && canSend,
                 )
             }
         }
@@ -292,7 +310,7 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: () -> Unit, di
                     TextButton(onClick = { discard(pending) }) {
                         Text(when (pending.kind) {
                             TurnKind.CHECK -> "撤回检验"
-                            TurnKind.RESTART -> "撤回重学"
+                            TurnKind.RESTART -> "取消请求"
                             else -> "撤回编辑"
                         })
                     }

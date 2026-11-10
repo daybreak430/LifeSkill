@@ -8,10 +8,8 @@ import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LessonFlowTest {
@@ -32,12 +30,13 @@ class LessonFlowTest {
         assertThrows(RuleViolation::class.java) { LibraryRules.shortName("超长技能名称") }
     }
 
-    @Test fun automaticPracticeWaitsForTwoTeachingReplies() {
-        val lesson = Turn("lesson", Speaker.ASSISTANT, TurnKind.MESSAGE, "讲解")
-        val quiz = lesson.copy(id = "quiz", kind = TurnKind.EXERCISE, choices = listOf("检查", "跳过"))
-        assertFalse(TutorRules.canOfferExercise(listOf(lesson)))
-        assertTrue(TutorRules.canOfferExercise(listOf(lesson, lesson)))
-        assertFalse(TutorRules.canOfferExercise(listOf(lesson, lesson, quiz, lesson)))
+    @Test fun exerciseIncludesItsChoicesAndQuickReplyCannotCountAsAnAnswer() {
+        val quiz = Turn("quiz", Speaker.ASSISTANT, TurnKind.EXERCISE, "讲解", exerciseId = "quiz", choices = listOf("检查", "跳过"))
         assertEquals("讲解\nA. 检查\nB. 跳过", quiz.modelText)
+        val input = Turn("input", Speaker.USER, TurnKind.MESSAGE, TutorRules.CONTINUE_REPLY)
+        val pending = TutorRules.pendingExercise(listOf(quiz, input))
+        assertThrows(RuleViolation::class.java) {
+            TutorRules.validateVerdict(TurnKind.PASSED, quiz.id, pending, input)
+        }
     }
 }

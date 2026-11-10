@@ -82,10 +82,7 @@ internal fun LifeSkillApp(
                             Page.HOME -> HomeScreen(current, latestStudySkill, app)
                             Page.DIRECTION -> entry?.let { DirectionScreen(it, current, latestStudySkill?.parentId, app) }
                             Page.TREE -> entry?.let { SkillTreeScreen(it, current, app) }
-                            Page.SKILL -> entry?.let {
-                                val tutor = conversationModel(container, ChatScope(ChatMode.TUTOR, it.id))
-                                SkillScreen(it, current, app, tutor)
-                            }
+                            Page.SKILL -> entry?.let { SkillScreen(it, current, app) }
                             Page.SETTINGS -> {
                                 val model: SettingsViewModel = viewModel(
                                     factory = remember(container) {

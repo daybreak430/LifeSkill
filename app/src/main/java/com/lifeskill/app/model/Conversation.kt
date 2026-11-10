@@ -14,7 +14,7 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 }
 
 enum class Speaker { USER, ASSISTANT }
-enum class TurnKind { MESSAGE, CHECK, EXERCISE, PASSED, RETRY, OFF_TOPIC, CREATED, RESTART }
+enum class TurnKind { MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, CREATED, RESTART }
 
 data class Turn(
     val id: String,
@@ -35,6 +35,8 @@ data class Exercise(val id: String, val question: String, val choices: List<Stri
 fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
+    const val CONTINUE_REPLY = "好的，继续"
+
     fun currentLesson(history: List<Turn>): List<Turn> =
         history.drop(history.indexOfLast { it.kind == TurnKind.RESTART }.coerceAtLeast(0))
 
@@ -46,16 +48,11 @@ object TutorRules {
         return Exercise(id, question.modelText, question.choices)
     }
 
-    fun canOfferExercise(history: List<Turn>): Boolean {
-        val sinceExercise = history.takeLastWhile {
-            it.speaker != Speaker.ASSISTANT || it.kind !in setOf(TurnKind.EXERCISE, TurnKind.RETRY, TurnKind.PASSED)
-        }
-        return sinceExercise.count { it.speaker == Speaker.ASSISTANT && it.kind == TurnKind.MESSAGE } >= 2
-    }
-
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
         if (reply != TurnKind.PASSED && reply != TurnKind.RETRY) return
-        if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE || input.text.isBlank()) {
+        if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
+            input.text.isBlank() || input.text == CONTINUE_REPLY
+        ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")
         }
     }

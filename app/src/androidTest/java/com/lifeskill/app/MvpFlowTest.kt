@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
@@ -337,7 +339,8 @@ class MvpFlowTest {
         ui.onNodeWithText("手动点亮").assertIsNotEnabled()
         ui.onNodeWithText("学习技能").performClick()
         await("点亮前置技能后可检验掌握")
-        ui.onNodeWithText("检验掌握").assertDoesNotExist()
+        val masteryCheck = ui.onNode(hasText("检验掌握") and hasClickAction())
+        masteryCheck.assertDoesNotExist()
         pressBack()
         await("未解锁")
         ui.onNodeWithContentDescription("关闭技能详情").performClick()
@@ -349,6 +352,7 @@ class MvpFlowTest {
         practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮"))
         practiceNode.performTouchInput { click() }
         ui.onNodeWithText("学习技能").performClick()
+        masteryCheck.assertDoesNotExist()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
             "${fence}mermaid\nflowchart TD\nA{读取} --> B[核对]\n$fence"
@@ -357,9 +361,18 @@ class MvpFlowTest {
         await("数据核对 💡")
         await("原样")
         await("读取")
+        masteryCheck.assertDoesNotExist()
+        fixture.ai.enqueue { messages ->
+            assertEquals("好的，继续", messages.last().text)
+            """{"kind":"offer_check","reply":"现在已经讲完核对步骤。"}"""
+        }
+        ui.onNodeWithTag("chat-messages").performScrollToNode(hasText("好的，继续"))
+        ui.onNodeWithText("好的，继续").assertIsEnabled().performTouchInput { click() }
+        await("可以试试「检验掌握」")
         fixture.ai.reply("""{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}""")
-        ui.onNodeWithText("检验掌握").performClick()
+        masteryCheck.assertIsEnabled().performTouchInput { click() }
         await("怎样识别异常记录？")
+        masteryCheck.assertDoesNotExist()
         val exerciseId = runBlocking {
             val practice = fixture.container.library.snapshot().entries.single { it.kind == EntryKind.SKILL && it.name == "实践" }
             fixture.container.conversations.watch(ChatScope(ChatMode.TUTOR, practice.id)).first().last().id
@@ -375,17 +388,24 @@ class MvpFlowTest {
         await("已点亮技能点", substring = true)
         pressBack()
         await("已点亮 · AI 检验通过")
+        ui.onNodeWithText("重新学习").assertDoesNotExist()
+        ui.onNodeWithContentDescription("重新学习").assertDoesNotExist()
+        ui.onNodeWithText("学习技能").performClick()
+        await("已点亮技能点", substring = true)
         fixture.ai.enqueue { messages ->
             assertEquals(2, messages.size)
             assertTrue(messages.last().text.contains("改用账单举例"))
             """{"kind":"teach","reply":"从核对账单开始讲。"}"""
         }
-        ui.onNodeWithText("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        ui.onNodeWithContentDescription("重新学习").performTouchInput { click() }
         await("开始新一轮")
+        await("开始后将清空此技能的旧对话，且无法恢复。点亮进度会保留。")
         ui.onNodeWithTag("restart-requirements").performTextInput("改用账单举例")
         ui.onNodeWithText("开始新一轮").performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("新一轮学习")
         await("从核对账单开始讲。")
+        ui.onNodeWithText("已点亮技能点", substring = true).assertDoesNotExist()
+        masteryCheck.assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("开始新一轮")
         ui.onNodeWithText("取消").performClick()
