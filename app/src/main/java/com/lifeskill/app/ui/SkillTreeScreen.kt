@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -38,11 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -128,16 +129,16 @@ internal fun SkillTreeScreen(
             modifier = Modifier.weight(1f, fill = false).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             color = studyColors.map.first(), shape = PanelShape,
         ) {
-            if (skills.isEmpty()) {
-                Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().skillMapBackdrop(), contentAlignment = Alignment.Center) {
+                if (skills.isEmpty()) {
                     LibraryEmpty("技能地图还是空的", Glyph.TREE)
-                }
-            } else {
-                SkillMap(
-                    skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
-                    addedEntryId, app::finishShowingAddition,
-                ) {
-                    app.open(Route.entry(it))
+                } else {
+                    SkillMap(
+                        skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
+                        addedEntryId, app::finishShowingAddition,
+                    ) {
+                        app.open(Route.entry(it))
+                    }
                 }
             }
         }
@@ -159,6 +160,49 @@ internal fun SkillTreeScreen(
             },
             confirmButton = { TextButton(onClick = { showReferences = false }) { Text("关闭") } },
         )
+    }
+}
+
+@Composable
+private fun Modifier.skillMapBackdrop(): Modifier {
+    val colors = studyColors
+    val grid = Steel
+    return drawWithCache {
+        val base = Brush.verticalGradient(colors.map)
+        val mint = Brush.radialGradient(
+            listOf(colors.focusBand.copy(alpha = .24f), colors.focusBand.copy(alpha = 0f)),
+            center = Offset(size.width * .10f, size.height * .08f), radius = size.width * .67f,
+        )
+        val blue = Brush.radialGradient(
+            listOf(colors.iconBlue.copy(alpha = .18f), colors.iconBlue.copy(alpha = 0f)),
+            center = Offset(size.width, size.height * .90f), radius = size.width * .72f,
+        )
+        val spacing = 21.dp.toPx()
+        val rows = (size.height / spacing + .5f).toInt()
+        val columns = (size.width / spacing + .5f).toInt()
+        val dots = buildList {
+            for (row in 0 until rows) {
+                for (column in 0 until columns) {
+                    add(Offset((column + .5f) * spacing, (row + .5f) * spacing))
+                }
+            }
+        }
+        val contourCenter = Offset(size.width * 1.02f, size.height * .87f)
+        val contour = Brush.radialGradient(
+            listOf(grid.copy(alpha = .26f), grid.copy(alpha = 0f)), contourCenter, size.width * .67f,
+        )
+        val contourStep = 28.dp.toPx()
+        val contourStroke = Stroke(.75.dp.toPx())
+        onDrawBehind {
+            // 装饰固定在画布上，节点滚动和连线动效共用这层静态背景。
+            drawRect(base)
+            drawRect(mint)
+            drawRect(blue)
+            drawPoints(dots, PointMode.Points, grid.copy(alpha = .21f), strokeWidth = 1.45.dp.toPx(), cap = StrokeCap.Round)
+            repeat(4) { index ->
+                drawCircle(contour, radius = contourStep * (index + 2), center = contourCenter, style = contourStroke)
+            }
+        }
     }
 }
 
@@ -221,7 +265,7 @@ private fun SkillMap(
     val mutedLine = lerp(Line, Steel, .48f)
     val focusLine = lerp(colors.route, Gold, .42f)
 
-    BoxWithConstraints(Modifier.fillMaxWidth().background(Brush.verticalGradient(colors.map)).ignoreHorizontalAndMultiTouch()) {
+    BoxWithConstraints(Modifier.fillMaxWidth().ignoreHorizontalAndMultiTouch()) {
         val cardWidth = minOf(140.dp * scaleText, (maxWidth - 28.dp).coerceAtLeast(1.dp) / layout.width)
         val diameter = minOf(66.dp, cardWidth * .82f)
         val left = (maxWidth - cardWidth * layout.width) / 2
