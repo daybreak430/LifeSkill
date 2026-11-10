@@ -372,22 +372,31 @@ class MvpFlowTest {
             """{"kind":"offer_check","reply":"现在已经讲完核对步骤。"}"""
         }
         ui.onNodeWithTag("chat-messages").performScrollToNode(hasText("好的，继续"))
-        ui.onNodeWithText("好的，继续").assertIsEnabled().performTouchInput { click() }
+        val continueReply = ui.onNode(hasText("好的，继续") and hasClickAction())
+        continueReply.assertIsEnabled().performTouchInput { click() }
         await("可以试试「检验掌握」")
         fixture.ai.reply("""{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}""")
         masteryCheck.assertIsEnabled().performTouchInput { click() }
         await("怎样识别异常记录？")
         masteryCheck.assertDoesNotExist()
+        continueReply.assertDoesNotExist()
         val exerciseId = runBlocking {
             val practice = fixture.container.library.snapshot().entries.single { it.kind == EntryKind.SKILL && it.name == "实践" }
             fixture.container.conversations.watch(ChatScope(ChatMode.TUTOR, practice.id)).first().last().id
         }
         fixture.ai.enqueue { messages ->
+            assertEquals("A. 直接删除", messages.last().text)
+            RepositoryTest.verdict("retry", "先判断记录缺少什么。", exerciseId)
+        }
+        ui.onNode(hasText("A. 直接删除") and hasClickAction()).performTouchInput { click() }
+        await("先判断记录缺少什么。")
+        continueReply.assertDoesNotExist()
+        fixture.ai.enqueue { messages ->
             assertEquals("B. 核对必填字段", messages.last().text)
             assertTrue(messages.first().text.contains("A. 直接删除"))
             RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId)
         }
-        ui.onNodeWithText("B. 核对必填字段").performClick()
+        ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performTouchInput { click() }
         await("已点亮技能点", substring = true)
         ui.activityRule.scenario.recreate()
         await("已点亮技能点", substring = true)
@@ -409,6 +418,7 @@ class MvpFlowTest {
         ui.onNodeWithText("开始新一轮").performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("新一轮学习")
         await("从核对账单开始讲。")
+        continueReply.assertIsDisplayed()
         ui.onNodeWithText("已点亮技能点", substring = true).assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }

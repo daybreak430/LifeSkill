@@ -114,11 +114,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             }
             items(history, key = Turn::id) { turn ->
                 val active = exercise != null && turn.id == lastQuizTurn?.id && turn.exerciseId == exercise.id
+                val choices = if (active) exercise.choices else turn.choices
                 Column {
                     ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
-                        choices = if (active) exercise.choices else turn.choices,
+                        choices = choices,
                         active = active,
                         canAnswer = canSend,
                         onAnswer = { answer ->
@@ -134,10 +135,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                                 style = MaterialTheme.typography.bodySmall, color = Muted,
                             )
                         }
-                        OutlinedButton(
-                            onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
-                            enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
-                        ) { Text(TutorRules.CONTINUE_REPLY) }
+                        if (choices.isEmpty()) {
+                            OutlinedButton(
+                                onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
+                                enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
+                            ) { Text(TutorRules.CONTINUE_REPLY) }
+                        }
                     }
                 }
             }
