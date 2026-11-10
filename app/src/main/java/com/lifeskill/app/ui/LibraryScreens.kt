@@ -59,7 +59,6 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Mark(Glyph.TREE, Gold, Modifier.size(30.dp))
                 Text("LifeSkill", Modifier.weight(1f), style = LibraryTitle)
                 GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
             }
@@ -83,7 +82,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            LibrarySection("学习方向", Modifier.padding(top = 4.dp)) {
+            LibrarySection("学习方向", Modifier.padding(top = 4.dp), divider = false) {
                 TextButton(onClick = { app.add(EntryKind.DIRECTION) }) {
                     Mark(Glyph.ADD, Gold, Modifier.size(16.dp))
                     Text("新增方向", Modifier.padding(start = 4.dp))

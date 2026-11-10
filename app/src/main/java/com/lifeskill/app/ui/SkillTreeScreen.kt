@@ -1,7 +1,7 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -34,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -57,7 +60,7 @@ import com.lifeskill.app.model.SkillState
 import kotlin.math.abs
 
 @Composable
-internal fun SkillTreeScreen(tree: Entry, library: Library, app: AppViewModel) {
+internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
     val edges = remember(skills, library.edges) {
@@ -67,38 +70,52 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, app: AppViewModel) {
     val layout = remember(skills.map(Entry::id), edges) { SkillMapLayout.arrange(skills.map(Entry::id), edges) }
     var showReferences by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        PageHeader(tree.name, app::back, subtitle = library.byId[tree.parentId]?.name) { EntryMenu(tree, app) }
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Action("新增技能点", Glyph.ADD, { app.add(EntryKind.SKILL, tree.id) }, Modifier.weight(1f))
-            Action("AI 追加", Glyph.SPARK, { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f), primary = true)
+            GlyphButton(Glyph.BACK, "返回", app::back)
+            Text(
+                library.byId[tree.parentId]?.name.orEmpty(), Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            EntryMenu(tree, app)
         }
+        Text(
+            tree.name, Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.headlineMedium,
+            maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
         Row(
-            Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 9.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("技能地图", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             if (layout.references.isNotEmpty()) {
                 TextButton(onClick = { showReferences = true }) { Text("关联 ${layout.references.size}") }
             }
-            Mark(Glyph.DIAMOND, Gold, Modifier.size(14.dp))
-            Text(
-                "${progress.lit} / ${progress.total} 已点亮", Modifier.padding(start = 6.dp),
-                style = MaterialTheme.typography.labelMedium, color = Gold,
-            )
+            Surface(shape = CircleShape, color = GoldGround) {
+                Text(
+                    "${progress.lit} / ${progress.total} 已点亮", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            LibraryAction("新增技能点", Glyph.ADD, { app.add(EntryKind.SKILL, tree.id) }, Modifier.weight(1f))
+            LibraryAction("AI 追加", Glyph.SPARK, { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
         }
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-            color = Ground, shape = RoundedCornerShape(17.dp), border = BorderStroke(1.dp, Line),
+            color = studyColors.map.first(), shape = RoundedCornerShape(20.dp),
         ) {
             if (skills.isEmpty()) {
                 Box(contentAlignment = Alignment.Center) {
                     EmptyState("技能地图还是空的", "新增第一个技能点，或让 AI 拆解学习路径。", Glyph.TREE)
                 }
             } else {
-                SkillMap(skills, layout, library) { app.open(Route.entry(it)) }
+                SkillMap(skills, layout, library, latestStudySkillId) { app.open(Route.entry(it)) }
             }
         }
     }
@@ -124,7 +141,9 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, app: AppViewModel) {
 private data class MapSegment(val edge: Edge, val start: MapPoint, val end: MapPoint, val onTrack: Boolean)
 
 @Composable
-private fun SkillMap(skills: List<Entry>, layout: SkillMapLayout, library: Library, onOpen: (Entry) -> Unit) {
+private fun SkillMap(
+    skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?, onOpen: (Entry) -> Unit,
+) {
     val nodesByRow = remember(skills, layout) { skills.groupBy { layout.nodes.getValue(it.id).row } }
     val segmentsByRow = remember(layout) {
         layout.connections.flatMap { connection ->
@@ -138,30 +157,22 @@ private fun SkillMap(skills: List<Entry>, layout: SkillMapLayout, library: Libra
             listOf(edge.prerequisiteId to index + 1, edge.skillId to index + 1)
         }.groupBy({ it.first }, { it.second })
     }
-    val scaleText = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
-    val cardHeight = 92.dp * scaleText
-    val rowGap = 36.dp
-    val dots = Line.copy(alpha = .55f)
-    val litLine = Gold
-    val readyLine = Steel.copy(alpha = .64f)
+    val ready = skills.filter { library.skillState(it.id) == SkillState.AVAILABLE }
+    val focusId = ready.firstOrNull { it.id == latestStudySkillId }?.id ?: ready.minWithOrNull(
+        compareBy({ layout.nodes.getValue(it.id).row }, { layout.nodes.getValue(it.id).column }),
+    )?.id
+    val colors = studyColors
+    val density = LocalDensity.current
+    val scaleText = density.fontScale.coerceIn(1f, 2f)
+    val labelHeight = with(density) { MaterialTheme.typography.labelLarge.lineHeight.toDp() }
+    val cardHeight = 57.dp + labelHeight
+    val rowGap = 22.dp
     val lockedLine = Line
 
-    BoxWithConstraints(Modifier.fillMaxSize().ignoreHorizontalAndMultiTouch()) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(colors.map)).ignoreHorizontalAndMultiTouch()) {
         val cardWidth = minOf(112.dp * scaleText, (maxWidth - 24.dp).coerceAtLeast(1.dp) / layout.width)
-        val diameter = minOf(62.dp, cardWidth * .82f)
+        val diameter = minOf(54.dp, cardWidth * .82f)
         val left = (maxWidth - cardWidth * layout.width) / 2
-        Canvas(Modifier.matchParentSize()) {
-            val step = 18.dp.toPx()
-            var x = step / 2
-            while (x < size.width) {
-                var y = step / 2
-                while (y < size.height) {
-                    drawCircle(dots, .85.dp.toPx(), Offset(x, y))
-                    y += step
-                }
-                x += step
-            }
-        }
         LazyColumn(
             Modifier.fillMaxSize().testTag("skill-map"),
             contentPadding = PaddingValues(vertical = 20.dp),
@@ -185,18 +196,18 @@ private fun SkillMap(skills: List<Entry>, layout: SkillMapLayout, library: Libra
                             }
                             val from = library.skillState(segment.edge.prerequisiteId)
                             val to = library.skillState(segment.edge.skillId)
-                            val color = when {
-                                from == SkillState.LIT && to == SkillState.LIT -> litLine
-                                from == SkillState.LIT -> readyLine
-                                else -> lockedLine
-                            }
-                            drawPath(path, color, style = Stroke(1.5.dp.toPx()))
+                            val onRoute = from == SkillState.LIT && (to == SkillState.LIT || segment.edge.skillId == focusId)
+                            drawPath(
+                                path, if (onRoute) colors.route else lockedLine,
+                                style = Stroke((if (onRoute) 2.dp else 1.5.dp).toPx(), cap = StrokeCap.Round),
+                            )
                         }
                     }
                     nodesByRow[row].orEmpty().forEach { skill ->
                         val point = layout.nodes.getValue(skill.id)
                         MapNode(
-                            skill, library.skillState(skill.id), diameter, referencesByNode[skill.id].orEmpty(),
+                            skill, library.skillState(skill.id), diameter, skill.id == focusId,
+                            referencesByNode[skill.id].orEmpty(),
                             { onOpen(skill) },
                             Modifier.absoluteOffset(x = left + cardWidth * (point.column - .5f)).size(cardWidth, cardHeight),
                         )
@@ -233,6 +244,7 @@ private fun MapNode(
     skill: Entry,
     state: SkillState,
     diameter: Dp,
+    focused: Boolean,
     references: List<Int>,
     onOpen: () -> Unit,
     modifier: Modifier,
@@ -242,7 +254,11 @@ private fun MapNode(
         onClick = onOpen, shape = RoundedCornerShape(13.dp),
         modifier = modifier.semantics {
             contentDescription = skill.name
-            stateDescription = if (references.isEmpty()) state.label else "${state.label}，前置关联 ${references.joinToString()}"
+            stateDescription = buildString {
+                append(state.label)
+                if (focused) append("，下一步")
+                if (references.isNotEmpty()) append("，前置关联 ${references.joinToString()}")
+            }
         },
         color = Color.Transparent,
     ) {
@@ -252,15 +268,16 @@ private fun MapNode(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Box {
-                SkillMedallion(skill.displayIcon, state, diameter)
+                SkillMedallion(skill.displayIcon, state, diameter, focused)
                 if (references.isNotEmpty()) {
-                    Surface(Modifier.align(Alignment.TopEnd), shape = RoundedCornerShape(5.dp), color = Raised) {
+                    Surface(Modifier.align(Alignment.BottomEnd), shape = RoundedCornerShape(5.dp), color = Raised) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
                         Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium, color = Ink)
                     }
                 }
             }
-            Text(mapName, color = state.tint(), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(mapName, color = if (state == SkillState.LOCKED) Muted else Ink,
+                style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

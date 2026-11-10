@@ -81,7 +81,7 @@ internal fun LifeSkillApp(
                         when (route.page) {
                             Page.HOME -> HomeScreen(current, latestStudySkill, app)
                             Page.DIRECTION -> entry?.let { DirectionScreen(it, current, latestStudySkill?.parentId, app) }
-                            Page.TREE -> entry?.let { SkillTreeScreen(it, current, app) }
+                            Page.TREE -> entry?.let { SkillTreeScreen(it, current, latestStudySkillId, app) }
                             Page.SKILL -> entry?.let { SkillScreen(it, current, app) }
                             Page.SETTINGS -> {
                                 val model: SettingsViewModel = viewModel(

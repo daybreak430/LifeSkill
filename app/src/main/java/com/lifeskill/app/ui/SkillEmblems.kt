@@ -5,12 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.SkillState
@@ -25,31 +24,35 @@ internal fun SkillState.tint() = when (this) {
 }
 
 @Composable
-internal fun SkillMedallion(icon: EntryIcon, state: SkillState, diameter: Dp) {
+internal fun SkillMedallion(icon: EntryIcon, state: SkillState, diameter: Dp, focused: Boolean = false) {
     val lit = state == SkillState.LIT
     val locked = state == SkillState.LOCKED
     val tint = state.tint()
-    val centerColor = if (lit) GoldGround else Raised
-    val edgeColor = if (lit) lerp(GoldGround, Ground, .44f) else Panel
+    val colors = studyColors
+    val surface = Panel
+    val fill = when {
+        focused -> GoldGround
+        locked -> Raised
+        else -> MaterialTheme.colorScheme.secondaryContainer
+    }
     Box(Modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val radius = size.minDimension / 2
-            drawCircle(
-                Brush.radialGradient(
-                    listOf(centerColor, edgeColor),
-                    center = center, radius = radius,
-                ),
-                radius = radius,
-            )
-            val ringAlpha = if (locked) .30f else .85f
-            drawCircle(tint.copy(alpha = ringAlpha), radius * .94f, style = Stroke(radius * .055f))
-            drawCircle(tint.copy(alpha = .25f), radius * .77f, style = Stroke(radius * .025f))
+            when {
+                lit -> drawCircle(Brush.linearGradient(colors.earned), radius = radius)
+                focused -> {
+                    drawCircle(colors.focusBand, radius = radius)
+                    drawCircle(surface, radius = radius * .89f)
+                    drawCircle(fill, radius = radius * .82f)
+                }
+                else -> drawCircle(fill, radius = radius)
+            }
         }
-        Mark(icon.glyph, tint.copy(alpha = if (locked) .62f else 1f), Modifier.size(diameter * .45f))
-        if (locked) {
-            Surface(Modifier.align(Alignment.BottomEnd).size(diameter * .34f), shape = CircleShape, color = Panel) {
+        Mark(icon.glyph, if (lit) colors.earnedInk else tint, Modifier.size(diameter * .43f))
+        if (lit || locked) {
+            Surface(Modifier.align(Alignment.TopEnd).size(diameter * .30f), shape = CircleShape, color = surface) {
                 Box(contentAlignment = Alignment.Center) {
-                    Mark(Glyph.LOCK, tint, Modifier.size(diameter * .22f))
+                    Mark(if (lit) Glyph.CHECK else Glyph.LOCK, tint, Modifier.size(diameter * .19f))
                 }
             }
         }

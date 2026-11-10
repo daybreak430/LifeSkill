@@ -8,6 +8,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -52,26 +54,67 @@ private val DarkPalette = darkColorScheme(
 )
 
 private val LightPalette = lightColorScheme(
-    primary = Color(0xFF795620),
+    primary = Color(0xFF0D503A),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFF1E5CF),
-    onPrimaryContainer = Color(0xFF604418),
-    secondary = Color(0xFF675F52),
+    primaryContainer = Color(0xFFD9F0E5),
+    onPrimaryContainer = Color(0xFF1B503E),
+    secondary = Color(0xFF386763),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDE7DA),
-    onSecondaryContainer = Color(0xFF433B2E),
-    background = Color(0xFFF7F5F0),
-    onBackground = Color(0xFF252522),
-    surface = Color(0xFFFFFDF8),
-    onSurface = Color(0xFF252522),
-    surfaceVariant = Color(0xFFF0ECE3),
-    onSurfaceVariant = Color(0xFF5D5A52),
-    outline = Color(0xFF71675D),
-    outlineVariant = Color(0xFFD9D1C2),
-    surfaceContainer = Color(0xFFF7F1E8),
-    surfaceContainerHigh = Color(0xFFF0EAE1),
-    surfaceContainerHighest = Color(0xFFE9E1D6),
+    secondaryContainer = Color(0xFFE1F1F1),
+    onSecondaryContainer = Color(0xFF284D4A),
+    background = Color(0xFFF7FAFA),
+    onBackground = Color(0xFF162824),
+    surface = Color(0xFFFCFDFD),
+    onSurface = Color(0xFF162824),
+    surfaceVariant = Color(0xFFEEF2F2),
+    onSurfaceVariant = Color(0xFF4B605B),
+    outline = Color(0xFF697D78),
+    outlineVariant = Color(0xFFD4E0E1),
+    surfaceContainer = Color(0xFFF0F5F5),
+    surfaceContainerHigh = Color(0xFFE9F0F0),
+    surfaceContainerHighest = Color(0xFFE0EAEA),
 )
+
+internal data class StudyColors(
+    val hero: List<Color>,
+    val heroLayer: Color,
+    val map: List<Color>,
+    val earned: List<Color>,
+    val earnedInk: Color,
+    val route: Color,
+    val focusBand: Color,
+    val iconViolet: Color,
+    val iconBlue: Color,
+    val iconGreen: Color,
+    val iconOrange: Color,
+)
+
+private val LightStudyColors = StudyColors(
+    hero = listOf(Color(0xFFE5F5DA), Color(0xFFD8EDF3), Color(0xFFDDE6FA)),
+    heroLayer = Color(0xFFE7E1F6),
+    map = listOf(Color(0xFFE6F4F2), LightPalette.background),
+    earned = listOf(Color(0xFF599E7C), Color(0xFF327756)),
+    earnedInk = Color.White,
+    route = Color(0xFF4C9675),
+    focusBand = Color(0xFFB9E2D0),
+    iconViolet = Color(0xFF6653AA), iconBlue = Color(0xFF275DA1),
+    iconGreen = Color(0xFF1F7656), iconOrange = Color(0xFFAD5728),
+)
+
+private val DarkStudyColors = StudyColors(
+    hero = listOf(DarkPalette.surfaceVariant, DarkPalette.surface),
+    heroLayer = DarkPalette.outlineVariant,
+    map = listOf(DarkPalette.surface, DarkPalette.background),
+    earned = listOf(DarkPalette.primary, Color(0xFFE1A656)),
+    earnedInk = DarkPalette.onPrimary,
+    route = DarkPalette.primary,
+    focusBand = Color(0xFF846942),
+    iconViolet = Color(0xFFC3B1F6), iconBlue = Color(0xFF98C2F0),
+    iconGreen = Color(0xFF8ED8B5), iconOrange = Color(0xFFF5B483),
+)
+
+private val LocalStudyColors = staticCompositionLocalOf { LightStudyColors }
+internal val studyColors: StudyColors @Composable @ReadOnlyComposable get() = LocalStudyColors.current
 
 private val Type = Typography(
     headlineLarge = TextStyle(fontSize = 34.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold),
@@ -86,7 +129,9 @@ private val Type = Typography(
 
 @Composable
 internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (dark) DarkPalette else LightPalette, typography = Type, content = content)
+    CompositionLocalProvider(LocalStudyColors provides if (dark) DarkStudyColors else LightStudyColors) {
+        MaterialTheme(colorScheme = if (dark) DarkPalette else LightPalette, typography = Type, content = content)
+    }
 }
 
 internal enum class Glyph {

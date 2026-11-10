@@ -2,12 +2,13 @@ package com.lifeskill.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -22,57 +23,64 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.Progress
 
 private val CardShape = RoundedCornerShape(14.dp)
 private val ActionShape = RoundedCornerShape(12.dp)
 internal val LibraryTitle = TextStyle(
-    fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 28.sp, lineHeight = 35.sp,
+    fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 35.sp,
 )
 
 @Composable
 internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, locked: Boolean, onContinue: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(), color = Panel, contentColor = Ink,
-        shape = CardShape, border = BorderStroke(1.dp, Line),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                LibrarySection("上次学到", style = MaterialTheme.typography.labelLarge, color = Muted)
-                Text(skill.name, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    val colors = studyColors
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val heroShape = RoundedCornerShape(22.dp)
+    Box(Modifier.fillMaxWidth()) {
+        Box(Modifier.matchParentSize().padding(horizontal = 12.dp).padding(bottom = 7.dp)
+            .background(colors.heroLayer, heroShape))
+        Box(Modifier.fillMaxWidth().padding(top = 7.dp).clip(heroShape).background(Brush.linearGradient(colors.hero))) {
+            if (fontScale < 1.3f) StudyMotif(Modifier.align(Alignment.TopEnd).size(116.dp, 82.dp))
+            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     tree.name, style = MaterialTheme.typography.bodyMedium, color = Muted,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
-                Text(progress.label, style = MaterialTheme.typography.labelLarge)
+                Text(skill.name, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SegmentedProgress(progress, Modifier.weight(1f), active = colors.route)
+                    Text(progress.label, style = MaterialTheme.typography.labelLarge, color = Ink)
+                }
                 LibraryAction(
-                    if (locked) "查看技能" else "继续学习", null, onContinue, Modifier.padding(top = 4.dp),
-                    primary = true, trailing = true,
+                    if (locked) "查看技能" else "继续学习", null, onContinue,
+                    Modifier.padding(top = 2.dp).widthIn(max = 164.dp * fontScale),
+                    primary = true, trailing = true, primaryColor = Gold,
                 )
-            }
-            if (LocalDensity.current.fontScale < 1.3f) {
-                StudyMotif(Modifier.weight(.48f, fill = false).widthIn(max = 126.dp).fillMaxWidth().aspectRatio(.95f))
             }
         }
     }
@@ -86,6 +94,7 @@ internal fun LibraryAction(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     trailing: Boolean = false,
+    primaryColor: Color = Ink,
 ) {
     val content = if (primary) Panel else Ink
     val icon = if (primary) content else Gold
@@ -94,7 +103,7 @@ internal fun LibraryAction(
         modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.Button },
         shape = ActionShape,
         color = when {
-            primary -> Ink
+            primary -> primaryColor
             trailing -> Raised
             else -> Panel
         },
@@ -122,6 +131,7 @@ internal fun LibrarySection(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.titleMedium,
     color: Color = Ink,
+    divider: Boolean = true,
     action: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -129,7 +139,8 @@ internal fun LibrarySection(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = style, color = color)
-        HorizontalDivider(Modifier.weight(1f), color = Line)
+        if (divider) HorizontalDivider(Modifier.weight(1f), color = Line)
+        else Spacer(Modifier.weight(1f))
         action()
     }
 }
@@ -139,21 +150,38 @@ internal fun DirectionCard(entry: Entry, progress: Progress, treeCount: Int, onC
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
         border = BorderStroke(1.dp, Line), shape = CardShape,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 86.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
     ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+        Column(
+            Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
         ) {
-            Emblem(entry.displayIcon.glyph, background = Raised, diameter = 34.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(entry.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Mark(entry.displayIcon.glyph, directionTint(entry), Modifier.size(20.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (progress.total > 0) progress.label else "$treeCount 棵技能树",
-                    style = MaterialTheme.typography.labelMedium, color = Muted,
+                    entry.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
+                Mark(Glyph.NEXT, Muted, Modifier.size(14.dp))
             }
+            Text(
+                if (progress.total > 0) progress.label else "$treeCount 棵技能树",
+                style = MaterialTheme.typography.bodySmall, color = Muted,
+            )
         }
+    }
+}
+
+@Composable
+private fun directionTint(entry: Entry): Color {
+    val colors = studyColors
+    return when (entry.displayIcon) {
+        EntryIcon.WORK, EntryIcon.CODE, EntryIcon.CHART, EntryIcon.BOOK -> colors.iconViolet
+        EntryIcon.DIAMOND, EntryIcon.TREE, EntryIcon.TARGET, EntryIcon.SPEECH -> colors.iconBlue
+        EntryIcon.SIDE, EntryIcon.PRACTICAL, EntryIcon.LEAF, EntryIcon.TOOLS -> colors.iconGreen
+        EntryIcon.HOBBY, EntryIcon.MUSIC, EntryIcon.CAMERA -> colors.iconOrange
+        EntryIcon.EXPLORE -> listOf(colors.iconBlue, colors.iconViolet, colors.iconGreen, colors.iconOrange)
+            .get((entry.id.hashCode() and Int.MAX_VALUE) % 4)
     }
 }
 
@@ -215,13 +243,13 @@ private fun StudyBookmark() {
 }
 
 @Composable
-private fun SegmentedProgress(progress: Progress) {
-    val active = Gold
+private fun SegmentedProgress(progress: Progress, modifier: Modifier = Modifier, active: Color = Gold) {
     val track = Line
     val segments = progress.total.coerceAtMost(12)
+    if (segments == 0) return
     // 大树用固定上限的分段，确切进度由下方文字呈现。
     val filled = (progress.fraction * segments).toInt()
-    Canvas(Modifier.fillMaxWidth().height(5.dp)) {
+    Canvas(modifier.fillMaxWidth().height(5.dp)) {
         val gap = 3.dp.toPx().coerceAtMost(size.width / (2 * segments))
         val segmentWidth = (size.width - gap * (segments - 1)) / segments
         repeat(segments) { index ->
@@ -229,7 +257,7 @@ private fun SegmentedProgress(progress: Progress) {
                 color = if (index < filled) active else track,
                 topLeft = Offset(index * (segmentWidth + gap), 0f),
                 size = Size(segmentWidth, size.height),
-                cornerRadius = CornerRadius(1.dp.toPx()),
+                cornerRadius = CornerRadius(size.height / 2),
             )
         }
     }
@@ -237,22 +265,18 @@ private fun SegmentedProgress(progress: Progress) {
 
 @Composable
 private fun StudyMotif(modifier: Modifier) {
-    val accent = Gold
-    val branch = Gold.copy(alpha = .43f)
-    val surface = Panel
+    val branch = studyColors.route.copy(alpha = .17f)
     Canvas(modifier) {
-        val nodes = listOf(
-            Offset(.5f, .12f), Offset(.5f, .36f),
-            Offset(.28f, .60f), Offset(.72f, .60f),
-            Offset(.11f, .87f), Offset(.37f, .87f), Offset(.63f, .87f), Offset(.89f, .87f),
-        ).map { Offset(it.x * size.width, it.y * size.height) }
-        nodes.forEachIndexed { index, node ->
-            if (index > 0) drawLine(branch, nodes[index / 2], node, 1.5.dp.toPx())
+        val width = size.width
+        val height = size.height
+        val motif = Path().apply {
+            moveTo(width * .16f, height * .63f)
+            cubicTo(width * .44f, height * .16f, width * .77f, height * .69f, width * .80f, 0f)
+            moveTo(width * .37f, height * .45f)
+            cubicTo(width * .54f, height * .34f, width * .60f, height * .27f, width * .59f, 0f)
+            moveTo(width * .46f, height * .41f)
+            cubicTo(width * .70f, height * .46f, width * .74f, height * .81f, width, height * .77f)
         }
-        val radius = size.minDimension * .056f
-        nodes.forEachIndexed { index, node ->
-            drawCircle(if (index == 1) accent else surface, radius, node)
-            drawCircle(if (index == 1) accent else branch, radius, node, style = Stroke(1.5.dp.toPx()))
-        }
+        drawPath(motif, branch, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
     }
 }

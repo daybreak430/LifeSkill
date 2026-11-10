@@ -384,7 +384,7 @@ class MvpFlowTest {
         await("已点亮 · AI 检验通过")
         ui.onNodeWithText("取消点亮").assertDoesNotExist()
         ui.onNodeWithContentDescription("关闭技能详情").performClick()
-        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮"))
+        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮，下一步"))
         practiceNode.performTouchInput { click() }
         ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("开始学习")
