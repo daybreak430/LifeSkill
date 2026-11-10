@@ -113,7 +113,7 @@ private fun UnlockingLock(modifier: Modifier, size: Dp, progress: () -> Float) {
     val tint = Muted
     Surface(
         modifier.graphicsLayer {
-            val leave = motionPhase(progress(), .88f, 1f)
+            val leave = motionPhase(progress(), MAP_LOCK_RELEASE_AT, 1f)
             alpha = 1f - leave
             translationY = -8.dp.toPx() * leave
         },

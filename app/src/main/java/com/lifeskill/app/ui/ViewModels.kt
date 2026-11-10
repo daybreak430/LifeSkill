@@ -23,6 +23,7 @@ import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.SkillUnlock
 import com.lifeskill.app.model.Turn
+import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.unlocksSince
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,8 +61,6 @@ internal data class Route(val page: Page, val id: String? = null) {
 
 internal data class NavigationFrame(val route: Route, val depth: Int)
 
-internal data class UnlockFeedback(val unlock: SkillUnlock, val celebrate: Boolean = true)
-
 internal data class Editor(
     val initial: EntryEdit,
     val saving: Boolean = false,
@@ -86,6 +87,8 @@ internal class AppViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     private val _editor = MutableStateFlow<Editor?>(null)
     val editor = _editor.asStateFlow()
+    private val _addedEntryId = MutableStateFlow<String?>(null)
+    val addedEntryId = _addedEntryId.asStateFlow()
     private val _delete = MutableStateFlow<Entry?>(null)
     val deletion = _delete.asStateFlow()
     private val _deleting = MutableStateFlow(false)
@@ -94,7 +97,7 @@ internal class AppViewModel(
     val notice = _notice.asStateFlow()
     private val _loadError = MutableStateFlow<String?>(null)
     val loadError = _loadError.asStateFlow()
-    private val _unlocks = MutableStateFlow<List<UnlockFeedback>>(emptyList())
+    private val _unlocks = MutableStateFlow<List<SkillUnlock>>(emptyList())
     val unlocks = _unlocks.asStateFlow()
 
     init { load() }
@@ -114,8 +117,8 @@ internal class AppViewModel(
                     val previous = _library.value
                     _library.value = current
                     if (previous != null) {
-                        _unlocks.value = _unlocks.value.filter { it.unlock.skillId in current.byId } +
-                            current.unlocksSince(previous).map { UnlockFeedback(it) }
+                        _unlocks.value = _unlocks.value.filter { it.skillId in current.byId } +
+                            current.unlocksSince(previous)
                     }
                     discardMissingRoutes(current)
                 }
@@ -134,12 +137,8 @@ internal class AppViewModel(
         if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
     }
 
-    fun acknowledgeCelebration(key: String) {
-        _unlocks.value = _unlocks.value.map { if (it.unlock.key == key) it.copy(celebrate = false) else it }
-    }
-
     fun finishUnlock(key: String) {
-        _unlocks.value = _unlocks.value.filterNot { it.unlock.key == key }
+        _unlocks.value = _unlocks.value.filterNot { it.key == key }
     }
 
     fun continueStudy(skill: Entry) {
@@ -179,12 +178,17 @@ internal class AppViewModel(
         _editor.value = editor.copy(saving = true, error = null)
         viewModelScope.launch {
             try {
-                container.library.save(edit)
+                val saved = container.library.save(edit)
+                if (edit.id == null) _addedEntryId.value = saved.id
                 _editor.value = null
             } catch (error: Exception) {
                 _editor.value = editor.copy(error = readable(error, "保存失败，请重试。"))
             }
         }
+    }
+
+    fun finishShowingAddition(id: String) {
+        if (_addedEntryId.value == id) _addedEntryId.value = null
     }
 
     fun chooseIcon(icon: EntryIcon?) {
@@ -245,23 +249,39 @@ internal class AppViewModel(
     }
 }
 
-internal data class ChatStatus(val working: Boolean = false, val error: String? = null, val draftError: String? = null)
+internal data class ChatStatus(
+    val working: Boolean = false,
+    val error: String? = null,
+    val draftError: String? = null,
+    val requestId: String? = null,
+)
+
+internal data class ChatHistory(val turns: List<Turn> = emptyList(), val celebrationId: String? = null)
 
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
     private val _status = MutableStateFlow(ChatStatus())
     val status = _status.asStateFlow()
     val history = repository.watch(scope)
+        .runningFold<List<Turn>, ChatHistory?>(null) { previous, turns ->
+            val last = turns.lastOrNull()
+            // 通过消息与点亮在同一事务提交，首份历史和撤回后重新露出的旧消息不触发庆祝。
+            val celebration = if (previous != null && last?.kind == TurnKind.PASSED &&
+                (previous.celebrationId == last.id || previous.turns.none { it.id == last.id })
+            ) last.id else null
+            ChatHistory(turns, celebration)
+        }
+        .filterNotNull()
         .catch { error ->
             if (error is CancellationException) throw error
             _status.value = ChatStatus(error = "无法读取本机对话记录。")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory())
 
     fun send(text: String, check: Boolean = false) = run { repository.send(scope, text, check) }
     fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
-    fun retry() = run { repository.retry(scope) }
-    fun discard(turn: Turn) = run { repository.discardPending(scope, turn.id) }
+    fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
+    fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }
     fun confirmDraft(id: String, destination: GenerationDestination) = run(addingDraft = true) {
         repository.confirmDraft(scope, id, destination)
     }
@@ -270,16 +290,16 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         _status.value = _status.value.copy(draftError = null)
     }
 
-    private fun run(addingDraft: Boolean = false, action: suspend () -> Unit) {
+    private fun run(addingDraft: Boolean = false, requestId: String? = null, action: suspend () -> Unit) {
         if (_status.value.working) return
-        _status.value = ChatStatus(working = true)
+        _status.value = ChatStatus(working = true, requestId = requestId)
         viewModelScope.launch {
             try {
                 action()
-                _status.value = ChatStatus()
+                _status.value = ChatStatus(requestId = requestId)
             } catch (error: Exception) {
                 _status.value = if (addingDraft) ChatStatus(draftError = readable(error, "添加失败，请重试。"))
-                else ChatStatus(error = readable(error, "本次请求失败，请重试。"))
+                else ChatStatus(error = readable(error, "本次请求失败，请重试。"), requestId = requestId)
             }
         }
     }

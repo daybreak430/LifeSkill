@@ -43,9 +43,21 @@ internal enum class AssessmentLight { LIT, LOCKED, UNCHANGED }
 
 internal class LibraryRepository(private val database: LifeSkillDatabase, private val secret: SecretBox) {
     private val dao = database.skills()
+    private data class DecodedEntry(val row: EntryRow, val entry: Entry)
+
+    // 只复用与本次 Room 读出的行匹配的解密结果，避免每次变更都重新解密整个库。
+    @Volatile private var observedEntries = emptyMap<String, DecodedEntry>()
 
     val library = database.invalidationTracker.createFlow("entries", "edges")
-        .map { snapshot() }
+        .map {
+            val rows = dao.library()
+            val previous = observedEntries
+            val decoded = rows.entries.associate { row ->
+                row.id to (previous[row.id]?.takeIf { it.row == row } ?: DecodedEntry(row, row.toEntry()))
+            }
+            observedEntries = decoded
+            Library(decoded.values.map(DecodedEntry::entry), rows.edges.map { Edge(it.skillId, it.prerequisiteId) })
+        }
         .flowOn(Dispatchers.IO)
 
     suspend fun initialize() = database.withTransaction {
@@ -58,25 +70,33 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
     }
 
     suspend fun snapshot(): Library = dao.library().let { rows ->
-        Library(rows.entries.map { it.toEntry() }, rows.edges.map { Edge(it.skillId, it.prerequisiteId) })
+        val previous = observedEntries
+        Library(
+            rows.entries.map { row -> previous[row.id]?.takeIf { it.row == row }?.entry ?: row.toEntry() },
+            rows.edges.map { Edge(it.skillId, it.prerequisiteId) },
+        )
     }
 
     suspend fun entry(id: String): Entry? = dao.entry(id)?.toEntry()
 
     suspend fun save(edit: EntryEdit): Entry = database.withTransaction {
-        val current = snapshot()
-        val parent = edit.parentId?.let { current.byId[it] ?: throw RuleViolation("上级项目已删除。") }
-        val expectedKind = if (parent == null) EntryKind.DIRECTION else parent.kind.childKind
+        val parent = edit.parentId?.let { dao.entry(it) ?: throw RuleViolation("上级项目已删除。") }
+        val expectedKind = if (parent == null) EntryKind.DIRECTION else EntryKind.valueOf(parent.kind).childKind
         if (expectedKind != edit.kind) {
             throw RuleViolation("无法在此层级创建${edit.kind.label}。")
         }
         val previousRow = edit.id?.let { dao.entry(it) ?: throw RuleViolation("该项目已删除。") }
-        val previous = previousRow?.toEntry()
+        val cached = observedEntries
+        val previous = previousRow?.let { row -> cached[row.id]?.takeIf { it.row == row }?.entry ?: row.toEntry() }
         if (previous != null && (previous.parentId != edit.parentId || previous.kind != edit.kind)) {
             throw RuleViolation("该项目的位置已变化，请重新打开。")
         }
         val name = LibraryRules.name(edit.name)
-        LibraryRules.checkUnique(name, current.childrenOf(edit.parentId).filterNot { it.id == edit.id }.map(Entry::name))
+        val siblings = dao.siblings(edit.parentId)
+        LibraryRules.checkUnique(name, siblings.filterNot { it.id == edit.id }.map { sibling ->
+            cached[sibling.id]?.takeIf { it.row.name == sibling.name }?.entry?.name
+                ?: secret.open(sibling.name, "${sibling.id}:name")
+        })
         val goal = if (edit.kind == EntryKind.SKILL) LibraryRules.goal(edit.goal) else ""
         val shortName = if (edit.kind == EntryKind.SKILL) LibraryRules.shortName(edit.shortName) else null
         val saved = if (previous == null) {
@@ -92,8 +112,8 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         }
         val newEdges = edit.prerequisites.map { Edge(saved.id, it) }
         if (saved.kind == EntryKind.SKILL) {
-            val ids = current.childrenOf(saved.parentId).map(Entry::id).toSet() + saved.id
-            val previousEdges = current.edges.filter { it.skillId in ids }
+            val ids = siblings.map(EntryRow::id).toSet() + saved.id
+            val previousEdges = dao.edgesInTree(checkNotNull(saved.parentId)).map { Edge(it.skillId, it.prerequisiteId) }
             SkillGraph.validate(ids, previousEdges.filterNot { it.skillId == saved.id } + newEdges, previousEdges)
         } else if (newEdges.isNotEmpty()) {
             throw RuleViolation("只有技能点可以设置前置关系。")

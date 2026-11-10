@@ -50,7 +50,6 @@ import com.lifeskill.app.R
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
-import com.lifeskill.app.model.SkillUnlock
 
 private const val PAGE_MOTION_MS = 220
 
@@ -72,11 +71,8 @@ internal fun LifeSkillApp(
     val navigation by app.navigation.collectAsStateWithLifecycle()
     val route = navigation.route
     val unlocks by app.unlocks.collectAsStateWithLifecycle()
-    var celebration by remember(route) { mutableStateOf<SkillUnlock?>(null) }
-    val pendingCelebration = unlocks.firstOrNull {
-        it.celebrate && route.page == Page.TUTOR && route.id == it.unlock.skillId
-    }?.unlock
     val editor by app.editor.collectAsStateWithLifecycle()
+    val addedEntryId by app.addedEntryId.collectAsStateWithLifecycle()
     val deletion by app.deletion.collectAsStateWithLifecycle()
     val deleting by app.deleting.collectAsStateWithLifecycle()
     val notice by app.notice.collectAsStateWithLifecycle()
@@ -85,12 +81,6 @@ internal fun LifeSkillApp(
     val stateHolder = rememberSaveableStateHolder()
 
     BackHandler(enabled = route.page != Page.HOME) { app.back() }
-    LaunchedEffect(pendingCelebration) {
-        if (pendingCelebration != null) {
-            celebration = pendingCelebration
-            app.acknowledgeCelebration(pendingCelebration.key)
-        }
-    }
     LaunchedEffect(notice) {
         val text = notice ?: return@LaunchedEffect
         snackbar.showSnackbar(text)
@@ -152,14 +142,17 @@ internal fun LifeSkillApp(
                         val displayedLibrary = if (active) current else lastLibrary
                         val entry = displayedLibrary.byId[displayedRoute.id]
                         val latestStudySkill = displayedLibrary.byId[latestStudySkillId]
+                        val addition = addedEntryId.takeIf { active }
                         Box(Modifier.fillMaxSize().routeInput(active)) {
                             stateHolder.SaveableStateProvider(displayedRoute.encode()) {
                                 when (displayedRoute.page) {
-                                    Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app)
-                                    Page.DIRECTION -> entry?.let { DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, app) }
+                                    Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition)
+                                    Page.DIRECTION -> entry?.let {
+                                        DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, app, addition)
+                                    }
                                     Page.TREE -> entry?.let {
-                                        val unlock = unlocks.firstOrNull { feedback -> feedback.unlock.treeId == it.id }?.unlock
-                                        SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active)
+                                        val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
+                                        SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition)
                                     }
                                     Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app) }
                                     Page.SETTINGS -> {
@@ -177,11 +170,6 @@ internal fun LifeSkillApp(
                                     }
                                 }
                             }
-                        }
-                    }
-                    celebration?.let { unlocked ->
-                        current.byId[unlocked.skillId]?.let { skill ->
-                            SkillCelebration(unlocked.key, skill) { celebration = null }
                         }
                     }
                     editor?.let { EditorDialog(it, current, app) }

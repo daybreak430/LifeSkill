@@ -46,9 +46,11 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -75,7 +77,7 @@ import kotlin.math.abs
 @Composable
 internal fun SkillTreeScreen(
     tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel,
-    unlock: SkillUnlock?, active: Boolean,
+    unlock: SkillUnlock?, active: Boolean, addedEntryId: String?,
 ) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
@@ -131,7 +133,10 @@ internal fun SkillTreeScreen(
                     LibraryEmpty("技能地图还是空的", Glyph.TREE)
                 }
             } else {
-                SkillMap(skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock) {
+                SkillMap(
+                    skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
+                    addedEntryId, app::finishShowingAddition,
+                ) {
                     app.open(Route.entry(it))
                 }
             }
@@ -162,9 +167,12 @@ private data class MapSegment(val edge: Edge, val start: MapPoint, val end: MapP
 @Composable
 private fun SkillMap(
     skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?,
-    unlock: SkillUnlock?, active: Boolean, onUnlockFinished: (String) -> Unit, onOpen: (Entry) -> Unit,
+    unlock: SkillUnlock?, active: Boolean, onUnlockFinished: (String) -> Unit,
+    addedEntryId: String?, onAdditionShown: (String) -> Unit, onOpen: (Entry) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    RevealListAddition(addedEntryId, layout.nodes[addedEntryId]?.row?.takeIf { unlock == null }, listState, onAdditionShown)
     val clock = remember(unlock?.key) { Animatable(if (unlock == null) 1f else 0f) }
     LaunchedEffect(unlock?.key, active) {
         if (!active || unlock == null) return@LaunchedEffect
@@ -176,7 +184,19 @@ private fun SkillMap(
             if (source !in visible || next != null && next !in visible) listState.animateScrollToItem(source)
         }
         delay(MAP_UNLOCK_DELAY_MS)
-        clock.animateTo(1f, tween(MAP_UNLOCK_DURATION_MS, easing = LinearEasing))
+        var feltLight = false
+        var feltUnlock = false
+        clock.animateTo(1f, tween(MAP_UNLOCK_DURATION_MS, easing = LinearEasing)) {
+            if (unlock.availableChildren.isNotEmpty() && !feltUnlock && value >= MAP_LOCK_RELEASE_AT) {
+                // 多条分支同时开锁时只反馈一次，系统跳过动效时也不叠加两次反馈。
+                feltUnlock = true
+                feltLight = true
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+            } else if (!feltLight && value >= .24f) {
+                feltLight = true
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            }
+        }
         onUnlockFinished(unlock.key)
     }
     val nodesByRow = remember(skills, layout) { skills.groupBy { layout.nodes.getValue(it.id).row } }

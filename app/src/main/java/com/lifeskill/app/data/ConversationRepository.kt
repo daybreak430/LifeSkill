@@ -87,8 +87,8 @@ internal class ConversationRepository(
         respond(scope, id)
     }
 
-    suspend fun retry(scope: ChatScope) {
-        val pending = lastPending(scope) ?: return
+    suspend fun retry(scope: ChatScope, expectedId: String? = null) {
+        val pending = lastPending(scope)?.takeIf { expectedId == null || it.id == expectedId } ?: return
         respond(scope, pending.id)
     }
 

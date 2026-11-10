@@ -103,6 +103,12 @@ internal abstract class SkillDao {
     @Query("SELECT * FROM entries WHERE id = :id")
     abstract suspend fun entry(id: String): EntryRow?
 
+    @Query("SELECT * FROM entries WHERE parentId IS :parentId")
+    abstract suspend fun siblings(parentId: String?): List<EntryRow>
+
+    @Query("SELECT edges.* FROM edges JOIN entries ON entries.id = edges.skillId WHERE entries.parentId = :treeId")
+    abstract suspend fun edgesInTree(treeId: String): List<EdgeRow>
+
     @Query("SELECT EXISTS(SELECT 1 FROM bootstrap WHERE id = 1)")
     abstract suspend fun initialized(): Boolean
 

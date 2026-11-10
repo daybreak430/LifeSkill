@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -22,10 +25,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -36,15 +41,31 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.SkillState
+import kotlinx.coroutines.flow.first
 
 @Composable
-internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel) {
+internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel, addedEntryId: String?) {
     val directions = library.childrenOf(null)
     val latestTree = library.byId[latestSkill?.parentId]
     val columnWidth = 148.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val state = rememberLazyGridState()
+    val addition = directions.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }
+        ?.plus(if (latestTree == null) 3 else 4)
+    RevealAddition(
+        addedEntryId, addition, { state.layoutInfo.totalItemsCount },
+        visible = { index ->
+            val info = state.layoutInfo
+            info.visibleItemsInfo.any {
+                it.index == index && it.offset.y >= info.viewportStartOffset &&
+                    it.offset.y + it.size.height <= info.viewportEndOffset
+            }
+        },
+        scroll = { state.animateScrollToItem(it) }, onShown = app::finishShowingAddition,
+    )
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(columnWidth),
+        state = state,
         modifier = Modifier.fillMaxSize().testTag("learning-directions"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -98,8 +119,11 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
 }
 
 @Composable
-internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: String?, app: AppViewModel) {
+internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: String?, app: AppViewModel, addedEntryId: String?) {
     val trees = library.childrenOf(direction.id)
+    val state = rememberLazyListState()
+    val addition = trees.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }?.plus(3)
+    RevealListAddition(addedEntryId, addition, state, app::finishShowingAddition)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -109,6 +133,7 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
             EntryMenu(direction, app)
         }
         LazyColumn(
+            state = state,
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("skill-tree-list"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp),
@@ -142,6 +167,39 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
                     app.open(Route.entry(tree))
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun RevealListAddition(
+    id: String?, index: Int?, state: LazyListState, onShown: (String) -> Unit,
+) {
+    RevealAddition(
+        id, index, { state.layoutInfo.totalItemsCount },
+        visible = { target ->
+            val info = state.layoutInfo
+            info.visibleItemsInfo.any {
+                it.index == target && it.offset >= info.viewportStartOffset && it.offset + it.size <= info.viewportEndOffset
+            }
+        },
+        scroll = { state.animateScrollToItem(it) }, onShown = onShown,
+    )
+}
+
+@Composable
+private fun RevealAddition(
+    id: String?, index: Int?, itemCount: () -> Int, visible: (Int) -> Boolean,
+    scroll: suspend (Int) -> Unit, onShown: (String) -> Unit,
+) {
+    LaunchedEffect(id, index) {
+        if (id == null || index == null) return@LaunchedEffect
+        // 等新条目进入列表布局，只在它超出视口时滚动。
+        snapshotFlow { itemCount() }.first { it > index }
+        try {
+            if (!visible(index)) scroll(index)
+        } finally {
+            onShown(id)
         }
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -257,6 +258,32 @@ class MvpFlowTest {
         }
     }
 
+    @Test fun newlySavedSkillScrollsIntoViewAndDuplicateKeepsForm() {
+        await("本职工作")
+        runBlocking {
+            val library = fixture.container.library
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "本地保存长地图"))
+            repeat(32) { index ->
+                library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "练习节点 ${index + 1}", "完成练习"))
+            }
+        }
+        ui.onNodeWithText("本职工作").performClick()
+        await("本地保存长地图")
+        ui.onNodeWithText("本地保存长地图").performClick()
+        ui.onNodeWithText("新增技能点").performClick()
+        val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
+        nameInput.performTextInput("练习节点 1")
+        fill("技能说明", "新增技能说明")
+        ui.onNodeWithText("保存").performClick()
+        await("这一层已有同名项目", substring = true)
+        nameInput.assertIsDisplayed().performTextReplacement("新增可见节点")
+        ui.onNodeWithText("保存").performClick()
+        await("0 / 33 已点亮")
+        ui.onNodeWithContentDescription("新增可见节点").assertIsDisplayed().performTouchInput { click() }
+        await("新增技能说明")
+    }
+
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
         await("本职工作")
         ui.onNodeWithContentDescription("设置").performClick()
@@ -403,6 +430,7 @@ class MvpFlowTest {
         }
         ui.onNodeWithText("A. 核对数据").performTouchInput { click() }
         await("已点亮技能点", substring = true)
+        ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
         pressBack()
         await("已点亮 · AI 检验通过")
         ui.onNodeWithText("取消点亮").assertDoesNotExist()
@@ -449,12 +477,17 @@ class MvpFlowTest {
         continueReply.performTouchInput { click() }
         await(TutorRules.EXAM_REPLY)
         continueReply.assertIsDisplayed()
+        fixture.ai.enqueue { throw RuleViolation("考试请求暂时失败，请重试。") }
         fixture.ai.enqueue { messages ->
             assertTrue(messages.last().text.contains("App 发起检验掌握"))
             """{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}"""
         }
         examReply.assertIsEnabled().performTouchInput { click() }
+        await("考试请求暂时失败，请重试。")
+        ui.onNodeWithText("重试").performClick()
         await("怎样识别异常记录？")
+        ui.onNodeWithText("重试").assertDoesNotExist()
+        ui.onNodeWithText("撤回检验").assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
         examReply.assertDoesNotExist()
         continueReply.assertDoesNotExist()
@@ -475,10 +508,20 @@ class MvpFlowTest {
             assertTrue(messages.first().text.contains("A. 直接删除"))
             RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId)
         }
-        ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performTouchInput { click() }
-        await("已点亮技能点", substring = true)
+        ui.mainClock.autoAdvance = false
+        try {
+            ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+            ui.waitUntil(8_000) {
+                ui.mainClock.advanceTimeByFrame()
+                ui.onAllNodesWithText("已点亮技能点", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            ui.onNodeWithTag("skill-celebration").assertIsDisplayed()
+        } finally {
+            ui.mainClock.autoAdvance = true
+        }
         ui.activityRule.scenario.recreate()
         await("已点亮技能点", substring = true)
+        ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
         pressBack()
         await("已点亮 · AI 检验通过")
         ui.onNodeWithText("重新学习").assertDoesNotExist()
