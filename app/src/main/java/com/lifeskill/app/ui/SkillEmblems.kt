@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.SkillState
@@ -24,10 +25,12 @@ internal fun SkillState.tint() = when (this) {
 }
 
 @Composable
-internal fun SkillMedallion(icon: EntryIcon, state: SkillState, diameter: Dp, focused: Boolean = false) {
+internal fun SkillMedallion(
+    icon: EntryIcon, state: SkillState, diameter: Dp, focused: Boolean = false, glyphSize: Dp = diameter * .43f,
+) {
     val lit = state == SkillState.LIT
     val locked = state == SkillState.LOCKED
-    val tint = state.tint()
+    val tint = if (focused) Gold else state.tint()
     val colors = studyColors
     val surface = Panel
     val fill = when {
@@ -41,14 +44,14 @@ internal fun SkillMedallion(icon: EntryIcon, state: SkillState, diameter: Dp, fo
             when {
                 lit -> drawCircle(Brush.linearGradient(colors.earned), radius = radius)
                 focused -> {
-                    drawCircle(colors.focusBand, radius = radius)
+                    drawCircle(lerp(colors.focusBand, colors.route, .46f), radius = radius)
                     drawCircle(surface, radius = radius * .89f)
                     drawCircle(fill, radius = radius * .82f)
                 }
                 else -> drawCircle(fill, radius = radius)
             }
         }
-        Mark(icon.glyph, if (lit) colors.earnedInk else tint, Modifier.size(diameter * .43f))
+        Mark(icon.glyph, if (lit) colors.earnedInk else tint, Modifier.size(glyphSize))
         if (lit || locked) {
             Surface(Modifier.align(Alignment.TopEnd).size(diameter * .30f), shape = CircleShape, color = surface) {
                 Box(contentAlignment = Alignment.Center) {

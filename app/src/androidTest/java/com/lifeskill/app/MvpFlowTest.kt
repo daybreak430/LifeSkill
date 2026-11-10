@@ -192,6 +192,9 @@ class MvpFlowTest {
         await("连线分支")
         ui.onNodeWithText("连线分支").performClick()
         await("关联 1")
+        val mapBounds = ui.onNodeWithTag("skill-map").fetchSemanticsNode().boundsInRoot
+        val lastNode = ui.onNodeWithContentDescription("左下游").fetchSemanticsNode().boundsInRoot
+        assertTrue(mapBounds.bottom - lastNode.bottom < lastNode.height / 2)
         ui.onNodeWithText("关联 1").performClick()
         await("前置关联")
         await("右起点 → 左下游", substring = true)

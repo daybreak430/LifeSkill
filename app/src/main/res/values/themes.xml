@@ -1,7 +1,10 @@
 <resources>
     <style name="Theme.LifeSkill" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#F7F5F0</item>
-        <item name="android:colorAccent">#82520E</item>
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:colorAccent">#0D503A</item>
         <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="Theme.LifeSkill.Starting" parent="Theme.LifeSkill">
+        <item name="android:windowBackground">@drawable/launch_window</item>
     </style>
 </resources>

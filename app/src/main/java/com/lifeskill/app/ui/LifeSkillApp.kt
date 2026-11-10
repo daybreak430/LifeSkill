@@ -21,12 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lifeskill.app.AppContainer
+import com.lifeskill.app.R
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
@@ -42,7 +44,8 @@ internal fun LifeSkillApp(
     }
     val app: AppViewModel = viewModel(factory = factory)
     val appearance by app.appearance.collectAsStateWithLifecycle()
-    val dark = appearance.isDark(isSystemInDarkTheme())
+    val systemDark = isSystemInDarkTheme()
+    val dark = appearance.isDark(systemDark)
     val library by app.library.collectAsStateWithLifecycle()
     val latestStudySkillId by app.latestStudySkillId.collectAsStateWithLifecycle()
     val route by app.route.collectAsStateWithLifecycle()
@@ -62,6 +65,12 @@ internal fun LifeSkillApp(
     }
 
     LifeSkillTheme(dark) {
+        if (library == null && error == null) {
+            val launchBackground = colorResource(R.color.launch_background)
+            SideEffect { onSystemBars(systemDark, launchBackground) }
+            LaunchLoading(launchBackground)
+            return@LifeSkillTheme
+        }
         val gradient = when (route.page) {
             Page.TUTOR, Page.GENERATE -> aiColors.backdrop
             else -> studyColors.backdrop
@@ -75,9 +84,7 @@ internal fun LifeSkillApp(
             Box(Modifier.fillMaxSize().padding(padding)) {
                 val current = library
                 if (current == null) {
-                    val problem = error
-                    if (problem == null) Loading(Modifier.align(Alignment.Center))
-                    else Action("$problem 点击重试", Glyph.TREE, app::load, Modifier.align(Alignment.Center))
+                    error?.let { Action("$it 点击重试", Glyph.TREE, app::load, Modifier.align(Alignment.Center)) }
                 } else {
                     val entry = current.byId[route.id]
                     val latestStudySkill = current.byId[latestStudySkillId]

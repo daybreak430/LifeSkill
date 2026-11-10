@@ -10,12 +10,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.absoluteOffset
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -46,9 +46,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
@@ -106,7 +109,7 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
             AiAction("AI 追加", { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
         }
         Surface(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            modifier = Modifier.weight(1f, fill = false).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             color = studyColors.map.first(), shape = PanelShape,
         ) {
             if (skills.isEmpty()) {
@@ -162,29 +165,26 @@ private fun SkillMap(
         compareBy({ layout.nodes.getValue(it.id).row }, { layout.nodes.getValue(it.id).column }),
     )?.id
     val colors = studyColors
-    val density = LocalDensity.current
-    val scaleText = density.fontScale.coerceIn(1f, 2f)
-    val labelHeight = with(density) { MaterialTheme.typography.labelLarge.lineHeight.toDp() }
-    val cardHeight = 57.dp + labelHeight
-    val rowGap = 22.dp
-    val lockedLine = Line
+    val scaleText = LocalDensity.current.fontScale.coerceIn(1f, 2f)
+    val mutedLine = lerp(Line, Steel, .48f)
+    val focusLine = lerp(colors.route, Gold, .42f)
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(colors.map)).ignoreHorizontalAndMultiTouch()) {
-        val cardWidth = minOf(112.dp * scaleText, (maxWidth - 24.dp).coerceAtLeast(1.dp) / layout.width)
-        val diameter = minOf(54.dp, cardWidth * .82f)
+    BoxWithConstraints(Modifier.fillMaxWidth().background(Brush.verticalGradient(colors.map)).ignoreHorizontalAndMultiTouch()) {
+        val cardWidth = minOf(140.dp * scaleText, (maxWidth - 28.dp).coerceAtLeast(1.dp) / layout.width)
+        val diameter = minOf(66.dp, cardWidth * .82f)
         val left = (maxWidth - cardWidth * layout.width) / 2
         LazyColumn(
-            Modifier.fillMaxSize().testTag("skill-map"),
+            Modifier.fillMaxWidth().testTag("skill-map"),
             contentPadding = PaddingValues(vertical = 20.dp),
         ) {
             items(layout.rowCount) { row ->
-                val rowHeight = if (row < layout.rowCount - 1) cardHeight + rowGap else cardHeight
-                Box(Modifier.fillMaxWidth().height(rowHeight)) {
-                    // 连线拆成逐行的线段，滚动时只绘制视口内的节点和路径。
+                val gap = if (row < layout.rowCount - 1) 22.dp else 0.dp
+                Box(Modifier.fillMaxWidth()) {
+                    // 每行由实际节点和文字撑开，连线从这一行的文字下方开始。
                     Canvas(Modifier.matchParentSize()) {
                         val originX = left.toPx()
                         val unitWidth = cardWidth.toPx()
-                        val cardBottom = cardHeight.toPx()
+                        val cardBottom = size.height - gap.toPx()
                         segmentsByRow[row].orEmpty().forEach { segment ->
                             val fromX = originX + segment.start.column * unitWidth
                             val toX = originX + segment.end.column * unitWidth
@@ -196,11 +196,12 @@ private fun SkillMap(
                             }
                             val from = library.skillState(segment.edge.prerequisiteId)
                             val to = library.skillState(segment.edge.skillId)
-                            val onRoute = from == SkillState.LIT && (to == SkillState.LIT || segment.edge.skillId == focusId)
-                            drawPath(
-                                path, if (onRoute) colors.route else lockedLine,
-                                style = Stroke((if (onRoute) 2.dp else 1.5.dp).toPx(), cap = StrokeCap.Round),
-                            )
+                            val (tint, stroke) = when {
+                                from == SkillState.LIT && segment.edge.skillId == focusId -> focusLine to 2.8.dp
+                                from == SkillState.LIT && to == SkillState.LIT -> colors.route to 2.4.dp
+                                else -> mutedLine to 1.8.dp
+                            }
+                            drawPath(path, tint, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
                         }
                     }
                     nodesByRow[row].orEmpty().forEach { skill ->
@@ -209,7 +210,8 @@ private fun SkillMap(
                             skill, library.skillState(skill.id), diameter, skill.id == focusId,
                             referencesByNode[skill.id].orEmpty(),
                             { onOpen(skill) },
-                            Modifier.absoluteOffset(x = left + cardWidth * (point.column - .5f)).size(cardWidth, cardHeight),
+                            Modifier.absoluteOffset(x = left + cardWidth * (point.column - .5f))
+                                .width(cardWidth).padding(bottom = gap),
                         )
                     }
                 }
@@ -263,12 +265,12 @@ private fun MapNode(
         color = Color.Transparent,
     ) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Box {
-                SkillMedallion(skill.displayIcon, state, diameter, focused)
+                SkillMedallion(skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f)
                 if (references.isNotEmpty()) {
                     Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape, color = Raised) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
@@ -276,8 +278,19 @@ private fun MapNode(
                     }
                 }
             }
-            Text(mapName, color = if (state == SkillState.LOCKED) Muted else Ink,
-                style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                mapName,
+                color = when {
+                    focused -> Gold
+                    state == SkillState.LOCKED -> Muted
+                    else -> Ink
+                },
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 15.sp, lineHeight = 22.sp,
+                    fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium,
+                ),
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
