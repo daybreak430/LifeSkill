@@ -122,15 +122,15 @@ internal fun UnlockingMedallion(
 }
 
 @Composable
-private fun UnlockingLock(modifier: Modifier, size: Dp, palette: MapNodePalette, progress: () -> Float) {
-    val tint = palette.lockedInk
+private fun UnlockingLock(modifier: Modifier, size: Dp, palette: MapNodePalette?, progress: () -> Float) {
+    val tint = palette?.lockedInk ?: Muted
     Surface(
         modifier.graphicsLayer {
             val leave = motionPhase(progress(), MAP_LOCK_RELEASE_AT, 1f)
             alpha = 1f - leave
             translationY = -8.dp.toPx() * leave
         },
-        shape = CircleShape, color = palette.lockedBadgeFill,
+        shape = CircleShape, color = palette?.lockedBadgeFill ?: Panel,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Canvas(Modifier.size(size)) {

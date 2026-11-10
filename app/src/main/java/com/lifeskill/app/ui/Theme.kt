@@ -80,8 +80,8 @@ internal data class MapNodePalette(
     val lockedRim: Color,
     val lockedInk: Color,
     val lockedBadgeFill: Color,
-    val availableFill: Color? = null,
-    val availableRim: Color? = null,
+    val availableFill: Color,
+    val availableRim: Color,
 )
 
 internal data class StudyColors(
@@ -101,7 +101,7 @@ internal data class StudyColors(
     val iconBlue: Color,
     val iconGreen: Color,
     val iconOrange: Color,
-    val mapNodePalette: MapNodePalette,
+    val mapNodePalette: MapNodePalette? = null,
 )
 
 private val LightStudyColors = StudyColors(
@@ -120,10 +120,10 @@ private val LightStudyColors = StudyColors(
     iconViolet = Color(0xFF8C7DB2), iconBlue = Color(0xFF6C91A8),
     iconGreen = Color(0xFF6E9583), iconOrange = Color(0xFFBB886A),
     mapNodePalette = MapNodePalette(
-        lockedFill = Color(0xFFE4E4E4),
-        lockedRim = Color(0xFFACACAC),
-        lockedInk = Color(0xFF666666),
-        lockedBadgeFill = Color(0xFFF3F3F3),
+        lockedFill = Color(0xFFECECEC),
+        lockedRim = Color(0xFFBDBDBD),
+        lockedInk = Color(0xFF696969),
+        lockedBadgeFill = Color(0xFFF6F6F6),
         availableFill = Color(0xFFCFE7E1),
         availableRim = Color(0xFF7EAA9E),
     ),
@@ -144,12 +144,6 @@ private val DarkStudyColors = StudyColors(
     focusBand = Color(0xFF579783),
     iconViolet = Color(0xFFC3B1F6), iconBlue = Color(0xFF98C2F0),
     iconGreen = Color(0xFF8ED8B5), iconOrange = Color(0xFFF5B483),
-    mapNodePalette = MapNodePalette(
-        lockedFill = Color(0xFF292929),
-        lockedRim = Color(0xFF474747),
-        lockedInk = Color(0xFFA3A3A3),
-        lockedBadgeFill = Color(0xFF343434),
-    ),
 )
 
 private val LocalStudyColors = staticCompositionLocalOf { LightStudyColors }

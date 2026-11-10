@@ -371,6 +371,7 @@ private fun MapNode(
     val mapName = remember(skill.name, skill.shortName) { skill.mapName }
     val palette = studyColors.mapNodePalette
     val locked = state == SkillState.LOCKED
+    val lockedPalette = palette.takeIf { locked }
     Surface(
         onClick = onOpen, shape = ControlShape,
         modifier = modifier.semantics {
@@ -401,11 +402,11 @@ private fun MapNode(
                 }
                 if (references.isNotEmpty()) {
                     Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape,
-                        color = if (locked) palette.lockedBadgeFill else Raised,
+                        color = lockedPalette?.lockedBadgeFill ?: Raised,
                     ) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
                         Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium,
-                            color = if (locked) palette.lockedInk else Ink,
+                            color = lockedPalette?.lockedInk ?: Ink,
                         )
                     }
                 }
@@ -414,7 +415,7 @@ private fun MapNode(
                 mapName,
                 color = when {
                     focused -> Gold
-                    locked -> palette.lockedInk
+                    locked -> lockedPalette?.lockedInk ?: Muted
                     else -> Ink
                 },
                 style = MaterialTheme.typography.labelLarge.copy(
