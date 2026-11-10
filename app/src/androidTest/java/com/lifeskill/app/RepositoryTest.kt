@@ -189,9 +189,50 @@ class RepositoryTest {
         assertEquals(1, container.conversations.watch(scope).first().size)
     }
 
+    @Test fun manualSaveAndAiAppendEnforceAdjacentPrerequisites() = runBlocking {
+        val library = container.library
+        val direction = library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "逻辑层级验证")
+        val root = add(tree, EntryKind.SKILL, "基础")
+        val middle = add(tree, EntryKind.SKILL, "进阶", setOf(root.id))
+        val original = library.snapshot()
+        expectRule { add(tree, EntryKind.SKILL, "应用", setOf(root.id, middle.id)) }
+        assertEquals(original, library.snapshot())
+
+        val scope = ChatScope(ChatMode.GENERATE, tree.id)
+        fun response(requires: List<Entry>) = """
+            {"kind":"create","reply":"新增","skills":[
+              {"ref":"apply","name":"应用","goal":"演示操作","requires":${JSONArray(requires.map { "existing:${it.id}" })}}
+            ]}
+        """.trimIndent()
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("\"level\":2"))
+            response(listOf(root, middle))
+        }
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("追加方案包含跨层前置"))
+            assertEquals(original, library.snapshot())
+            response(listOf(middle))
+        }
+        container.conversations.send(scope, "追加应用技能")
+        val updated = library.snapshot()
+        val added = updated.childrenOf(tree.id).single { it.name == "应用" }
+        assertEquals(setOf(middle.id), updated.prerequisitesOf(added.id))
+        assertEquals(TurnKind.CREATED, container.conversations.watch(scope).first().last().kind)
+    }
+
     @Test fun confirmingInvalidDraftRollsBackWholeBatch() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
-        val invalid = """{"kind":"create","reply":"方案","directionName":"设计","trees":[{"name":"树 A","skills":[]},{"name":"树 B","skills":[{"ref":"x","name":"节点","goal":"能解释用途","requires":["x"]}]}]}"""
+        val invalid = """
+            {"kind":"create","reply":"方案","directionName":"设计","trees":[
+              {"name":"树 A","skills":[]},
+              {"name":"树 B","skills":[
+                {"ref":"base","name":"基础","goal":"能解释用途","requires":[]},
+                {"ref":"next","name":"进阶","goal":"能使用基础概念","requires":["base"]},
+                {"ref":"last","name":"应用","goal":"能完成练习","requires":["base","next"]}
+              ]}
+            ]}
+        """.trimIndent()
         seedLegacyDraft(scope, invalid)
         val preview = container.conversations.watch(scope).first().last()
         assertEquals(TurnKind.DRAFT, preview.kind)
@@ -202,6 +243,7 @@ class RepositoryTest {
         ai.reply(invalid)
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("上一版技能树没有通过校验"))
+            assertTrue(messages.first().text.contains("紧邻的上一层"))
             CREATED
         }
         container.conversations.send(scope, "重新生成数据技能树")

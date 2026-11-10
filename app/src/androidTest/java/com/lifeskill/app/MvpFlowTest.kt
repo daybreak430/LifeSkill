@@ -390,6 +390,44 @@ class MvpFlowTest {
         await("新增技能说明")
     }
 
+    @Test fun prerequisitePickerDisablesEarlierTiersAfterChoosingAnAdjacentSkill() {
+        await("本职工作")
+        val library = fixture.container.library
+        val tree = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "层级选择验证"))
+            val root = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "基础层", "掌握基础"))
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "进阶层", "完成进阶练习", setOf(root.id)))
+            tree
+        }
+        try {
+            ui.onNodeWithText("本职工作").performClick()
+            await(tree.name)
+            ui.onNodeWithText(tree.name).performClick()
+            ui.onNodeWithText("新增技能点").performClick()
+            fill("名称", "应用层")
+            fill("技能说明", "完成综合练习")
+            ui.onNodeWithText("前置节点").performScrollTo().performTouchInput { click() }
+            val rootChoice = ui.onNode(hasText("基础层") and isToggleable())
+            val middleChoice = ui.onNode(hasText("进阶层") and isToggleable())
+            rootChoice.assertIsEnabled()
+            middleChoice.performScrollTo().performTouchInput { click() }
+            rootChoice.assertIsNotEnabled()
+            middleChoice.performScrollTo().performTouchInput { click() }
+            rootChoice.assertIsEnabled()
+            middleChoice.performScrollTo().performTouchInput { click() }
+            ui.onNodeWithText("保存").performClick()
+            await("0 / 3 已点亮")
+            runBlocking {
+                val saved = library.snapshot()
+                val added = saved.childrenOf(tree.id).single { it.name == "应用层" }
+                assertEquals(listOf("进阶层"), saved.prerequisitesOf(added.id).map { saved.byId.getValue(it).name })
+            }
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
+    }
+
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
         await("本职工作")
         ui.onNodeWithContentDescription("设置").performClick()

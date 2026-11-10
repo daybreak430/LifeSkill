@@ -66,7 +66,9 @@ internal object AiProtocol {
         "off_topic" to TurnKind.OFF_TOPIC,
     )
 
-    fun generationPrompt(owner: Entry?, candidates: List<Entry>, remainingBranches: Map<String, Int>): String {
+    fun generationPrompt(
+        owner: Entry?, candidates: List<Entry>, remainingBranches: Map<String, Int>, levels: Map<String, Int>,
+    ): String {
         val context = JSONObject()
             .put("scope", owner?.kind?.name ?: "HOME")
             .put("target", owner?.name ?: JSONObject.NULL)
@@ -74,6 +76,7 @@ internal object AiProtocol {
                 candidates.forEach { candidate ->
                     val item = JSONObject().put("id", candidate.id).put("name", candidate.name)
                     remainingBranches[candidate.id]?.let { item.put("remainingBranches", it) }
+                    levels[candidate.id]?.let { item.put("level", it + 1) }
                     put(item)
                 }
             })
@@ -93,7 +96,7 @@ internal object AiProtocol {
             """.trimIndent()
             EntryKind.TREE -> """
                 当前技能树由 App 固定，items 列出已有技能点。只能在当前树追加技能点，输出只含 kind、reply、skills。
-                依赖已有节点时，在 requires 使用 "existing:<从 items 复制该节点的 id>"，引用次数不能超过该节点的 remainingBranches。
+                依赖已有节点时，在 requires 使用 "existing:<从 items 复制该节点的 id>"，引用次数不能超过该节点的 remainingBranches。已有节点的逻辑层级见 level。
                 追加技能点示例：{"kind":"create","reply":"已规划。","skills":[$exampleSkill]}
             """.trimIndent()
             EntryKind.SKILL -> error("技能点没有生成入口。")
@@ -111,6 +114,7 @@ internal object AiProtocol {
             每个 skill 包含 ref、name、goal、requires、icon，可加 shortName（地图简称，2–5 个字，保留技能的核心词）。goal 用简短句子说明本节要学的内容和可检验的目标。
             按每个技能点的名称和学习目标选择 icon，从以下图标库原样填写英文标识。相近的技能可以复用同一个图标，不同类型的技能应选各自贴切的图标。图标库：${iconCatalog(EntryIcon.entries.filterNot { it == EntryIcon.DIAMOND })}
             ref 是同批同树唯一的简短英文标识；requires 引用同树 ref，无前置填 []。不要引用自己或形成循环。
+            无前置的技能为第 1 层。技能的所有直接前置必须处于同一层，技能本身在紧邻的下一层。若 B 依赖 A，C 依赖 B，C 的 requires 只能列 B，不能再列 A。只在内部核对层级，不输出 level 字段。
             ${if (owner?.kind != EntryKind.TREE) "新树里的 requires 只能填写该树 skills 中实际存在的 ref。即使同批生成多棵树，各树也不能互相引用。" else ""}
             每个技能点最多作为两个后续节点的前置。内容较多时拆成逐步进阶的路径，不要从同一点分出三条支线。
             名称不超过 ${LibraryRules.NAME_LIMIT} 个字符且不可换行，学习目标不超过 ${LibraryRules.GOAL_LIMIT} 个字符。树名和技能点名在同层唯一，目标应可检验。

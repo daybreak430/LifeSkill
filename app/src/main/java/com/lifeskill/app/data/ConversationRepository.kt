@@ -12,7 +12,9 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.GenerationPreview
+import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.SkippedPrerequisiteTier
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
@@ -109,7 +111,11 @@ internal class ConversationRepository(
             is GenerationDestination.New -> draft.copy(directionId = null, directionName = destination.name)
         }
         // 以用户选中的方向为准，写入内容和更新草稿状态一次提交。
-        val result = library.applyDraft(null, selected)
+        val result = try {
+            library.applyDraft(null, selected)
+        } catch (_: SkippedPrerequisiteTier) {
+            throw RuleViolation("这份草稿含有跨层前置关系，请重新生成。")
+        }
         val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary + resolved.notice,
             row.contentVersion, resultId = result.entry.id)
         dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
@@ -144,7 +150,10 @@ internal class ConversationRepository(
                 val remaining = if (owner?.kind == EntryKind.TREE) {
                     candidates.associate { it.id to current.remainingBranches(it.id) }
                 } else emptyMap()
-                AiProtocol.generationPrompt(owner, candidates, remaining)
+                val levels = if (owner?.kind == EntryKind.TREE) {
+                    SkillGraph.levels(candidates.map(Entry::id), current.edges)
+                } else emptyMap()
+                AiProtocol.generationPrompt(owner, candidates, remaining, levels)
             }
             Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, recent))
         } ?: return
@@ -184,7 +193,14 @@ internal class ConversationRepository(
         val reply = AiProtocol.generation(raw)
         val draft = reply.draft ?: return Turn(id, Speaker.ASSISTANT, TurnKind.MESSAGE, reply.reply, version)
         if (owner?.kind == EntryKind.TREE) {
-            val result = library.applyDraft(owner, draft)
+            val result = try {
+                library.applyDraft(owner, draft)
+            } catch (error: SkippedPrerequisiteTier) {
+                throw RecoverableReply(
+                    checkNotNull(error.message),
+                    "上一版追加方案包含跨层前置。为每个新技能选择同一逻辑层的直接前置，并重新输出完整 JSON。",
+                )
+            }
             return Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, version, resultId = result.entry.id)
         }
         if (draft.skills.isNotEmpty() || (owner != null && (draft.directionId != null || draft.directionName != null)) ||

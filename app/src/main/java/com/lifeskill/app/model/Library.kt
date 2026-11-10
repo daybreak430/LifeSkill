@@ -70,6 +70,23 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
     fun skillState(id: String) = skillStates.getValue(id)
     fun remainingBranches(id: String) = (SkillGraph.BRANCH_LIMIT - dependents[id].orEmpty().size).coerceAtLeast(0)
 
+    fun prerequisiteChoices(treeId: String?, skillId: String?, selected: Set<String>): Set<String> {
+        val ids = childrenOf(treeId).map(Entry::id).toSet()
+        val previous = edges.filter { it.skillId in ids }
+        // 新技能还没有持久化 ID，先把表单中的选择当作临时节点试算。
+        val target = skillId.orEmpty()
+        val draft = previous.filterNot { it.skillId == target } + selected.map { Edge(target, it) }
+        val draftIds = ids + target
+        return (ids - target).filterTo(mutableSetOf()) { candidate ->
+            candidate in selected || try {
+                SkillGraph.validate(draftIds, draft + Edge(target, candidate), previous)
+                true
+            } catch (_: RuleViolation) {
+                false
+            }
+        }
+    }
+
     fun skillsUnder(id: String?): List<Entry> = when (byId[id]?.kind) {
         EntryKind.SKILL -> listOfNotNull(byId[id])
         EntryKind.TREE -> childrenOf(id)
@@ -84,6 +101,8 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
 }
 
 open class RuleViolation(message: String) : IllegalArgumentException(message)
+
+internal class SkippedPrerequisiteTier : RuleViolation("前置节点只能选紧邻的上一层技能。")
 
 object LibraryRules {
     const val NAME_LIMIT = 48
@@ -146,7 +165,14 @@ object SkillGraph {
         if (edges.any { it.skillId == it.prerequisiteId }) {
             throw RuleViolation("技能点不能把自己设为前置节点。")
         }
-        tiers(skillIds.toList(), edges)
+        val levels = levels(skillIds, edges)
+        val skipped = edges.filterNot { isAdjacent(it, levels) }
+        if (skipped.isNotEmpty()) {
+            // 保留已存在的跨层依赖，但编辑上游导致原相邻关系变成跨层也要拦截。
+            val previousLevels = levels(skillIds, previousEdges)
+            val previousSkipped = previousEdges.filterNot { isAdjacent(it, previousLevels) }.toSet()
+            if (skipped.any { it !in previousSkipped }) throw SkippedPrerequisiteTier()
+        }
         val previousChildren = previousEdges.groupBy(Edge::prerequisiteId)
         for ((parent, outgoing) in edges.distinct().groupBy(Edge::prerequisiteId)) {
             // 旧树允许逐步减少超额分支，保存名称或说明时也不丢弃原有关系。
@@ -156,8 +182,14 @@ object SkillGraph {
         }
     }
 
-    // 用拓扑顺序计算最长依赖路径，手动编辑校验和画布布局复用这一规则。
-    fun tiers(skillIds: List<String>, edges: List<Edge>): List<List<String>> {
+    fun isAdjacent(edge: Edge, levels: Map<String, Int>) =
+        levels.getValue(edge.skillId) == levels.getValue(edge.prerequisiteId) + 1
+
+    fun tiers(skillIds: List<String>, edges: List<Edge>): List<List<String>> =
+        levels(skillIds, edges).entries.groupBy({ it.value }, { it.key }).toSortedMap().values.toList()
+
+    // 用最长前置路径定义逻辑层级，与地图因屏宽产生的换行无关。
+    fun levels(skillIds: Collection<String>, edges: List<Edge>): Map<String, Int> {
         val depths = skillIds.associateWith { 0 }.toMutableMap()
         val visible = edges.distinct().filter { it.skillId in depths && it.prerequisiteId in depths }
         val outgoing = visible.groupBy(Edge::prerequisiteId)
@@ -176,6 +208,6 @@ object SkillGraph {
             }
         }
         if (visited != skillIds.size) throw RuleViolation("这些前置关系会形成循环。")
-        return skillIds.groupBy { depths.getValue(it) }.toSortedMap().values.toList()
+        return depths
     }
 }

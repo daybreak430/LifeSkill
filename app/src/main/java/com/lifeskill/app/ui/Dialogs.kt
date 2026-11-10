@@ -110,9 +110,12 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                             )
                         }
                         if (showPrerequisites) {
+                            val choices = remember(library, initial, selected) {
+                                library.prerequisiteChoices(initial.parentId, initial.id, selected)
+                            }
                             siblings.forEach { entry ->
                                 val checked = entry.id in selected
-                                val canSelect = entry.id in initial.prerequisites || library.remainingBranches(entry.id) > 0
+                                val canSelect = entry.id in choices
                                 Row(
                                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
                                         .background(if (checked) GoldGround else Ground)
@@ -127,7 +130,10 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
                                     if (!canSelect) {
-                                        Text("分支已满", color = Muted, style = MaterialTheme.typography.labelMedium)
+                                        val reason = if (entry.id !in initial.prerequisites &&
+                                            library.remainingBranches(entry.id) == 0
+                                        ) "分支已满" else "不可选"
+                                        Text(reason, color = Muted, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }

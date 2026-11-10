@@ -29,8 +29,26 @@ class RulesTest {
     @Test fun graphUsesLongestPathForSharedPrerequisites() {
         val skills = listOf("root", "branch", "tip", "other")
         val edges = listOf(Edge("tip", "root"), Edge("branch", "root"), Edge("tip", "branch"))
-        SkillGraph.validate(skills.toSet(), edges)
         assertEquals(listOf(listOf("root", "other"), listOf("branch"), listOf("tip")), SkillGraph.tiers(skills, edges))
+    }
+
+    @Test fun graphAllowsSeveralParentsOnlyFromThePreviousTier() {
+        val ids = setOf("root", "left", "right", "target")
+        val valid = listOf(Edge("left", "root"), Edge("right", "root"), Edge("target", "left"), Edge("target", "right"))
+        SkillGraph.validate(ids, valid)
+
+        val legacy = listOf(Edge("left", "root"), Edge("target", "left"), Edge("target", "root"))
+        assertThrows(RuleViolation::class.java) { SkillGraph.validate(ids, legacy) }
+        SkillGraph.validate(ids, legacy, legacy)
+        SkillGraph.validate(ids, legacy.dropLast(1), legacy)
+    }
+
+    @Test fun editingAnUpstreamSkillCannotTurnAnExistingLinkIntoASkippedTier() {
+        val ids = setOf("start", "left", "right", "target")
+        val previous = listOf(Edge("target", "left"), Edge("target", "right"))
+        assertThrows(RuleViolation::class.java) {
+            SkillGraph.validate(ids, previous + Edge("left", "start"), previous)
+        }
     }
 
     @Test fun graphRejectsSelfEdgesCyclesAndForeignPrerequisites() {

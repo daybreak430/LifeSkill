@@ -21,16 +21,20 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
     private data class Segment(val start: Int, val end: Int)
 
     private val vertices = mutableListOf<Vertex>()
-    private val rows = SkillGraph.tiers(ids, edges).flatMap { it.chunked(2) }.mapIndexed { row, skills ->
+    private val levels = SkillGraph.levels(ids, edges)
+    private val rows = ids.groupBy(levels::getValue).toSortedMap().values.flatMap { it.chunked(2) }.mapIndexed { row, skills ->
         skills.map { addVertex(row, it) }.toMutableList()
     }
     private val skills = vertices.mapIndexed { index, vertex -> checkNotNull(vertex.skill) to index }.toMap()
-    private val routes = edges.distinct().mapNotNull { edge ->
-        val source = skills[edge.prerequisiteId] ?: return@mapNotNull null
-        val target = skills[edge.skillId] ?: return@mapNotNull null
+    // 旧跨层依赖仍用于解锁，在画布上只显示关联编号。
+    private val edgesByAdjacency = edges.distinct().filter { it.prerequisiteId in skills && it.skillId in skills }
+        .partition { SkillGraph.isAdjacent(it, levels) }
+    private val routes = edgesByAdjacency.first.map { edge ->
+        val source = skills.getValue(edge.prerequisiteId)
+        val target = skills.getValue(edge.skillId)
         val firstRow = vertices[source].row
         val lastRow = vertices[target].row
-        // 跨层线在中间每层占一条独立窄通道，不穿过技能卡片或文字。
+        // 相邻逻辑层仍可能因换行而隔开，给连线留窄通道。
         val tracks = (firstRow + 1 until lastRow).map { row ->
             addVertex(row, null).also { rows[row].add(it) }
         }
@@ -121,7 +125,7 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
             width = worldWidth.toFloat(),
             rowCount = visible.size,
             connections = accepted.map { route -> MapConnection(route.edge, route.vertices.map(points::getValue)) },
-            references = routes.filterNot { it in accepted }.map(Route::edge),
+            references = routes.filterNot { it in accepted }.map(Route::edge) + edgesByAdjacency.second,
         )
     }
 

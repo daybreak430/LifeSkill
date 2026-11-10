@@ -21,15 +21,22 @@ class SkillMapLayoutTest {
         assertSeparated(map, edges)
     }
 
-    @Test fun routesLongEdgesThroughTheirOwnTrack() {
+    @Test fun showsOldCrossTierEdgesOnlyAsReferences() {
         val nodes = listOf("a", "b", "c", "d")
         val longEdge = Edge("d", "a")
         val edges = listOf(Edge("b", "a"), Edge("c", "b"), Edge("d", "c"), longEdge)
         val map = SkillMapLayout.arrange(nodes, edges)
-        val route = map.connections.single { it.edge == longEdge }
-        assertEquals(listOf(0, 1, 2, 3), route.points.map { it.row })
-        assertTrue(map.references.isEmpty())
+        assertEquals(listOf(longEdge), map.references)
+        assertEquals(3, map.connections.size)
         assertSeparated(map, edges)
+    }
+
+    @Test fun adjacentTiersCanStillConnectAcrossWrappedRows() {
+        val nodes = listOf("first", "second", "third", "fourth", "child")
+        val edge = Edge("child", "first")
+        val map = SkillMapLayout.arrange(nodes, listOf(edge))
+        assertEquals(listOf(0, 1, 2), map.connections.single().points.map { it.row })
+        assertTrue(map.references.isEmpty())
     }
 
     @Test fun keepsConflictingDependenciesAsReferences() {
