@@ -37,7 +37,7 @@ internal fun SkillState.tint() = when (this) {
 @Composable
 internal fun SkillMedallion(
     icon: EntryIcon, state: SkillState, diameter: Dp, focused: Boolean = false, glyphSize: Dp = diameter * .43f,
-    showBadge: Boolean = true,
+    showBadge: Boolean = true, mapPalette: MapNodePalette? = null,
 ) {
     val lit = state == SkillState.LIT
     val locked = state == SkillState.LOCKED
@@ -46,9 +46,10 @@ internal fun SkillMedallion(
     val surface = Panel
     val fill = when {
         focused -> GoldGround
-        locked -> Raised
-        else -> MaterialTheme.colorScheme.secondaryContainer
+        locked -> mapPalette?.lockedFill ?: Raised
+        else -> mapPalette?.availableFill ?: MaterialTheme.colorScheme.secondaryContainer
     }
+    val rim = if (locked) mapPalette?.lockedRim else mapPalette?.availableRim
     Box(Modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val radius = size.minDimension / 2
@@ -59,7 +60,13 @@ internal fun SkillMedallion(
                     drawCircle(surface, radius = radius * .89f)
                     drawCircle(fill, radius = radius * .82f)
                 }
-                else -> drawCircle(fill, radius = radius)
+                else -> {
+                    drawCircle(fill, radius = radius)
+                    if (rim != null) {
+                        val stroke = 1.dp.toPx()
+                        drawCircle(rim, radius = (radius - stroke / 2).coerceAtLeast(0f), style = Stroke(stroke))
+                    }
+                }
             }
         }
         Mark(icon.glyph, if (lit) colors.earnedInk else tint, Modifier.size(glyphSize))
@@ -78,6 +85,7 @@ internal fun UnlockingMedallion(
     icon: EntryIcon, diameter: Dp, focused: Boolean, source: Boolean, progress: () -> Float,
 ) {
     val glow = Gold
+    val mapPalette = studyColors.mapNodePalette
     Box(Modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val from = if (source) .04f else .76f
@@ -88,7 +96,7 @@ internal fun UnlockingMedallion(
             }
         }
         SkillMedallion(icon, if (source) SkillState.AVAILABLE else SkillState.LOCKED,
-            diameter, focused = source, glyphSize = diameter * .49f, showBadge = false)
+            diameter, focused = source, glyphSize = diameter * .49f, showBadge = false, mapPalette = mapPalette)
         Box(Modifier.graphicsLayer {
             val reveal = if (source) motionPhase(progress(), 0f, .43f) else motionPhase(progress(), .76f, 1f)
             alpha = FastOutSlowInEasing.transform(reveal)
@@ -97,7 +105,7 @@ internal fun UnlockingMedallion(
             scaleY = scaleX
         }) {
             SkillMedallion(icon, if (source) SkillState.LIT else SkillState.AVAILABLE,
-                diameter, focused && !source, glyphSize = diameter * .49f)
+                diameter, focused && !source, glyphSize = diameter * .49f, mapPalette = mapPalette)
         }
         if (!source) {
             UnlockingLock(

@@ -392,7 +392,10 @@ private fun MapNode(
                         UnlockingMedallion(skill.displayIcon, diameter, focused, source = true, progress = clock)
                     unlockTarget && state == SkillState.AVAILABLE ->
                         UnlockingMedallion(skill.displayIcon, diameter, focused, source = false, progress = clock)
-                    else -> SkillMedallion(skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f)
+                    else -> SkillMedallion(
+                        skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f,
+                        mapPalette = studyColors.mapNodePalette,
+                    )
                 }
                 if (references.isNotEmpty()) {
                     Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape, color = Raised) {

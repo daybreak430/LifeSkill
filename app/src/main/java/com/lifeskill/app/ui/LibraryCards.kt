@@ -70,6 +70,24 @@ internal val LibraryTitle = TextStyle(
     fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 35.sp,
 )
 
+private val DirectionArcHeight = 32.dp
+private val DirectionProgressPadding = 3.dp
+private val DirectionProgressGap = 2.dp
+
+@Composable
+internal fun directionCardHeight(): Dp {
+    val typography = MaterialTheme.typography
+    return with(LocalDensity.current) {
+        // 以空卡的点击区为基准，进度布局也预留两行方向名称。
+        val titleHeight = typography.titleMedium.lineHeight.toDp() * 2
+        val progressHeight = DirectionArcHeight + DirectionProgressPadding * 2 + DirectionProgressGap * 2 +
+            titleHeight + typography.bodySmall.lineHeight.toDp() + 2.dp
+        val compactHeight = maxOf(48.dp, titleHeight + 2.dp) +
+            maxOf(48.dp, typography.labelMedium.lineHeight.toDp() * 2 + 2.dp) + 10.dp
+        maxOf(progressHeight, compactHeight)
+    }
+}
+
 @Composable
 internal fun HomeStudyCard(
     study: HomeStudy?, modifier: Modifier = Modifier, onAction: () -> Unit,
@@ -232,23 +250,24 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
             },
     ) {
         Column(
-            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+            Modifier.padding(horizontal = 12.dp, vertical = DirectionProgressPadding),
+            verticalArrangement = Arrangement.spacedBy(DirectionProgressGap, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.BottomCenter) {
+            Box(Modifier.fillMaxWidth().height(DirectionArcHeight), contentAlignment = Alignment.BottomCenter) {
                 Canvas(Modifier.matchParentSize()) {
-                    val stroke = 4.dp.toPx()
-                    val diameter = minOf(size.width - stroke, (size.height - stroke) * 2).coerceAtLeast(0f)
-                    val origin = Offset((size.width - diameter) / 2, stroke / 2)
-                    val bounds = Size(diameter, diameter)
+                    val stroke = 3.5.dp.toPx()
+                    val arcHeight = ((size.height - stroke) * 2).coerceAtLeast(0f)
+                    val arcWidth = minOf(size.width - stroke, arcHeight * 1.25f).coerceAtLeast(0f)
+                    val origin = Offset((size.width - arcWidth) / 2, stroke / 2)
+                    val bounds = Size(arcWidth, arcHeight)
                     val arc = Stroke(stroke, cap = StrokeCap.Round)
                     drawArc(colors.progressTrack, 180f, 180f, false, origin, bounds, style = arc)
                     if (sweep.value > 0f) {
                         drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
                     }
                 }
-                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 2.dp).size(19.dp))
+                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 2.dp).size(17.dp))
             }
             Text(
                 entry.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),

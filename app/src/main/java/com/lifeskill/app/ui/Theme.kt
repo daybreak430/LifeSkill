@@ -75,6 +75,13 @@ private val LightPalette = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE0EAEA),
 )
 
+internal data class MapNodePalette(
+    val lockedFill: Color,
+    val lockedRim: Color,
+    val availableFill: Color,
+    val availableRim: Color,
+)
+
 internal data class StudyColors(
     val backdrop: List<Color>,
     val cardShadow: Color,
@@ -92,6 +99,7 @@ internal data class StudyColors(
     val iconBlue: Color,
     val iconGreen: Color,
     val iconOrange: Color,
+    val mapNodePalette: MapNodePalette? = null,
 )
 
 private val LightStudyColors = StudyColors(
@@ -109,6 +117,12 @@ private val LightStudyColors = StudyColors(
     focusBand = Color(0xFFB9E2D0),
     iconViolet = Color(0xFF8C7DB2), iconBlue = Color(0xFF6C91A8),
     iconGreen = Color(0xFF6E9583), iconOrange = Color(0xFFBB886A),
+    mapNodePalette = MapNodePalette(
+        lockedFill = Color(0xFFDCE7EC),
+        lockedRim = Color(0xFF9CB1BD),
+        availableFill = Color(0xFFCFE7E1),
+        availableRim = Color(0xFF7EAA9E),
+    ),
 )
 
 private val DarkStudyColors = StudyColors(

@@ -50,19 +50,10 @@ import kotlinx.coroutines.flow.first
 internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel, addedEntryId: String?) {
     val directions = library.childrenOf(null)
     val study = remember(library, latestSkill) { library.homeStudy(latestSkill) }
-    val density = LocalDensity.current
-    val columnWidth = 148.dp * density.fontScale.coerceAtLeast(1f)
+    val columnWidth = 148.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
     val sidePadding = 16.dp
     val gap = 12.dp
-    val typography = MaterialTheme.typography
-    // 同一字号下卡片共用固定高度，为两行方向名称和建树操作保留空间。
-    val directionCardHeight = with(density) {
-        val titleHeight = typography.titleMedium.lineHeight.toDp() * 2
-        val progressHeight = 62.dp + titleHeight + typography.bodySmall.lineHeight.toDp()
-        val compactHeight = maxOf(48.dp, titleHeight + 2.dp) +
-            maxOf(48.dp, typography.labelMedium.lineHeight.toDp() * 2 + 2.dp) + 10.dp
-        maxOf(progressHeight, compactHeight)
-    }
+    val cardHeight = directionCardHeight()
     val state = rememberLazyGridState()
     val addition = directions.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }
         ?.plus(if (study == null) 3 else 4)
@@ -125,7 +116,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         }
         items(directions, key = Entry::id) { direction ->
             val progress = library.progress(direction.id)
-            val card = Modifier.animateItem().height(directionCardHeight).testTag("direction-card-${direction.id}")
+            val card = Modifier.animateItem().height(cardHeight).testTag("direction-card-${direction.id}")
             val open = { app.open(Route.entry(direction)) }
             if (progress.total > 0) {
                 DirectionCard(direction, progress, card, open)
