@@ -96,7 +96,11 @@ private fun LessonBlock(node: Node) {
             node.richText(), color = Ink,
             style = if (node.level <= 2) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
         )
-        is Paragraph -> Text(node.richText(), color = Ink, style = MaterialTheme.typography.bodyLarge)
+        is Paragraph -> {
+            val text = node.richText()
+            val flow = remember(text.text) { LessonFlow.parse(text.text) }
+            if (flow == null) Text(text, color = Ink, style = MaterialTheme.typography.bodyLarge) else FlowBlock(flow)
+        }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             val start = (node as? OrderedList)?.markerStartNumber ?: 1
             node.children().forEachIndexed { index, item ->
@@ -114,18 +118,21 @@ private fun LessonBlock(node: Node) {
             }
         }
         is FencedCodeBlock -> {
-            val flow = remember(node) {
-                val language = node.info.trim()
-                if (language.isEmpty() || language.equals("mermaid", ignoreCase = true)) LessonFlow.parse(node.literal) else null
-            }
-            if (flow == null) CodeBlock(node.literal) else FlowBlock(flow)
+            val language = node.info.trim().takeWhile { !it.isWhitespace() }
+            LessonCode(node.literal, mermaidFence = language.equals("mermaid", ignoreCase = true))
         }
-        is IndentedCodeBlock -> CodeBlock(node.literal)
+        is IndentedCodeBlock -> LessonCode(node.literal)
         is HtmlBlock -> CodeBlock(node.literal)
         is ThematicBreak -> HorizontalDivider(color = Line)
         is TableBlock -> LessonTable(node)
         else -> node.children().forEach { LessonBlock(it) }
     }
+}
+
+@Composable
+private fun LessonCode(source: String, mermaidFence: Boolean = false) {
+    val flow = remember(source, mermaidFence) { LessonFlow.parse(source, mermaidFence) }
+    if (flow == null) CodeBlock(source) else FlowBlock(flow)
 }
 
 private fun Node.children(): Sequence<Node> = generateSequence(firstChild) { it.next }

@@ -125,7 +125,8 @@ internal fun LifeSkillApp(
                         modifier = Modifier.fillMaxSize().clipToBounds(),
                         contentKey = { it.route.encode() },
                         transitionSpec = {
-                            val direction = if (targetState.depth < initialState.depth) -1 else 1
+                            val backToTree = initialState.route.page == Page.TUTOR && targetState.route.page == Page.TREE
+                            val direction = if (targetState.depth < initialState.depth || backToTree) -1 else 1
                             (fadeIn(tween(PAGE_MOTION_MS)) + slideInHorizontally(tween(PAGE_MOTION_MS, easing = FastOutSlowInEasing)) {
                                 direction * it / 14
                             }) togetherWith (fadeOut(tween(160)) + slideOutHorizontally(tween(PAGE_MOTION_MS, easing = FastOutSlowInEasing)) {

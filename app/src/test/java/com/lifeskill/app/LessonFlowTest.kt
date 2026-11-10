@@ -40,6 +40,35 @@ class LessonFlowTest {
             LessonFlow.parse("graph TB\nA[复查] --> A")?.returnArrows)
     }
 
+    @Test fun rendersHeaderlessAdditionFlowFromSavedReplies() {
+        val source = """
+            A[观察算式] --> B{有加法吗}
+            B -->|是| C[交换加数位置]
+            B -->|否| D[不能用交换律]
+            C --> E[和保持不变]
+            E --> F[凑整简化计算]
+        """.trimIndent()
+        val flow = requireNotNull(LessonFlow.parse(source))
+        assertEquals(LessonFlow.parse("flowchart TD\n$source"), flow)
+        assertEquals(setOf("B"), flow.decisions)
+        assertEquals(listOf("是", "否"), flow.arrows.mapNotNull(LessonArrow::label))
+    }
+
+    @Test fun acceptsCommonModelVariantsWithoutTreatingPlainCodeAsADiagram() {
+        val flow = requireNotNull(LessonFlow.parse("""
+            graph LR;
+            %% 流程从左向右声明，移动端统一纵向排版
+            Start((开始)) --> Check{继续吗} -- 是 --> Finish(完成)
+            Check -.->|重试| Start
+        """.trimIndent()))
+        assertEquals(listOf(listOf("Start"), listOf("Check"), listOf("Finish")), flow.tiers)
+        assertEquals(listOf(LessonArrow("Check", "Start", "重试")), flow.returnArrows)
+        assertEquals("是", flow.arrows.last().label)
+        assertNull(LessonFlow.parse("value --> limit"))
+        assertEquals(listOf(LessonArrow("A", "B", null)),
+            LessonFlow.parse("A --> B", mermaidFence = true)?.arrows)
+    }
+
     @Test fun compactLabelsKeepFullNameSeparate() {
         assertEquals("学习数据清", LibraryRules.mapName("学习数据清理"))
         assertEquals("画课", LibraryRules.mapName("画"))

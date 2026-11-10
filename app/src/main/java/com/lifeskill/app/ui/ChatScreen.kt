@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,11 +39,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.data.ConversationRepository
@@ -60,6 +66,7 @@ import com.lifeskill.app.model.choiceAnswer
 import kotlinx.coroutines.flow.first
 
 private val ReplyInset = 42.dp
+private val creationCount = Regex("""([0-9]+) [个棵](方向|技能树|技能点)""")
 
 @Composable
 internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean) {
@@ -88,10 +95,9 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     var lastSeenMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var followReply by remember { mutableStateOf(false) }
     var lastCelebratedId by rememberSaveable { mutableStateOf<String?>(null) }
-    val celebrationId = timeline.celebrationId
-    var celebration by remember(celebrationId) {
-        mutableStateOf(celebrationId?.takeIf { pageActive && it != lastCelebratedId })
-    }
+    var openCelebrationId by rememberSaveable { mutableStateOf<String?>(null) }
+    val newCelebrationId = timeline.celebrationId?.takeIf { it != lastCelebratedId }
+    val celebration = newCelebrationId ?: openCelebrationId
     val statusMatches = status.requestId == null || status.requestId == pending?.id
     // 重试或撤回已提交时，旧历史快照可能晚一帧更新，不能重新出现重试按钮。
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
@@ -104,9 +110,11 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         chat.send(text, check)
     }
 
-    LaunchedEffect(pageActive, celebrationId) {
-        if (celebrationId != null) lastCelebratedId = celebrationId
-        if (!pageActive) celebration = null
+    LaunchedEffect(pageActive, newCelebrationId) {
+        if (newCelebrationId != null) {
+            lastCelebratedId = newCelebrationId
+            if (pageActive) openCelebrationId = newCelebrationId
+        }
     }
 
     LaunchedEffect(listState) {
@@ -259,7 +267,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         }
     }
     if (pageActive && owner != null) {
-        celebration?.let { SkillCelebration(it, owner) { celebration = null } }
+        celebration?.let { id ->
+            SkillCelebration(id, owner) {
+                lastCelebratedId = id
+                openCelebrationId = null
+            }
+        }
     }
     if (pageActive && showRestart) {
         RestartLessonDialog(
@@ -312,7 +325,7 @@ private fun ChatBubble(
         return
     }
     val user = turn.speaker == Speaker.USER
-    val prominent = turn.kind == TurnKind.CREATED || turn.kind == TurnKind.PASSED
+    val created = turn.kind == TurnKind.CREATED
     val colors = aiColors
     val shape = RoundedCornerShape(20.dp, 20.dp, if (user) 12.dp else 20.dp, if (user) 20.dp else 12.dp)
     Row(
@@ -323,9 +336,14 @@ private fun ChatBubble(
     ) {
         if (!user) AiCrystal(36.dp)
         Surface(
+            modifier = if (created) Modifier.fillMaxWidth() else Modifier,
             color = if (user) Color.Transparent else colors.panel,
             shape = shape, shadowElevation = if (user) 0.dp else 2.dp,
         ) {
+            if (created) {
+                CreationReceipt(turn.text, result, open)
+                return@Surface
+            }
             val backdrop = if (user) Modifier.background(Brush.linearGradient(colors.outgoing)) else Modifier
             Column(backdrop.padding(horizontal = 15.dp, vertical = 12.dp)) {
                 val badge = when (turn.kind) {
@@ -338,9 +356,8 @@ private fun ChatBubble(
                         modifier = Modifier.padding(bottom = 5.dp))
                 }
                 SelectionContainer {
-                    if (user || turn.kind == TurnKind.CREATED) {
-                        Text(turn.text, style = MaterialTheme.typography.bodyLarge,
-                            color = if (user) Color.White else if (prominent) colors.accent else Ink)
+                    if (user) {
+                        Text(turn.text, style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     } else {
                         LessonMarkdown(turn.text)
                     }
@@ -370,6 +387,62 @@ private fun ChatBubble(
                         Text("打开${result.kind.label} · ${result.name}", Modifier.weight(1f, fill = false), color = colors.accent)
                         Mark(Glyph.NEXT, colors.accent, Modifier.padding(start = 4.dp).size(15.dp))
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit) {
+    val colors = aiColors
+    val summary = text.substringBefore('\n')
+    val counts = remember(summary) {
+        // 旧消息存的是应用生成的计数文本。逐项匹配，保留无法识别的历史格式。
+        if (!summary.startsWith("已新增 ")) emptyList()
+        else summary.removePrefix("已新增 ").split('、').map { creationCount.matchEntire(it) }
+            .takeIf { parts -> parts.all { it != null } }.orEmpty().filterNotNull()
+    }
+    val note = if (counts.isEmpty()) text.removePrefix("已新增 ").trim() else text.substringAfter('\n', "").trim()
+    Column(
+        Modifier.background(Brush.verticalGradient(listOf(lerp(colors.panel, colors.chip, .32f), colors.panel)))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Emblem(Glyph.CHECK, colors.accent, colors.chip, diameter = 24.dp)
+            Text("已新增", color = Ink, style = MaterialTheme.typography.titleSmall)
+        }
+        if (counts.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                counts.forEach { count ->
+                    Column(Modifier.weight(1f)) {
+                        Text(count.groupValues[1], color = colors.accent,
+                            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                        Text(count.groupValues[2], color = Muted, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+        if (note.isNotEmpty()) Text(note, color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (result != null) {
+            Surface(
+                onClick = { open(result) }, shape = ControlShape, color = colors.chip,
+                modifier = Modifier.fillMaxWidth().semantics {
+                    contentDescription = "打开${result.kind.label} · ${result.name}"
+                },
+            ) {
+                Row(
+                    Modifier.heightIn(min = 48.dp).padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Mark(result.displayIcon.glyph, colors.accent, Modifier.size(20.dp))
+                    Column(Modifier.weight(1f).clearAndSetSemantics {}) {
+                        Text(result.name, color = Ink, style = MaterialTheme.typography.labelLarge,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(result.kind.label, color = colors.accent, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Mark(Glyph.NEXT, colors.accent, Modifier.size(15.dp))
                 }
             }
         }

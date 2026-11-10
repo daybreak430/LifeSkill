@@ -133,6 +133,9 @@ class MvpFlowTest {
             ui.activityRule.scenario.recreate()
             await("先梳理已学的要点。")
             pressBack()
+            await("续学技能树")
+            ui.onNodeWithTag("skill-map").assertIsDisplayed()
+            pressBack()
             await("继续学习")
             val grid = ui.onNodeWithTag("learning-directions")
             grid.performTouchInput {
@@ -397,8 +400,9 @@ class MvpFlowTest {
         ui.onNodeWithText("新建 · 数据能力").performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("方向名称").assertDoesNotExist()
         ui.onNodeWithText("确认添加").assertIsEnabled().performTouchInput { click() }
-        await("打开技能树 · 数据质量")
-        ui.onNodeWithText("打开技能树 · 数据质量").performClick()
+        await("已新增")
+        ui.onNodeWithText("技能点").assertIsDisplayed()
+        ui.onNodeWithContentDescription("打开技能树 · 数据质量").performClick()
         await("技能地图")
         assertEquals(EntryIcon.TARGET, iconOf("数据质量"))
         assertEquals(EntryIcon.CHART, iconOf("基础"))
@@ -430,11 +434,13 @@ class MvpFlowTest {
         }
         ui.onNodeWithText("A. 核对数据").performTouchInput { click() }
         await("已点亮技能点", substring = true)
+        val closeCelebration = ui.onNodeWithContentDescription("关闭庆祝")
+        closeCelebration.assertIsDisplayed().performTouchInput { click() }
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
-        pressBack()
-        await("已点亮 · AI 检验通过")
+        ui.onNodeWithContentDescription("返回").performClick()
+        await("技能地图")
         ui.onNodeWithText("取消点亮").assertDoesNotExist()
-        ui.onNodeWithContentDescription("关闭技能详情").performClick()
+        ui.onNodeWithContentDescription("关闭技能详情").assertDoesNotExist()
         practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮，下一步"))
         practiceNode.performTouchInput { click() }
         ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
@@ -442,7 +448,7 @@ class MvpFlowTest {
         masteryCheck.assertDoesNotExist()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
-            "$fence\nflowchart TD\nA{读取} --> B[核对]\nB -->|继续迭代| A\n$fence"
+            "${fence}text\nA{读取} --> B[核对]\nB -->|继续迭代| A\n$fence"
         fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", lesson).toString())
         ui.onNodeWithText("开始学习").performClick()
         await("数据核对 💡")
@@ -516,18 +522,29 @@ class MvpFlowTest {
                 ui.onAllNodesWithText("已点亮技能点", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             ui.onNodeWithTag("skill-celebration").assertIsDisplayed()
+            ui.mainClock.advanceTimeBy(2_000)
+            closeCelebration.assertIsDisplayed()
         } finally {
             ui.mainClock.autoAdvance = true
         }
+        pressBack()
+        closeCelebration.assertIsDisplayed()
+        ui.onNodeWithTag("skill-celebration").performTouchInput { click(Offset(20f, 40f)) }
+        closeCelebration.assertIsDisplayed()
         ui.activityRule.scenario.recreate()
         await("已点亮技能点", substring = true)
-        ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
+        closeCelebration.assertIsDisplayed().performClick()
+        ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
         pressBack()
+        await("2 / 2 已点亮")
+        ui.onNodeWithContentDescription("关闭技能详情").assertDoesNotExist()
+        practiceNode.performTouchInput { click() }
         await("已点亮 · AI 检验通过")
         ui.onNodeWithText("重新学习").assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").assertDoesNotExist()
         ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("已点亮技能点", substring = true)
+        ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
         fixture.ai.enqueue { messages ->
             assertEquals(2, messages.size)
             assertTrue(messages.last().text.contains("改用账单举例"))
@@ -548,8 +565,6 @@ class MvpFlowTest {
         await("开始新一轮")
         ui.onNodeWithText("取消").performClick()
         await("从核对账单开始讲。")
-        pressBack()
-        await("已点亮 · AI 检验通过")
         pressBack()
         await("2 / 2 已点亮")
     }

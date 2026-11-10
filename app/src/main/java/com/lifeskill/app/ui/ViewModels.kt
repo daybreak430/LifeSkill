@@ -134,7 +134,20 @@ internal class AppViewModel(
     }
 
     fun back() {
-        if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
+        val stack = routes.value
+        if (stack.size <= 1) return
+        val current = Route.decode(stack.last())
+        val previous = stack.dropLast(1)
+        val tree = if (current.page == Page.TUTOR) {
+            library.value?.byId?.get(current.id)?.parentId?.let { Route(Page.TREE, it).encode() }
+        } else null
+        val destination = if (tree == null) previous else {
+            val treeIndex = previous.lastIndexOf(tree)
+            // 从首页续学直接进入对话时，历史栈里还没有对应的技能树。
+            if (treeIndex >= 0) previous.take(treeIndex + 1)
+            else previous.dropLastWhile { Route.decode(it).page == Page.SKILL } + tree
+        }
+        state["routes"] = ArrayList(destination)
     }
 
     fun finishUnlock(key: String) {
