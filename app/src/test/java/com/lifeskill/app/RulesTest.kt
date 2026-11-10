@@ -3,10 +3,16 @@ package com.lifeskill.app
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.model.Edge
+import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Exercise
 import com.lifeskill.app.model.LibraryRules
+import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.Mastery
+import com.lifeskill.app.model.Progress
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillGraph
+import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
@@ -31,6 +37,29 @@ class RulesTest {
         assertThrows(RuleViolation::class.java) {
             SkillGraph.validate(skills, listOf(Edge("alpha", "beta"), Edge("beta", "alpha")))
         }
+    }
+
+    @Test fun graphLimitsNewBranchesWhilePreservingExistingDependencies() {
+        val ids = setOf("root", "one", "two", "three", "four")
+        val legacy = listOf(Edge("one", "root"), Edge("two", "root"), Edge("three", "root"))
+        assertThrows(RuleViolation::class.java) { SkillGraph.validate(ids, legacy) }
+        SkillGraph.validate(ids, legacy, legacy)
+        SkillGraph.validate(ids, legacy.take(2), legacy)
+        assertThrows(RuleViolation::class.java) { SkillGraph.validate(ids, legacy + Edge("four", "root"), legacy) }
+    }
+
+    @Test fun legacyProgressRequiresTheWholePrerequisiteChain() {
+        val root = Entry("root", "tree", EntryKind.SKILL, "起点")
+        val middle = root.copy(id = "middle", name = "进阶", mastery = Mastery.MANUAL)
+        val last = root.copy(id = "last", name = "应用", mastery = Mastery.AI)
+        val edges = listOf(Edge("middle", "root"), Edge("last", "middle"))
+        val library = Library(listOf(last, middle, root), edges)
+        assertEquals(SkillState.AVAILABLE, library.skillState(root.id))
+        assertEquals(SkillState.LOCKED, library.skillState(middle.id))
+        assertEquals(SkillState.LOCKED, library.skillState(last.id))
+        assertEquals(Progress(0, 3), library.progress())
+        val unlocked = library.copy(entries = listOf(last, middle, root.copy(mastery = Mastery.MANUAL)))
+        assertEquals(Progress(3, 3), unlocked.progress())
     }
 
     @Test fun duplicatesAreDetectedAfterWhitespaceCaseAndWidthNormalization() {

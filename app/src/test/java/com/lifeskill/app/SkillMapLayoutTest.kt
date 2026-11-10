@@ -40,6 +40,15 @@ class SkillMapLayoutTest {
         assertSeparated(map, edges)
     }
 
+    @Test fun wrapsWideTiersAndShowsOnlyTwoOutgoingLinesForLegacyBranches() {
+        val nodes = listOf("root", "a", "b", "c", "d", "e")
+        val edges = nodes.drop(1).map { Edge(it, "root") }
+        val map = SkillMapLayout.arrange(nodes, edges)
+        assertEquals(4, map.rowCount)
+        assertEquals(2, map.connections.size)
+        assertSeparated(map, edges)
+    }
+
     @Test fun keepsAllDependenciesAndNeverCrossesAcrossVariedGraphs() {
         val random = Random(15)
         val ids = (0..19).map { it.toString() }
@@ -52,6 +61,8 @@ class SkillMapLayoutTest {
     }
 
     private fun assertSeparated(map: SkillMapLayout, edges: List<Edge>) {
+        assertTrue(map.nodes.values.groupingBy { it.row }.eachCount().values.all { it <= 2 })
+        assertTrue(map.width <= 3.11f)
         val represented = map.connections.map { it.edge } + map.references
         assertEquals(edges.size, represented.size)
         assertEquals(edges.toSet(), represented.toSet())

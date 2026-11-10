@@ -12,6 +12,7 @@ import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillGraph
+import com.lifeskill.app.model.SkillState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -35,6 +36,8 @@ internal data class Creation(val entry: Entry, val directions: Int, val trees: I
         skills.takeIf { it > 0 }?.let { "${it} 个技能点" },
     ).joinToString("、", prefix = "已新增 ")
 }
+
+internal enum class AssessmentLight { LIT, LOCKED, UNCHANGED }
 
 internal class LibraryRepository(private val database: LifeSkillDatabase, private val secret: SecretBox) {
     private val dao = database.skills()
@@ -88,8 +91,8 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val newEdges = edit.prerequisites.map { Edge(saved.id, it) }
         if (saved.kind == EntryKind.SKILL) {
             val ids = current.childrenOf(saved.parentId).map(Entry::id).toSet() + saved.id
-            val otherEdges = current.edges.filter { it.skillId in ids && it.skillId != saved.id }
-            SkillGraph.validate(ids, otherEdges + newEdges)
+            val previousEdges = current.edges.filter { it.skillId in ids }
+            SkillGraph.validate(ids, previousEdges.filterNot { it.skillId == saved.id } + newEdges, previousEdges)
         } else if (newEdges.isNotEmpty()) {
             throw RuleViolation("只有技能点可以设置前置关系。")
         }
@@ -111,6 +114,9 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val previous = dao.entry(id) ?: throw RuleViolation("该技能点已删除。")
         val mastery = Mastery.valueOf(previous.mastery)
         if (previous.kind != EntryKind.SKILL.name) throw RuleViolation("只有技能点可以点亮。")
+        val current = snapshot()
+        if (lit && current.skillState(id) == SkillState.LOCKED) throw RuleViolation("请先点亮所有前置技能。")
+        if (!lit && current.hasLitDependent(id)) throw RuleViolation("请先取消已点亮的后续技能。")
         if ((mastery != Mastery.UNLIT) != lit) {
             val next = if (lit) Mastery.MANUAL else Mastery.UNLIT
             dao.updateEntry(previous.copy(mastery = next.name, masteryVersion = previous.masteryVersion + 1))
@@ -118,12 +124,16 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
     }
 
     // 评估发出后若用户编辑目标或手动操作，旧结果不覆盖用户的新状态。
-    suspend fun lightFromAssessment(expected: Entry): Boolean {
-        val row = dao.entry(expected.id) ?: return false
-        if (row.masteryVersion != expected.masteryVersion || row.contentVersion != expected.contentVersion) return false
-        if (row.mastery != Mastery.UNLIT.name) return false
+    suspend fun lightFromAssessment(expected: Entry): AssessmentLight {
+        val row = dao.entry(expected.id) ?: return AssessmentLight.UNCHANGED
+        if (row.masteryVersion != expected.masteryVersion || row.contentVersion != expected.contentVersion) {
+            return AssessmentLight.UNCHANGED
+        }
+        // 对话仓库在写入回复的事务内调用，按提交时的前置进度判定。
+        if (snapshot().skillState(expected.id) == SkillState.LOCKED) return AssessmentLight.LOCKED
+        if (row.mastery != Mastery.UNLIT.name) return AssessmentLight.UNCHANGED
         dao.updateEntry(row.copy(mastery = Mastery.AI.name, masteryVersion = row.masteryVersion + 1))
-        return true
+        return AssessmentLight.LIT
     }
 
     // 对话仓库在同一事务内调用，生成内容和该轮回复同时提交。
@@ -199,7 +209,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             }
         }
         val previousEdges = library.edges.filter { it.skillId in existingIds }
-        SkillGraph.validate(existingIds + refIds.values, previousEdges + addedEdges)
+        SkillGraph.validate(existingIds + refIds.values, previousEdges + addedEdges, previousEdges)
         var position = dao.nextPosition()
         for (entry in additions) dao.insertEntry(entry.row(position++))
         dao.insertEdges(addedEdges.map { EdgeRow(it.skillId, it.prerequisiteId) })

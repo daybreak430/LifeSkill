@@ -93,15 +93,22 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                     if (showPrerequisites) {
                         siblings.forEach { entry ->
                             val checked = entry.id in selected
+                            val canSelect = entry.id in initial.prerequisites || library.remainingBranches(entry.id) > 0
                             Row(
                                 Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                    .toggleable(checked, enabled = !editor.saving, role = Role.Checkbox) {
+                                    .toggleable(checked, enabled = canSelect && !editor.saving, role = Role.Checkbox) {
                                         selected = if (it) selected + entry.id else selected - entry.id
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Checkbox(checked, onCheckedChange = null, enabled = !editor.saving)
-                                Text(entry.name, Modifier.padding(start = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                                Checkbox(checked, onCheckedChange = null, enabled = canSelect && !editor.saving)
+                                Text(
+                                    entry.name, Modifier.weight(1f).padding(start = 10.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                if (!canSelect) {
+                                    Text("分支已满", color = Muted, style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }

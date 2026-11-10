@@ -17,6 +17,10 @@ enum class EntryKind(val label: String) {
 
 enum class Mastery { UNLIT, MANUAL, AI }
 
+enum class SkillState(val label: String) {
+    LOCKED("未解锁"), AVAILABLE("可点亮"), LIT("已点亮"),
+}
+
 data class Entry(
     val id: String,
     val parentId: String?,
@@ -44,9 +48,27 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
     val byId = entries.associateBy(Entry::id)
     private val children = entries.groupBy(Entry::parentId)
     private val prerequisites = edges.groupBy(Edge::skillId)
+    private val dependents = edges.groupBy(Edge::prerequisiteId)
+
+    private val skillStates by lazy {
+        val ids = entries.filter { it.kind == EntryKind.SKILL }.map(Entry::id)
+        val states = mutableMapOf<String, SkillState>()
+        // 按拓扑顺序计算有效进度。旧版越级点亮的记录保留，补齐前置后恢复显示。
+        SkillGraph.tiers(ids, edges).flatten().forEach { id ->
+            states[id] = when {
+                prerequisites[id].orEmpty().any { states[it.prerequisiteId] != SkillState.LIT } -> SkillState.LOCKED
+                byId.getValue(id).lit -> SkillState.LIT
+                else -> SkillState.AVAILABLE
+            }
+        }
+        states
+    }
 
     fun childrenOf(id: String?) = children[id].orEmpty()
     fun prerequisitesOf(id: String) = prerequisites[id].orEmpty().map(Edge::prerequisiteId).toSet()
+    fun skillState(id: String) = skillStates.getValue(id)
+    fun remainingBranches(id: String) = (SkillGraph.BRANCH_LIMIT - dependents[id].orEmpty().size).coerceAtLeast(0)
+    fun hasLitDependent(id: String) = dependents[id].orEmpty().any { skillState(it.skillId) == SkillState.LIT }
 
     fun skillsUnder(id: String?): List<Entry> = when (byId[id]?.kind) {
         EntryKind.SKILL -> listOfNotNull(byId[id])
@@ -57,7 +79,7 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
 
     fun progress(id: String? = null): Progress {
         val skills = skillsUnder(id)
-        return Progress(skills.count(Entry::lit), skills.size)
+        return Progress(skills.count { skillState(it.id) == SkillState.LIT }, skills.size)
     }
 }
 
@@ -115,7 +137,9 @@ object LibraryRules {
 }
 
 object SkillGraph {
-    fun validate(skillIds: Set<String>, edges: List<Edge>) {
+    const val BRANCH_LIMIT = 2
+
+    fun validate(skillIds: Set<String>, edges: List<Edge>, previousEdges: List<Edge> = emptyList()) {
         if (edges.any { it.skillId !in skillIds || it.prerequisiteId !in skillIds }) {
             throw RuleViolation("前置节点必须与当前节点属于同一棵技能树。")
         }
@@ -123,6 +147,13 @@ object SkillGraph {
             throw RuleViolation("技能点不能把自己设为前置节点。")
         }
         tiers(skillIds.toList(), edges)
+        val previousChildren = previousEdges.groupBy(Edge::prerequisiteId)
+        for ((parent, outgoing) in edges.distinct().groupBy(Edge::prerequisiteId)) {
+            // 旧树允许逐步减少超额分支，保存名称或说明时也不丢弃原有关系。
+            if (outgoing.size > BRANCH_LIMIT && !previousChildren[parent].orEmpty().containsAll(outgoing)) {
+                throw RuleViolation("每个技能点最多通往 $BRANCH_LIMIT 个后续技能点，请选择还有空位的前置节点。")
+            }
+        }
     }
 
     // 用拓扑顺序计算最长依赖路径，手动编辑校验和画布布局复用这一规则。

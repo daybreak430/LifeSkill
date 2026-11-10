@@ -19,6 +19,7 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.TurnKind
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -116,6 +117,68 @@ class RepositoryTest {
             library.delete(tree.id)
             assertEquals(null, latest.first())
         }
+    }
+
+    @Test fun manualAndAiLightingRequireEveryPrerequisiteAtCommitTime() = runBlocking {
+        withTimeout(10_000) {
+            val library = container.library
+            val conversations = container.conversations
+            val direction = library.snapshot().childrenOf(null).first()
+            val tree = add(direction, EntryKind.TREE, "顺序验证")
+            val first = add(tree, EntryKind.SKILL, "第一前置")
+            val second = add(tree, EntryKind.SKILL, "第二前置")
+            val child = add(tree, EntryKind.SKILL, "合流技能", setOf(first.id, second.id))
+            val scope = ChatScope(ChatMode.TUTOR, child.id)
+            library.setLit(first.id, true)
+            expectRule { library.setLit(child.id, true) }
+            expectRule { conversations.send(scope, "", check = true) }
+            assertTrue(conversations.watch(scope).first().isEmpty())
+
+            library.setLit(second.id, true)
+            ai.reply("""{"kind":"exercise","reply":"请说出操作步骤。"}""")
+            conversations.send(scope, "", check = true)
+            val exercise = conversations.watch(scope).first().last()
+            val waiting = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            ai.enqueue {
+                waiting.complete(Unit)
+                release.await()
+                verdict("passed", "答对了。", exercise.id)
+            }
+            val check = async { conversations.send(scope, "核对后执行") }
+            waiting.await()
+            library.setLit(second.id, false)
+            release.complete(Unit)
+            check.await()
+            assertEquals(SkillState.LOCKED, library.snapshot().skillState(child.id))
+            assertEquals(Mastery.UNLIT, library.entry(child.id)?.mastery)
+            assertTrue(conversations.watch(scope).first().last().text.contains("点亮前置技能后"))
+
+            library.setLit(second.id, true)
+            library.setLit(child.id, true)
+            expectRule { library.setLit(second.id, false) }
+            library.setLit(child.id, false)
+            library.setLit(second.id, false)
+            assertEquals(SkillState.LOCKED, library.snapshot().skillState(child.id))
+        }
+    }
+
+    @Test fun editingAndGenerationBothRejectAThirdBranch() = runBlocking {
+        val library = container.library
+        val direction = library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "分叉验证")
+        val parent = add(tree, EntryKind.SKILL, "起点")
+        add(tree, EntryKind.SKILL, "左支线", setOf(parent.id))
+        add(tree, EntryKind.SKILL, "右支线", setOf(parent.id))
+        expectRule { add(tree, EntryKind.SKILL, "第三支线", setOf(parent.id)) }
+        val scope = ChatScope(ChatMode.GENERATE, tree.id)
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("\"remainingBranches\":0"))
+            """{"kind":"create","reply":"新增","skills":[{"ref":"more","name":"第三支线","goal":"可验证目标","requires":["existing:${parent.id}"]}]}"""
+        }
+        expectRule { container.conversations.send(scope, "再加一条支线") }
+        assertEquals(3, library.snapshot().childrenOf(tree.id).size)
+        assertEquals(1, container.conversations.watch(scope).first().size)
     }
 
     @Test fun generationRollsBackWholeBatchAndRetriesSameRequest() = runBlocking {

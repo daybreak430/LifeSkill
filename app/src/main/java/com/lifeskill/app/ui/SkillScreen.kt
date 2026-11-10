@@ -34,17 +34,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Mastery
+import com.lifeskill.app.model.SkillState
 
 @Composable
 internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tutor: ChatViewModel) {
     val chatStatus by tutor.status.collectAsStateWithLifecycle()
-    val halo = if (skill.lit) Gold else Steel
+    val state = library.skillState(skill.id)
+    val lit = state == SkillState.LIT
+    val halo = state.tint()
+    val hasLitDependent = lit && library.hasLitDependent(skill.id)
     var showRestart by rememberSaveable { mutableStateOf(false) }
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
-    val mastery = when (skill.mastery) {
-        Mastery.UNLIT -> "待学习"
-        Mastery.MANUAL -> "已点亮 · 手动"
-        Mastery.AI -> "已点亮 · AI 检验通过"
+    val mastery = when {
+        lit && skill.mastery == Mastery.MANUAL -> "已点亮 · 手动"
+        lit && skill.mastery == Mastery.AI -> "已点亮 · AI 检验通过"
+        else -> state.label
     }
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -71,11 +75,11 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tuto
                         drawCircle(halo.copy(alpha = .22f), radius * .83f, style = Stroke(1.dp.toPx()))
                         drawCircle(halo.copy(alpha = .10f), radius * .97f, style = Stroke(1.dp.toPx()))
                     }
-                    SkillMedallion(skill.displayIcon, skill.lit, 106.dp)
+                    SkillMedallion(skill.displayIcon, state, 106.dp)
                 }
                 Text(skill.name, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
                 Text(
-                    mastery, Modifier.padding(top = 7.dp), color = if (skill.lit) Gold else Muted,
+                    mastery, Modifier.padding(top = 7.dp), color = halo,
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
@@ -89,9 +93,9 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tuto
                 }
             }
             if (prerequisites.isNotEmpty()) {
-                Text("建议先学", style = MaterialTheme.typography.titleMedium)
+                Text("前置技能", style = MaterialTheme.typography.titleMedium)
                 prerequisites.forEach { entry ->
-                    EntryTile(entry, if (entry.lit) "已点亮" else "待学习", { app.open(Route.entry(entry)) })
+                    EntryTile(entry, library.skillState(entry.id), { app.open(Route.entry(entry)) })
                 }
             }
         }
@@ -99,13 +103,28 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tuto
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val restriction = when {
+                state == SkillState.LOCKED && skill.lit -> "补齐前置技能后恢复原点亮记录"
+                state == SkillState.LOCKED -> "点亮全部前置技能后解锁"
+                hasLitDependent -> "请先取消已点亮的后续技能"
+                else -> null
+            }
+            restriction?.let {
+                Text(
+                    it, Modifier.padding(bottom = 6.dp), color = Muted,
+                    style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center,
+                )
+            }
             Action(
                 "学习技能", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
                 Modifier.fillMaxWidth(), primary = true,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = { app.setLit(skill, !skill.lit) }) {
-                    Text(if (skill.lit) "取消点亮" else "手动点亮", color = Muted)
+                TextButton(
+                    onClick = { app.setLit(skill, !lit) },
+                    enabled = state != SkillState.LOCKED && !hasLitDependent,
+                ) {
+                    Text(if (lit) "取消点亮" else "手动点亮")
                 }
                 TextButton(onClick = { showRestart = true }, enabled = !chatStatus.working) {
                     Text("重新学习")

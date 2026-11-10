@@ -3,7 +3,10 @@ package com.lifeskill.app
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -172,9 +175,60 @@ class MvpFlowTest {
         await("右起点 → 左下游", substring = true)
         ui.onNodeWithText("关闭").performClick()
         ui.onNodeWithContentDescription("左下游").performTouchInput { click() }
-        await("建议先学")
+        await("前置技能")
         await("右起点")
         await("左起点")
+    }
+
+    @Test fun skillMapWrapsIntoTwoColumnsAndOnlyScrollsVertically() {
+        await("本职工作")
+        val library = fixture.container.library
+        val tree = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "纵向地图"))
+            repeat(16) { index ->
+                library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "技能编号 ${index + 1}", "掌握本节概念"))
+            }
+            tree
+        }
+        try {
+            ui.onNodeWithText("本职工作").performClick()
+            await(tree.name)
+            ui.onNodeWithText(tree.name).performClick()
+            val map = ui.onNodeWithTag("skill-map")
+            val first = ui.onNodeWithContentDescription("技能编号 1")
+            val second = ui.onNodeWithContentDescription("技能编号 2")
+            val third = ui.onNodeWithContentDescription("技能编号 3")
+            val before = first.fetchSemanticsNode().boundsInRoot
+            val secondBounds = second.fetchSemanticsNode().boundsInRoot
+            assertEquals(before.top, secondBounds.top, .5f)
+            assertTrue(before.right < secondBounds.left)
+            assertTrue(third.fetchSemanticsNode().boundsInRoot.top > before.bottom)
+            val center = before.center - map.fetchSemanticsNode().boundsInRoot.topLeft
+            map.performTouchInput {
+                swipe(center - Offset(42f, 0f), center + Offset(42f, 0f))
+            }
+            assertEquals(before, first.fetchSemanticsNode().boundsInRoot)
+            map.performTouchInput {
+                pinch(
+                    center - Offset(24f, 0f), center - Offset(80f, 0f),
+                    center + Offset(24f, 0f), center + Offset(80f, 0f),
+                )
+            }
+            assertEquals(before, first.fetchSemanticsNode().boundsInRoot)
+            ui.onNodeWithContentDescription("放大地图").assertDoesNotExist()
+            map.performTouchInput {
+                swipe(Offset(width * .50f, height * .88f), Offset(width * .50f, height * .14f))
+            }
+            first.assertIsNotDisplayed()
+            map.performScrollToIndex(7)
+            ui.onNodeWithContentDescription("技能编号 16").performTouchInput { click() }
+            await("技能编号 16")
+            pressBack()
+            ui.onNodeWithContentDescription("技能编号 16").assertIsDisplayed()
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
     }
 
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
@@ -222,7 +276,7 @@ class MvpFlowTest {
         ui.onNodeWithText("手动点亮").performClick()
         await("已点亮 · 手动")
         ui.onNodeWithText("取消点亮").performClick()
-        await("待学习")
+        await("可点亮")
         ui.onNodeWithText("手动点亮").performClick()
         await("已点亮 · 手动")
         ui.onNodeWithContentDescription("更多操作").performClick()
@@ -244,11 +298,11 @@ class MvpFlowTest {
         ui.onNodeWithText("保存").performClick()
         await("1 / 2 已点亮")
         ui.onNodeWithContentDescription("练习依赖").performTouchInput { click() }
-        await("建议先学")
+        await("前置技能")
         ui.onNodeWithContentDescription("更多操作").performClick()
         ui.onNodeWithText("删除技能点").performClick()
         ui.onNodeWithText("取消").performClick()
-        await("建议先学")
+        await("前置技能")
         ui.onNodeWithContentDescription("更多操作").performClick()
         ui.onNodeWithText("删除技能点").performClick()
         ui.onNodeWithText("删除").performClick()
@@ -276,29 +330,24 @@ class MvpFlowTest {
         ui.onNodeWithText("打开技能树 · 数据质量").performClick()
         await("技能地图")
 
-        val map = ui.onNodeWithTag("skill-map")
-        val root = ui.onNodeWithContentDescription("基础")
-        val before = root.fetchSemanticsNode().boundsInRoot
-        map.performTouchInput {
-            swipe(Offset(width * .22f, height * .62f), Offset(width * .40f, height * .72f))
-        }
-        val moved = root.fetchSemanticsNode().boundsInRoot
-        assertTrue(moved.center.x > before.center.x + 10)
-        assertTrue(moved.center.y > before.center.y + 10)
-        ui.onNodeWithContentDescription("重置地图视图").performClick()
-        val pivot = root.fetchSemanticsNode().boundsInRoot.center - map.fetchSemanticsNode().boundsInRoot.topLeft
-        map.performTouchInput {
-            val inner = Offset(width * .06f, 0f)
-            val outer = Offset(width * .10f, 0f)
-            pinch(
-                pivot - inner, pivot - outer,
-                pivot + inner, pivot + outer,
-            )
-        }
-        assertTrue(root.fetchSemanticsNode().boundsInRoot.width > before.width)
-        ui.onNodeWithContentDescription("重置地图视图").performClick()
-        ui.onNodeWithContentDescription("实践").performTouchInput { click() }
-
+        val practiceNode = ui.onNodeWithContentDescription("实践")
+        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
+        practiceNode.performTouchInput { click() }
+        await("点亮全部前置技能后解锁")
+        ui.onNodeWithText("手动点亮").assertIsNotEnabled()
+        ui.onNodeWithText("学习技能").performClick()
+        await("点亮前置技能后可检验掌握")
+        ui.onNodeWithText("检验掌握").assertDoesNotExist()
+        pressBack()
+        await("未解锁")
+        ui.onNodeWithContentDescription("关闭技能详情").performClick()
+        ui.onNodeWithContentDescription("基础").performTouchInput { click() }
+        await("可点亮")
+        ui.onNodeWithText("手动点亮").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("已点亮 · 手动")
+        ui.onNodeWithContentDescription("关闭技能详情").performClick()
+        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮"))
+        practiceNode.performTouchInput { click() }
         ui.onNodeWithText("学习技能").performClick()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
@@ -344,7 +393,7 @@ class MvpFlowTest {
         pressBack()
         await("已点亮 · AI 检验通过")
         pressBack()
-        await("1 / 2 已点亮")
+        await("2 / 2 已点亮")
     }
 
     private fun iconOf(name: String): EntryIcon? = runBlocking {

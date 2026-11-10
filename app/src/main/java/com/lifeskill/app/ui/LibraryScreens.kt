@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.SkillState
 
 @Composable
 internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel) {
@@ -166,7 +167,7 @@ internal fun EntryMenu(entry: Entry, app: AppViewModel) {
 }
 
 @Composable
-internal fun EntryTile(entry: Entry, subtitle: String, onClick: () -> Unit) {
+internal fun EntryTile(entry: Entry, state: SkillState, onClick: () -> Unit) {
     Surface(
         onClick = onClick, color = Panel, border = BorderStroke(1.dp, Line.copy(alpha = .8f)),
         shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth(),
@@ -175,11 +176,10 @@ internal fun EntryTile(entry: Entry, subtitle: String, onClick: () -> Unit) {
             Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            val tint = if (entry.lit) Gold else Steel
-            Emblem(entry.displayIcon.glyph, tint, if (entry.lit) GoldGround else Raised)
+            SkillMedallion(entry.displayIcon, state, 42.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(entry.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = Muted)
+                Text(state.label, style = MaterialTheme.typography.labelMedium, color = state.tint())
             }
             Mark(Glyph.NEXT, Muted, Modifier.size(15.dp))
         }

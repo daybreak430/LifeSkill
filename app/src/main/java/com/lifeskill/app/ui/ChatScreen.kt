@@ -43,6 +43,7 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
@@ -55,6 +56,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val status by chat.status.collectAsStateWithLifecycle()
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
+    val locked = tutor && owner != null && library.skillState(owner.id) == SkillState.LOCKED
     val pending = history.lastOrNull()?.takeIf { it.speaker == Speaker.USER }
     val currentLesson = remember(history, owner?.contentVersion) {
         if (tutor) TutorRules.currentLesson(history.filter { it.contentVersion == owner?.contentVersion }) else emptyList()
@@ -134,7 +136,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         Column(
             Modifier.fillMaxWidth().padding(start = 15.dp, end = 12.dp, bottom = 9.dp, top = 4.dp),
         ) {
-            if (tutor) {
+            if (locked) {
+                Text(
+                    "点亮前置技能后可检验掌握", Modifier.padding(vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium, color = Muted,
+                )
+            } else if (tutor) {
                 TextButton(
                     onClick = { keyboard?.hide(); chat.send("", check = true) },
                     enabled = !status.working && pending == null,

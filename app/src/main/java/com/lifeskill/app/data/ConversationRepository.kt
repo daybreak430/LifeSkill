@@ -10,6 +10,7 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
@@ -54,6 +55,9 @@ internal class ConversationRepository(
     private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
+            if (kind == TurnKind.CHECK && library.snapshot().skillState(checkNotNull(owner).id) == SkillState.LOCKED) {
+                throw RuleViolation("点亮前置技能后可检验掌握。")
+            }
             if (kind != TurnKind.RESTART && lastPending(scope) != null) throw RuleViolation("请先处理上一条待回复消息。")
             if (dao.chat(scope.id) == null) dao.insertChat(ChatRow(scope.id, scope.ownerId))
             val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0)
@@ -94,8 +98,12 @@ internal class ConversationRepository(
             val prompt = if (scope.mode == ChatMode.TUTOR) {
                 AiProtocol.tutorPrompt(checkNotNull(owner), pending, TutorRules.canOfferExercise(recent))
             } else {
-                val candidates = library.snapshot().childrenOf(owner?.id)
-                AiProtocol.generationPrompt(owner, candidates)
+                val current = library.snapshot()
+                val candidates = current.childrenOf(owner?.id)
+                val remaining = if (owner?.kind == EntryKind.TREE) {
+                    candidates.associate { it.id to current.remainingBranches(it.id) }
+                } else emptyMap()
+                AiProtocol.generationPrompt(owner, candidates, remaining)
             }
             Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(recent))
         } ?: return
@@ -156,10 +164,16 @@ internal class ConversationRepository(
             "我们先回到「${context.owner?.name}」。你想继续哪个知识点，或试试一个小练习？"
         } else reply.reply
         var kind = reply.kind
-        if (kind == TurnKind.PASSED && !library.lightFromAssessment(checkNotNull(context.owner))) {
-            kind = TurnKind.MESSAGE
+        if (kind == TurnKind.PASSED) {
+            when (library.lightFromAssessment(checkNotNull(context.owner))) {
+                AssessmentLight.LIT -> text = "已点亮技能点\n$text"
+                AssessmentLight.LOCKED -> {
+                    kind = TurnKind.MESSAGE
+                    text = "练习通过。点亮前置技能后，可重新检验以点亮此技能。\n\n$text"
+                }
+                AssessmentLight.UNCHANGED -> kind = TurnKind.MESSAGE
+            }
         }
-        if (kind == TurnKind.PASSED) text = "已点亮技能点\n$text"
         val exerciseId = when (kind) {
             TurnKind.EXERCISE -> id
             TurnKind.RETRY, TurnKind.PASSED -> context.pending?.id

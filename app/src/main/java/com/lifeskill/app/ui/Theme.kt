@@ -90,7 +90,7 @@ internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
 }
 
 internal enum class Glyph {
-    TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, FIT, PLUS, MINUS,
+    TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, LOCK,
     WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS, RESTART,
 }
 
@@ -128,8 +128,7 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
                 line(19, 3, 19, 8)
                 line(16.5, 5.5, 21.5, 5.5)
             }
-            Glyph.ADD, Glyph.PLUS -> { line(5, 12, 19, 12); line(12, 5, 12, 19) }
-            Glyph.MINUS -> line(6, 12, 18, 12)
+            Glyph.ADD -> { line(5, 12, 19, 12); line(12, 5, 12, 19) }
             Glyph.BACK -> { path(11, 5, 4, 12, 11, 19); line(4, 12, 20, 12) }
             Glyph.NEXT -> path(9, 5, 16, 12, 9, 19)
             Glyph.SETTINGS -> {
@@ -144,10 +143,10 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
             Glyph.DIAMOND -> path(12, 3, 21, 12, 12, 21, 3, 12, close = true)
             Glyph.TARGET -> { circle(12, 12, 9f); circle(12, 12, 5f); circle(12, 12, 1.5f, true) }
             Glyph.SEND -> { path(3, 4, 21, 12, 3, 20, 7, 12, close = true); line(7, 12, 21, 12) }
-            Glyph.FIT -> {
-                path(3, 9, 3, 3, 9, 3); path(15, 3, 21, 3, 21, 9)
-                path(3, 15, 3, 21, 9, 21); path(15, 21, 21, 21, 21, 15)
-                circle(12, 12, 2f)
+            Glyph.LOCK -> {
+                path(5, 11, 19, 11, 19, 21, 5, 21, close = true)
+                path(8, 11, 8, 7, 10, 4, 14, 4, 16, 7, 16, 11)
+                line(12, 15, 12, 17)
             }
             Glyph.WORK -> {
                 drawRect(color, at(3, 8), Size(18 * unit, 12 * unit), style = Stroke(1.65f * unit))

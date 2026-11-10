@@ -21,7 +21,7 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
     private data class Segment(val start: Int, val end: Int)
 
     private val vertices = mutableListOf<Vertex>()
-    private val rows = SkillGraph.tiers(ids, edges).mapIndexed { row, skills ->
+    private val rows = SkillGraph.tiers(ids, edges).flatMap { it.chunked(2) }.mapIndexed { row, skills ->
         skills.map { addVertex(row, it) }.toMutableList()
     }
     private val skills = vertices.mapIndexed { index, vertex -> checkNotNull(vertex.skill) to index }.toMap()
@@ -77,7 +77,13 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
 
     private fun select(order: IntArray): Set<Route> = buildSet {
         val occupied = List(rows.size) { mutableListOf<Segment>() }
+        val branches = IntArray(vertices.size)
+        val tracks = IntArray(rows.size)
         for (route in routes) {
+            val source = route.vertices.first()
+            val trackRows = vertices[source].row + 1 until vertices[route.vertices.last()].row
+            // 固定横向通道预算。旧树的额外分支及挤不下的跨行关系转成关联编号。
+            if (branches[source] >= SkillGraph.BRANCH_LIMIT || trackRows.any { tracks[it] >= TRACKS_PER_ROW }) continue
             val segments = route.vertices.zipWithNext(::Segment)
             val blocked = segments.any { segment ->
                 occupied[vertices[segment.start].row].any { existing ->
@@ -89,6 +95,8 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
             }
             if (!blocked) {
                 add(route)
+                branches[source]++
+                trackRows.forEach { tracks[it]++ }
                 segments.forEach { occupied[vertices[it.start].row].add(it) }
             }
         }
@@ -128,5 +136,6 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
 
     private companion object {
         const val GAP = .185
+        const val TRACKS_PER_ROW = 3
     }
 }
