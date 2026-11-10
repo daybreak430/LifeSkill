@@ -66,7 +66,8 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         }
         if (latestSkill != null && latestTree != null) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                ContinueStudyCard(latestSkill, latestTree, library.progress(latestTree.id)) {
+                val locked = library.skillState(latestSkill.id) == SkillState.LOCKED
+                ContinueStudyCard(latestSkill, latestTree, library.progress(latestTree.id), locked) {
                     app.continueStudy(latestSkill)
                 }
             }

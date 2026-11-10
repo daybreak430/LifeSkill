@@ -48,7 +48,7 @@ internal val LibraryTitle = TextStyle(
 )
 
 @Composable
-internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, onContinue: () -> Unit) {
+internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, locked: Boolean, onContinue: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(), color = Panel, contentColor = Ink,
         shape = CardShape, border = BorderStroke(1.dp, Line),
@@ -67,7 +67,7 @@ internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, on
                 )
                 Text(progress.label, style = MaterialTheme.typography.labelLarge)
                 LibraryAction(
-                    "继续学习", null, onContinue, Modifier.padding(top = 4.dp),
+                    if (locked) "查看技能" else "继续学习", null, onContinue, Modifier.padding(top = 4.dp),
                     primary = true, trailing = true,
                 )
             }

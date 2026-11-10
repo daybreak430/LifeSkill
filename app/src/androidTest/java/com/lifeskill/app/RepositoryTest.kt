@@ -64,6 +64,7 @@ class RepositoryTest {
         val tree = add(direction, EntryKind.TREE, "测试树")
         val root = add(tree, EntryKind.SKILL, "前置")
         val child = add(tree, EntryKind.SKILL, "后续", setOf(root.id))
+        markLegacyLit(root.id)
         val scope = ChatScope(ChatMode.TUTOR, child.id)
         ai.reply("""{"kind":"teach","reply":"先复习已有知识。"}""")
         container.conversations.send(scope, "开始学习")
@@ -120,7 +121,7 @@ class RepositoryTest {
         }
     }
 
-    @Test fun manualAndAiLightingRequireEveryPrerequisiteAtCommitTime() = runBlocking {
+    @Test fun learningAndAssessmentRequireEveryPrerequisite() = runBlocking {
         withTimeout(10_000) {
             val library = container.library
             val conversations = container.conversations
@@ -128,14 +129,16 @@ class RepositoryTest {
             val tree = add(direction, EntryKind.TREE, "顺序验证")
             val first = add(tree, EntryKind.SKILL, "第一前置")
             val second = add(tree, EntryKind.SKILL, "第二前置")
+            val third = add(tree, EntryKind.SKILL, "新增前置")
             val child = add(tree, EntryKind.SKILL, "合流技能", setOf(first.id, second.id))
             val scope = ChatScope(ChatMode.TUTOR, child.id)
-            library.setLit(first.id, true)
-            expectRule { library.setLit(child.id, true) }
+            markLegacyLit(first.id)
+            expectRule { conversations.send(scope, "开始学习") }
             expectRule { conversations.send(scope, "", check = true) }
+            expectRule { conversations.restartLesson(scope, "") }
             assertTrue(conversations.watch(scope).first().isEmpty())
 
-            library.setLit(second.id, true)
+            markLegacyLit(second.id)
             offerCheck(scope)
             ai.reply("""{"kind":"exercise","reply":"请说出操作步骤。"}""")
             conversations.send(scope, "", check = true)
@@ -149,19 +152,16 @@ class RepositoryTest {
             }
             val check = async { conversations.send(scope, "核对后执行") }
             waiting.await()
-            library.setLit(second.id, false)
+            library.save(EntryEdit(child.id, tree.id, EntryKind.SKILL, child.name, child.goal, setOf(first.id, second.id, third.id)))
             release.complete(Unit)
             check.await()
             assertEquals(SkillState.LOCKED, library.snapshot().skillState(child.id))
             assertEquals(Mastery.UNLIT, library.entry(child.id)?.mastery)
             assertTrue(conversations.watch(scope).first().last().text.contains("点亮前置技能后"))
 
-            library.setLit(second.id, true)
-            library.setLit(child.id, true)
-            expectRule { library.setLit(second.id, false) }
-            library.setLit(child.id, false)
-            library.setLit(second.id, false)
-            assertEquals(SkillState.LOCKED, library.snapshot().skillState(child.id))
+            val history = conversations.watch(scope).first()
+            expectRule { conversations.restartLesson(scope, "") }
+            assertEquals(history, conversations.watch(scope).first())
         }
     }
 
@@ -294,7 +294,7 @@ class RepositoryTest {
                 val skill = saved.library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "记录", "能复述"))
                 ai.reply("""{"kind":"teach","reply":"先说说你知道什么。"}""")
                 saved.conversations.send(ChatScope(ChatMode.TUTOR, skill.id), "继续学习")
-                saved.library.setLit(skill.id, true)
+                markLegacyLit(skill.id, disk)
                 skill.id
             }
             withDiskDatabase(file) { disk ->
@@ -424,7 +424,7 @@ class RepositoryTest {
         return JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills).toString()
     }
 
-    @Test fun assessmentCannotOverwriteManualProgressChangedWhileWaiting() = runBlocking {
+    @Test fun assessmentCannotLightEditedSkillWhileWaiting() = runBlocking {
         withTimeout(10_000) {
             val direction = container.library.snapshot().childrenOf(null).first()
             val tree = add(direction, EntryKind.TREE, "进度优先")
@@ -441,14 +441,13 @@ class RepositoryTest {
                 release.await()
                 verdict("passed", "答对了。", exercise.id)
             }
-            val answer = async { container.conversations.send(scope, "用源记录对照。") }
+            val answer = async { expectRule { container.conversations.send(scope, "用源记录对照。") } }
             waiting.await()
-            container.library.setLit(skill.id, true)
-            container.library.setLit(skill.id, false)
+            container.library.save(EntryEdit(skill.id, tree.id, EntryKind.SKILL, skill.name, "学习新的核对方法"))
             release.complete(Unit)
             answer.await()
             assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
-            assertEquals("答对了。", container.conversations.watch(scope).first().last().text)
+            assertEquals("用源记录对照。", container.conversations.watch(scope).first().last().text)
         }
     }
 
@@ -461,7 +460,7 @@ class RepositoryTest {
         val otherScope = ChatScope(ChatMode.TUTOR, other.id)
         ai.reply("""{"kind":"teach","reply":"其他节点的记录"}""")
         container.conversations.send(otherScope, "开始学习")
-        container.library.setLit(skill.id, true)
+        markLegacyLit(skill.id)
         offerCheck(scope)
         ai.reply("""{"kind":"exercise","reply":"旧版练习"}""")
         container.conversations.send(scope, "", check = true)
@@ -537,6 +536,12 @@ class RepositoryTest {
 
     private suspend fun add(parent: Entry, kind: EntryKind, name: String, prerequisites: Set<String> = emptySet()) =
         container.library.save(EntryEdit(null, parent.id, kind, name, "能识别异常并说明原因", prerequisites))
+
+    private suspend fun markLegacyLit(id: String, db: LifeSkillDatabase = database) {
+        val dao = db.skills()
+        val row = checkNotNull(dao.entry(id))
+        dao.updateEntry(row.copy(mastery = Mastery.MANUAL.name, masteryVersion = 1))
+    }
 
     private suspend fun expectRule(action: suspend () -> Unit) {
         try {

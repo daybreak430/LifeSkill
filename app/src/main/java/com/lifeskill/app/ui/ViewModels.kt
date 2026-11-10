@@ -19,6 +19,7 @@ import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Turn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -119,11 +120,20 @@ internal class AppViewModel(
         if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
     }
 
-    fun continueStudy(skill: Entry) = open(Route(Page.TUTOR, skill.id))
+    fun continueStudy(skill: Entry) {
+        val current = library.value ?: return
+        if (skill.id !in current.byId) return
+        val locked = current.skillState(skill.id) == SkillState.LOCKED
+        open(if (locked) Route.entry(skill) else Route(Page.TUTOR, skill.id))
+    }
 
     private fun discardMissingRoutes(library: Library) {
         val stack = routes.value
-        val valid = stack.filter { encoded -> Route.decode(encoded).id?.let { it in library.byId } ?: true }
+        val valid = stack.filter { encoded ->
+            val route = Route.decode(encoded)
+            val id = route.id
+            id == null || id in library.byId && (route.page != Page.TUTOR || library.skillState(id) != SkillState.LOCKED)
+        }
         if (valid != stack) state["routes"] = ArrayList(valid)
     }
 
@@ -204,16 +214,6 @@ internal class AppViewModel(
                 _notice.value = readable(error, "删除失败，请重试。")
             } finally {
                 _deleting.value = false
-            }
-        }
-    }
-
-    fun setLit(entry: Entry, lit: Boolean) {
-        viewModelScope.launch {
-            try {
-                container.library.setLit(entry.id, lit)
-            } catch (error: Exception) {
-                _notice.value = readable(error, "技能状态更新失败，请重试。")
             }
         }
     }

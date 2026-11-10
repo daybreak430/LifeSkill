@@ -15,6 +15,7 @@ enum class EntryKind(val label: String) {
         }
 }
 
+// MANUAL 用于读取旧版本的点亮记录。
 enum class Mastery { UNLIT, MANUAL, AI }
 
 enum class SkillState(val label: String) {
@@ -68,7 +69,6 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
     fun prerequisitesOf(id: String) = prerequisites[id].orEmpty().map(Edge::prerequisiteId).toSet()
     fun skillState(id: String) = skillStates.getValue(id)
     fun remainingBranches(id: String) = (SkillGraph.BRANCH_LIMIT - dependents[id].orEmpty().size).coerceAtLeast(0)
-    fun hasLitDependent(id: String) = dependents[id].orEmpty().any { skillState(it.skillId) == SkillState.LIT }
 
     fun skillsUnder(id: String?): List<Entry> = when (byId[id]?.kind) {
         EntryKind.SKILL -> listOfNotNull(byId[id])

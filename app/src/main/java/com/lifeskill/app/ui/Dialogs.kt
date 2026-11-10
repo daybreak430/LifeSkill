@@ -1,6 +1,6 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -10,12 +10,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,9 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
@@ -50,120 +64,179 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     val goalTooLong = goal.trim().length > LibraryRules.GOAL_LIMIT
     val invalidShortName = skill && runCatching { LibraryRules.shortName(shortName) }.isFailure
     val activeIcon = editor.icon ?: EntryIcon.default(initial.kind, initial.id)
+    val canSave = !editor.saving && !editor.suggesting && name.isNotBlank() && !nameTooLong && !invalidShortName &&
+        (!skill || goal.isNotBlank() && !goalTooLong)
+    val shape = RoundedCornerShape(12.dp)
 
-    AlertDialog(
-        onDismissRequest = app::closeEditor,
-        title = { Text((if (initial.id == null) "新增" else "编辑") + initial.kind.label) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                OutlinedTextField(
-                    name, { name = it }, Modifier.fillMaxWidth(),
-                    label = { Text("名称") }, singleLine = true, enabled = !editor.saving,
-                    isError = nameTooLong,
-                    supportingText = if (nameTooLong) { { Text("名称最多 ${LibraryRules.NAME_LIMIT} 个字符") } } else null,
+    Dialog(onDismissRequest = app::closeEditor) {
+        val focus = LocalFocusManager.current
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Panel) {
+            Column {
+                Text(
+                    (if (initial.id == null) "新增" else "编辑") + initial.kind.label,
+                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
                 )
-                if (skill) {
-                    OutlinedTextField(
-                        goal, { goal = it }, Modifier.fillMaxWidth(),
-                        label = { Text("技能说明") }, minLines = 2, maxLines = 5, enabled = !editor.saving,
-                        isError = goalTooLong,
-                        supportingText = if (goalTooLong) { { Text("技能说明最多 ${LibraryRules.GOAL_LIMIT} 个字符") } } else null,
+                HorizontalDivider(color = Line)
+                // 只滚动表单内容，键盘弹出和选择区展开时，底部操作仍可见。
+                Column(
+                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
+                        .testTag("entry-form").padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    EditorField(
+                        name, { name = it }, "名称", !editor.saving,
+                        error = if (nameTooLong) "名称最多 ${LibraryRules.NAME_LIMIT} 个字符" else null,
+                        imeAction = if (skill) ImeAction.Next else ImeAction.Done,
                     )
-                    OutlinedTextField(
-                        shortName, { shortName = it }, Modifier.fillMaxWidth(),
-                        label = { Text("节点简称（选填）") }, placeholder = { Text("2–5 个字") },
-                        singleLine = true, enabled = !editor.saving, isError = invalidShortName,
-                        supportingText = if (invalidShortName) { { Text("请输入 2–5 个字") } } else null,
-                    )
-                    if (siblings.isNotEmpty()) {
-                        Row(
-                            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
-                                showPrerequisites = !showPrerequisites
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("前置节点", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                if (selected.isEmpty()) "选择" else "已选 ${selected.size}",
-                                style = MaterialTheme.typography.labelMedium, color = Gold,
+                    if (skill) {
+                        EditorField(
+                            goal, { goal = it }, "技能说明", !editor.saving, minLines = 2, maxLines = 5,
+                            error = if (goalTooLong) "技能说明最多 ${LibraryRules.GOAL_LIMIT} 个字符" else null,
+                        )
+                        EditorField(
+                            shortName, { shortName = it }, "节点简称（选填）", !editor.saving,
+                            placeholder = "2–5 个字", error = if (invalidShortName) "请输入 2–5 个字" else null,
+                            imeAction = ImeAction.Done,
+                        )
+                        if (siblings.isNotEmpty()) {
+                            EditorPickerRow(
+                                title = "前置节点", value = if (selected.isEmpty()) "未选择" else "已选 ${selected.size}",
+                                expanded = showPrerequisites, enabled = !editor.saving,
+                                onClick = {
+                                    focus.clearFocus()
+                                    showPrerequisites = !showPrerequisites
+                                },
                             )
-                            Mark(Glyph.NEXT, Gold, Modifier.padding(start = 6.dp))
                         }
-                    }
-                    if (showPrerequisites) {
-                        siblings.forEach { entry ->
-                            val checked = entry.id in selected
-                            val canSelect = entry.id in initial.prerequisites || library.remainingBranches(entry.id) > 0
-                            Row(
-                                Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                    .toggleable(checked, enabled = canSelect && !editor.saving, role = Role.Checkbox) {
-                                        selected = if (it) selected + entry.id else selected - entry.id
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(checked, onCheckedChange = null, enabled = canSelect && !editor.saving)
-                                Text(
-                                    entry.name, Modifier.weight(1f).padding(start = 10.dp),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                if (!canSelect) {
-                                    Text("分支已满", color = Muted, style = MaterialTheme.typography.labelMedium)
+                        if (showPrerequisites) {
+                            siblings.forEach { entry ->
+                                val checked = entry.id in selected
+                                val canSelect = entry.id in initial.prerequisites || library.remainingBranches(entry.id) > 0
+                                Row(
+                                    Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                        .toggleable(checked, enabled = canSelect && !editor.saving, role = Role.Checkbox) {
+                                            selected = if (it) selected + entry.id else selected - entry.id
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(checked, onCheckedChange = null, enabled = canSelect && !editor.saving)
+                                    Text(
+                                        entry.name, Modifier.weight(1f).padding(start = 10.dp),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    if (!canSelect) {
+                                        Text("分支已满", color = Muted, style = MaterialTheme.typography.labelMedium)
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Mark(activeIcon.glyph, Gold)
-                    Text(
-                        activeIcon.label, Modifier.weight(1f).padding(start = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    TextButton(
-                        onClick = { showIcons = !showIcons },
+                    EditorPickerRow(
+                        title = "选择图标", value = activeIcon.label, expanded = showIcons,
                         enabled = !editor.saving && !editor.suggesting,
-                    ) { Text(if (showIcons) "收起图标" else "选择图标") }
-                }
-                if (showIcons) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = editor.icon == null, onClick = {
-                                app.chooseIcon(null)
-                                showIcons = false
-                            },
-                            enabled = !editor.saving && !editor.suggesting, label = { Text("默认") },
-                        )
-                        EntryIcon.entries.forEach { icon ->
+                        onClick = {
+                            focus.clearFocus()
+                            showIcons = !showIcons
+                        },
+                        leading = { Emblem(activeIcon.glyph, diameter = 32.dp) },
+                    )
+                    if (showIcons) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilterChip(
-                                selected = editor.icon == icon, onClick = {
-                                    app.chooseIcon(icon)
+                                selected = editor.icon == null, onClick = {
+                                    app.chooseIcon(null)
                                     showIcons = false
                                 },
-                                enabled = !editor.saving && !editor.suggesting, label = { Text(icon.label) },
-                                leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted) },
+                                enabled = !editor.saving && !editor.suggesting, label = { Text("默认") },
                             )
+                            EntryIcon.entries.forEach { icon ->
+                                FilterChip(
+                                    selected = editor.icon == icon, onClick = {
+                                        app.chooseIcon(icon)
+                                        showIcons = false
+                                    },
+                                    enabled = !editor.saving && !editor.suggesting, label = { Text(icon.label) },
+                                    leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted) },
+                                )
+                            }
                         }
                     }
+                    TextButton(
+                        onClick = {
+                            focus.clearFocus()
+                            app.suggestIcon(name, goal)
+                        },
+                        modifier = Modifier.align(Alignment.End),
+                        enabled = name.isNotBlank() && !nameTooLong && !editor.saving && !editor.suggesting,
+                    ) { Text(if (editor.suggesting) "正在推荐…" else "AI 推荐图标") }
+                    editor.iconError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
-                TextButton(
-                    onClick = { app.suggestIcon(name, goal) },
-                    enabled = name.isNotBlank() && !nameTooLong && !editor.saving && !editor.suggesting,
-                ) { Text(if (editor.suggesting) "正在推荐…" else "AI 推荐图标") }
-                editor.iconError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-                editor.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                HorizontalDivider(color = Line)
+                editor.error?.let {
+                    Text(
+                        it, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
+                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = app::closeEditor, enabled = !editor.saving) { Text("取消") }
+                    Button(
+                        onClick = {
+                            focus.clearFocus()
+                            app.saveEntry(initial.copy(
+                                name = name, goal = goal, prerequisites = selected, icon = editor.icon, shortName = shortName,
+                            ))
+                        },
+                        modifier = Modifier.heightIn(min = 48.dp), enabled = canSave, shape = shape,
+                        colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Panel),
+                    ) { Text(if (editor.saving) "正在保存" else "保存") }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { app.saveEntry(initial.copy(
-                    name = name, goal = goal, prerequisites = selected, icon = editor.icon, shortName = shortName,
-                )) },
-                enabled = !editor.saving && !editor.suggesting && name.isNotBlank() && !nameTooLong && !invalidShortName &&
-                    (!skill || goal.isNotBlank() && !goalTooLong),
-            ) { Text(if (editor.saving) "正在保存" else "保存") }
-        },
-        dismissButton = { TextButton(onClick = app::closeEditor, enabled = !editor.saving) { Text("取消") } },
+        }
+    }
+}
+
+@Composable
+private fun EditorField(
+    value: String, onChange: (String) -> Unit, label: String, enabled: Boolean,
+    minLines: Int = 1, maxLines: Int = 1, placeholder: String? = null, error: String? = null,
+    imeAction: ImeAction = ImeAction.Default,
+) {
+    OutlinedTextField(
+        value, onChange, Modifier.fillMaxWidth(), label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        singleLine = maxLines == 1, minLines = minLines, maxLines = maxLines, enabled = enabled,
+        isError = error != null, supportingText = error?.let { { Text(it) } },
+        keyboardOptions = KeyboardOptions(imeAction = imeAction), shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Ground),
     )
+}
+
+@Composable
+private fun EditorPickerRow(
+    title: String, value: String, expanded: Boolean, enabled: Boolean, onClick: () -> Unit,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    Surface(
+        onClick = onClick, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { role = Role.Button },
+        shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Line), color = Panel,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            leading?.invoke()
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Text(value, color = Muted, style = MaterialTheme.typography.labelMedium)
+            Mark(Glyph.NEXT, if (enabled) Gold else Line, Modifier.rotate(if (expanded) 90f else 0f))
+        }
+    }
 }
 
 @Composable

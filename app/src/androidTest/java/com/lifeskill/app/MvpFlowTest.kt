@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -144,6 +145,14 @@ class MvpFlowTest {
             pressBack()
             ui.onNodeWithText("技能树卡片 12").assertIsDisplayed()
             pressBack()
+            runBlocking {
+                val prerequisite = library.save(EntryEdit(null, skill.parentId, EntryKind.SKILL, "新增前置", "掌握基础"))
+                library.save(EntryEdit(skill.id, skill.parentId, skill.kind, skill.name, skill.goal, setOf(prerequisite.id)))
+            }
+            await("查看技能")
+            ui.onNodeWithText("查看技能").performTouchInput { click() }
+            ui.onNodeWithText("学习技能").assertIsNotEnabled()
+            pressBack()
             runBlocking { library.delete(skill.id) }
             ui.waitUntil(8_000) {
                 ui.onAllNodesWithText("课程回顾").fetchSemanticsNodes().isEmpty()
@@ -249,9 +258,12 @@ class MvpFlowTest {
         await("本职工作")
         ui.onNodeWithText("新增方向").performClick()
         val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
+        nameInput.performTouchInput { click() }
         nameInput.performTextInput("测".repeat(49))
         await("名称最多 48 个字符")
-        ui.onNodeWithText("保存").assertIsNotEnabled()
+        ui.onNodeWithText("保存").assertIsDisplayed().assertIsNotEnabled()
+        pressBack()
+        nameInput.assertIsDisplayed()
         nameInput.performTextReplacement("模拟器验证")
         ui.onNodeWithText("选择图标").performClick()
         ui.onNodeWithText("阅读").performClick()
@@ -275,19 +287,16 @@ class MvpFlowTest {
         ui.onNodeWithText("保存").performClick()
         await("基础课")
         ui.onNodeWithContentDescription("手动技能点").performTouchInput { click() }
-        ui.onNodeWithText("手动点亮").performClick()
-        await("已点亮 · 手动")
-        ui.onNodeWithText("取消点亮").performClick()
-        await("可点亮")
-        ui.onNodeWithText("手动点亮").performClick()
-        await("已点亮 · 手动")
+        ui.onNodeWithText("学习技能").assertIsEnabled()
+        ui.onNodeWithText("手动点亮").assertDoesNotExist()
+        ui.onNodeWithText("取消点亮").assertDoesNotExist()
         ui.onNodeWithContentDescription("更多操作").performClick()
         ui.onNodeWithText("编辑技能点").performClick()
         ui.onNode(hasSetTextAction() and hasText("名称")).performTextReplacement("已编辑技能点")
         ui.onNodeWithText("保存").performClick()
         await("已编辑技能点")
         ui.onNodeWithContentDescription("关闭技能详情").performClick()
-        await("1 / 1 已点亮")
+        await("0 / 1 已点亮")
         ui.onNodeWithText("新增技能点").performClick()
         fill("名称", "练习依赖")
         val goalInput = ui.onNode(hasSetTextAction() and hasText("技能说明"))
@@ -295,10 +304,10 @@ class MvpFlowTest {
         await("技能说明最多 320 个字符")
         ui.onNodeWithText("保存").assertIsNotEnabled()
         goalInput.performTextReplacement("使用前置概念完成一项练习")
-        ui.onNodeWithText("前置节点").performClick()
-        ui.onNode(hasText("已编辑技能点") and isToggleable()).performClick()
+        ui.onNodeWithText("前置节点").performScrollTo().performTouchInput { click() }
+        ui.onNode(hasText("已编辑技能点") and isToggleable()).performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("保存").performClick()
-        await("1 / 2 已点亮")
+        await("0 / 2 已点亮")
         ui.onNodeWithContentDescription("练习依赖").performTouchInput { click() }
         await("前置技能")
         ui.onNodeWithContentDescription("更多操作").performClick()
@@ -308,7 +317,7 @@ class MvpFlowTest {
         ui.onNodeWithContentDescription("更多操作").performClick()
         ui.onNodeWithText("删除技能点").performClick()
         ui.onNodeWithText("删除").performClick()
-        await("1 / 1 已点亮")
+        await("0 / 1 已点亮")
         pressBack()
         await("新增技能树")
         pressBack()
@@ -336,22 +345,36 @@ class MvpFlowTest {
         practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
         practiceNode.performTouchInput { click() }
         await("点亮全部前置技能后解锁")
-        ui.onNodeWithText("手动点亮").assertIsNotEnabled()
-        ui.onNodeWithText("学习技能").performClick()
-        await("点亮前置技能后可检验掌握")
+        ui.onNodeWithText("手动点亮").assertDoesNotExist()
+        ui.onNodeWithText("学习技能").assertIsNotEnabled().performTouchInput { click() }
+        ui.onNodeWithText("AI 老师").assertDoesNotExist()
         val masteryCheck = ui.onNode(hasText("检验掌握") and hasClickAction())
-        masteryCheck.assertDoesNotExist()
-        pressBack()
-        await("未解锁")
         ui.onNodeWithContentDescription("关闭技能详情").performClick()
         ui.onNodeWithContentDescription("基础").performTouchInput { click() }
         await("可点亮")
-        ui.onNodeWithText("手动点亮").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
-        await("已点亮 · 手动")
+        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("开始学习")
+        fixture.ai.reply("""{"kind":"offer_check","reply":"基础知识已讲完。"}""")
+        ui.onNodeWithText("开始学习").performClick()
+        await("可以试试「检验掌握」")
+        fixture.ai.reply("""{"kind":"exercise","reply":"先做哪一步？","choices":["核对数据","提交结果"]}""")
+        masteryCheck.performTouchInput { click() }
+        await("先做哪一步？")
+        fixture.ai.enqueue { messages ->
+            assertEquals("A. 核对数据", messages.last().text)
+            val id = JSONObject(messages.first().text.substringAfter("当前待答练习：").lineSequence().first()).getString("id")
+            RepositoryTest.verdict("passed", "掌握基础知识。", id)
+        }
+        ui.onNodeWithText("A. 核对数据").performTouchInput { click() }
+        await("已点亮技能点", substring = true)
+        pressBack()
+        await("已点亮 · AI 检验通过")
+        ui.onNodeWithText("取消点亮").assertDoesNotExist()
         ui.onNodeWithContentDescription("关闭技能详情").performClick()
         practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮"))
         practiceNode.performTouchInput { click() }
-        ui.onNodeWithText("学习技能").performClick()
+        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("开始学习")
         masteryCheck.assertDoesNotExist()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +

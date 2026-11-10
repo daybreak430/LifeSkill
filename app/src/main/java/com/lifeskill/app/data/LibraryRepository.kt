@@ -110,20 +110,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
 
     suspend fun delete(id: String) = database.withTransaction { dao.deleteEntry(id) }
 
-    suspend fun setLit(id: String, lit: Boolean) = database.withTransaction {
-        val previous = dao.entry(id) ?: throw RuleViolation("该技能点已删除。")
-        val mastery = Mastery.valueOf(previous.mastery)
-        if (previous.kind != EntryKind.SKILL.name) throw RuleViolation("只有技能点可以点亮。")
-        val current = snapshot()
-        if (lit && current.skillState(id) == SkillState.LOCKED) throw RuleViolation("请先点亮所有前置技能。")
-        if (!lit && current.hasLitDependent(id)) throw RuleViolation("请先取消已点亮的后续技能。")
-        if ((mastery != Mastery.UNLIT) != lit) {
-            val next = if (lit) Mastery.MANUAL else Mastery.UNLIT
-            dao.updateEntry(previous.copy(mastery = next.name, masteryVersion = previous.masteryVersion + 1))
-        }
-    }
-
-    // 评估发出后若用户编辑目标或手动操作，旧结果不覆盖用户的新状态。
+    // 只应用仍匹配当前技能内容和进度版本的评估结果。
     suspend fun lightFromAssessment(expected: Entry): AssessmentLight {
         val row = dao.entry(expected.id) ?: return AssessmentLight.UNCHANGED
         if (row.masteryVersion != expected.masteryVersion || row.contentVersion != expected.contentVersion) {

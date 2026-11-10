@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,13 +33,10 @@ import com.lifeskill.app.model.SkillState
 @Composable
 internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
     val state = library.skillState(skill.id)
-    val lit = state == SkillState.LIT
     val halo = state.tint()
-    val hasLitDependent = lit && library.hasLitDependent(skill.id)
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
     val mastery = when {
-        lit && skill.mastery == Mastery.MANUAL -> "已点亮 · 手动"
-        lit && skill.mastery == Mastery.AI -> "已点亮 · AI 检验通过"
+        state == SkillState.LIT && skill.mastery == Mastery.AI -> "已点亮 · AI 检验通过"
         else -> state.label
     }
     Column(Modifier.fillMaxSize()) {
@@ -99,7 +95,6 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
             val restriction = when {
                 state == SkillState.LOCKED && skill.lit -> "补齐前置技能后恢复原点亮记录"
                 state == SkillState.LOCKED -> "点亮全部前置技能后解锁"
-                hasLitDependent -> "请先取消已点亮的后续技能"
                 else -> null
             }
             restriction?.let {
@@ -110,14 +105,8 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
             }
             Action(
                 "学习技能", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
-                Modifier.fillMaxWidth(), primary = true,
+                Modifier.fillMaxWidth(), primary = true, enabled = state != SkillState.LOCKED,
             )
-            TextButton(
-                onClick = { app.setLit(skill, !lit) },
-                enabled = state != SkillState.LOCKED && !hasLitDependent,
-            ) {
-                Text(if (lit) "取消点亮" else "手动点亮")
-            }
         }
     }
 }

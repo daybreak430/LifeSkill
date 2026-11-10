@@ -55,6 +55,7 @@ internal class ConversationRepository(
     private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
+            requireUnlockedLesson(scope, owner)
             if (dao.chat(scope.id) == null) dao.insertChat(ChatRow(scope.id, scope.ownerId))
             if (kind == TurnKind.RESTART) {
                 // 清空和新请求一起提交，旧请求的标识也随之失效，迟到的回复无法写回。
@@ -64,9 +65,6 @@ internal class ConversationRepository(
                 if (last?.speaker == Speaker.USER.name) throw RuleViolation("请先处理上一条待回复消息。")
                 if (kind == TurnKind.CHECK) {
                     checkNotNull(owner)
-                    if (library.snapshot().skillState(owner.id) == SkillState.LOCKED) {
-                        throw RuleViolation("点亮前置技能后可检验掌握。")
-                    }
                     if (last?.kind != TurnKind.CHECK_OFFER.name || last.contentVersion != owner.contentVersion) {
                         throw RuleViolation("等 AI 老师提示后再检验掌握。")
                     }
@@ -94,6 +92,7 @@ internal class ConversationRepository(
             if (dao.turn(scope.id, replyId) != null) return@withTransaction null
             val owner = requireOwner(scope)
             val input = lastPending(scope)?.takeIf { it.id == requestId } ?: return@withTransaction null
+            requireUnlockedLesson(scope, owner)
             if (owner != null && owner.contentVersion != input.contentVersion) {
                 throw RuleViolation("学习内容已编辑，请重新发送这条消息。")
             }
@@ -109,8 +108,7 @@ internal class ConversationRepository(
             } else null
             val prompt = if (scope.mode == ChatMode.TUTOR) {
                 checkNotNull(owner)
-                val canInviteCheck = pending == null && library.snapshot().skillState(owner.id) != SkillState.LOCKED
-                AiProtocol.tutorPrompt(owner, pending, canInviteCheck)
+                AiProtocol.tutorPrompt(owner, pending, canInviteCheck = pending == null)
             } else {
                 val current = library.snapshot()
                 val candidates = current.childrenOf(owner?.id)
@@ -198,6 +196,12 @@ internal class ConversationRepository(
             throw RuleViolation("此对话与当前项目层级不匹配。")
         }
         return entry
+    }
+
+    private suspend fun requireUnlockedLesson(scope: ChatScope, owner: Entry?) {
+        if (scope.mode == ChatMode.TUTOR && library.snapshot().skillState(checkNotNull(owner).id) == SkillState.LOCKED) {
+            throw RuleViolation("点亮全部前置技能后才能学习。")
+        }
     }
 
     private suspend fun lastPending(scope: ChatScope): Turn? =
