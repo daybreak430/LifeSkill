@@ -94,14 +94,16 @@ internal class ConversationRepository(
         if (row.kind == TurnKind.CREATED.name) return@withTransaction
         if (row.kind != TurnKind.DRAFT.name) throw RuleViolation("这条消息没有可添加的草稿。")
         requireOwner(scope)
-        val draft = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn")).draft)
+        val resolved = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn")).draft).resolveNewTreeReferences()
+        val draft = resolved.draft
         val selected = when (destination) {
             is GenerationDestination.Existing -> draft.copy(directionId = destination.id, directionName = null)
             is GenerationDestination.New -> draft.copy(directionId = null, directionName = destination.name)
         }
         // 以用户选中的方向为准，写入内容和更新草稿状态一次提交。
         val result = library.applyDraft(null, selected)
-        val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, row.contentVersion, resultId = result.entry.id)
+        val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary + resolved.notice,
+            row.contentVersion, resultId = result.entry.id)
         dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
     }
 
@@ -181,6 +183,14 @@ internal class ConversationRepository(
             (draft.trees.isEmpty() && (owner != null || draft.directionName == null || draft.directionId != null))
         ) {
             throw RuleViolation("AI 返回的草稿与当前入口不匹配，请重试。")
+        }
+        try {
+            library.validateNewTrees(draft.resolveNewTreeReferences().draft.trees)
+        } catch (error: RuleViolation) {
+            throw RecoverableReply(
+                error.message ?: "生成的技能树存在冲突，请重试。",
+                "上一版技能树没有通过校验。${error.message.orEmpty()} 请重新生成，核对名称和每棵树的前置关系后输出完整 JSON。",
+            )
         }
         return Turn(id, Speaker.ASSISTANT, TurnKind.DRAFT, raw, version, resultId = owner?.id)
     }
@@ -264,7 +274,8 @@ internal class ConversationRepository(
             val draft = checkNotNull(AiProtocol.generation(body).draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
             val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成 ${draft.trees.size} 棵技能树"
-            return Turn(id, Speaker.ASSISTANT, turnKind, summary, contentVersion, preview = preview)
+            return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.resolveNewTreeReferences().notice,
+                contentVersion, preview = preview)
         }
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))

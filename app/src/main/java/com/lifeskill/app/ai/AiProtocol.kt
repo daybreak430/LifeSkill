@@ -21,7 +21,34 @@ internal data class GenerationDraft(
     val directionName: String?,
     val trees: List<TreeDraft>,
     val skills: List<SkillDraft>,
-)
+) {
+    fun resolveNewTreeReferences(): ResolvedGeneration {
+        var ignored = 0
+        val resolved = trees.map { tree ->
+            val refs = tree.skills.map(SkillDraft::ref).toSet()
+            val byName = tree.skills.groupBy(SkillDraft::name)
+            tree.copy(skills = tree.skills.map { skill ->
+                val requires = skill.requires.map(String::trim).distinct().mapNotNull { reference ->
+                    // 新树只引用本批的节点。模型偶尔把本地 ref 加上 existing:，或直接使用节点名称。
+                    val local = reference.removePrefix("existing:")
+                    val resolvedRef = when {
+                        local in refs -> local
+                        local == reference -> byName[reference]?.singleOrNull()?.ref
+                        else -> null
+                    }
+                    if (resolvedRef == null) ignored++
+                    resolvedRef
+                }.distinct()
+                skill.copy(requires = requires)
+            })
+        }
+        return ResolvedGeneration(copy(trees = resolved), ignored)
+    }
+}
+
+internal data class ResolvedGeneration(val draft: GenerationDraft, val ignored: Int) {
+    val notice get() = if (ignored == 0) "" else "\n已略过 $ignored 条无法定位的前置关系"
+}
 internal data class GenerationReply(val reply: String, val draft: GenerationDraft? = null)
 internal data class TutorReply(val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>)
 
@@ -81,6 +108,7 @@ internal object AiProtocol {
             示例只说明结构，实际名称、数量、标识和目标均来自用户需求及 App 数据。只输出当前入口允许的字段。
             每个 skill 包含 ref、name、goal、requires，可加 shortName（地图简称，2–5 个字，保留技能的核心词）。goal 用简短句子说明本节要学的内容和可检验的目标。
             ref 是同批同树唯一的简短英文标识；requires 引用同树 ref，无前置填 []。不要引用自己或形成循环。
+            ${if (owner?.kind != EntryKind.TREE) "新树里的 requires 只能填写该树 skills 中实际存在的 ref。即使同批生成多棵树，各树也不能互相引用。" else ""}
             每个技能点最多作为两个后续节点的前置。内容较多时拆成逐步进阶的路径，不要从同一点分出三条支线。
             名称不超过 ${LibraryRules.NAME_LIMIT} 个字符且不可换行，学习目标不超过 ${LibraryRules.GOAL_LIMIT} 个字符。树名和技能点名在同层唯一，目标应可检验。
             优先遵循用户指定的数量。用户要求精确数量时，按 1 到目标数量给 ref 编号（如 skill_01），达到数量就结束，并核对数组长度。未指定数量时，每棵新树生成 6 至 10 个技能点。

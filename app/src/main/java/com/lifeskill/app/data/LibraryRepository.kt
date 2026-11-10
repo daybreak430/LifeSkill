@@ -3,6 +3,7 @@ package com.lifeskill.app.data
 import androidx.room.withTransaction
 import com.lifeskill.app.ai.GenerationDraft
 import com.lifeskill.app.ai.SkillDraft
+import com.lifeskill.app.ai.TreeDraft
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
@@ -169,8 +170,28 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         return Creation(newTrees.singleOrNull() ?: target, directions, newTrees.size, skills)
     }
 
+    fun validateNewTrees(trees: List<TreeDraft>) {
+        val names = mutableListOf<String>()
+        val emptyLibrary = Library()
+        trees.forEach { tree ->
+            val name = LibraryRules.name(tree.name)
+            LibraryRules.checkUnique(name, names)
+            names.add(name)
+            planSkills(null, tree.skills, emptyLibrary)
+        }
+    }
+
     private suspend fun addSkills(tree: Entry, drafts: List<SkillDraft>, library: Library): Int {
-        val existing = library.childrenOf(tree.id)
+        val (additions, addedEdges) = planSkills(tree.id, drafts, library)
+        var position = dao.nextPosition()
+        for (entry in additions) dao.insertEntry(entry.row(position++))
+        dao.insertEdges(addedEdges.map { EdgeRow(it.skillId, it.prerequisiteId) })
+        return additions.size
+    }
+
+    private fun planSkills(treeId: String?, drafts: List<SkillDraft>, library: Library): Pair<List<Entry>, List<Edge>> {
+        // 草稿预检时树还没有 ID，仅对同批节点建立并校验关系。
+        val existing = if (treeId == null) emptyList() else library.childrenOf(treeId)
         val existingIds = existing.map(Entry::id).toSet()
         val names = existing.map(Entry::name).toMutableList()
         val refIds = mutableMapOf<String, String>()
@@ -181,7 +202,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             val name = LibraryRules.name(draft.name)
             LibraryRules.checkUnique(name, names)
             names.add(name)
-            Entry(newId(), tree.id, EntryKind.SKILL, name, LibraryRules.goal(draft.goal), shortName = draft.shortName).also {
+            Entry(newId(), treeId, EntryKind.SKILL, name, LibraryRules.goal(draft.goal), shortName = draft.shortName).also {
                 refIds[draft.ref] = it.id
             }
         }
@@ -197,10 +218,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         }
         val previousEdges = library.edges.filter { it.skillId in existingIds }
         SkillGraph.validate(existingIds + refIds.values, previousEdges + addedEdges, previousEdges)
-        var position = dao.nextPosition()
-        for (entry in additions) dao.insertEntry(entry.row(position++))
-        dao.insertEdges(addedEdges.map { EdgeRow(it.skillId, it.prerequisiteId) })
-        return additions.size
+        return additions to addedEdges
     }
 
     private suspend fun create(parentId: String?, kind: EntryKind, name: String): Entry =

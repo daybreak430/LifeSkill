@@ -24,6 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -57,10 +59,11 @@ internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, lo
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val heroShape = RoundedCornerShape(22.dp)
-    Box(Modifier.fillMaxWidth()) {
-        Box(Modifier.matchParentSize().padding(horizontal = 12.dp).padding(bottom = 7.dp)
+    Box(Modifier.fillMaxWidth().clipToBounds()) {
+        Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = 11.dp, bottom = 16.dp)
+            .rotate(-3f)
             .background(colors.heroLayer, heroShape))
-        Box(Modifier.fillMaxWidth().padding(top = 7.dp).clip(heroShape).background(Brush.linearGradient(colors.hero))) {
+        Box(Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape).background(Brush.linearGradient(colors.hero))) {
             if (fontScale < 1.3f) StudyMotif(Modifier.align(Alignment.TopEnd).size(116.dp, 82.dp))
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

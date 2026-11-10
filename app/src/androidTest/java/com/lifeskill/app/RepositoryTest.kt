@@ -10,10 +10,12 @@ import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.ConversationRepository
+import com.lifeskill.app.data.ChatRow
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.LocalSettings
 import com.lifeskill.app.data.SecretBox
+import com.lifeskill.app.data.TurnRow
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
@@ -22,6 +24,7 @@ import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.TurnKind
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -186,17 +189,19 @@ class RepositoryTest {
 
     @Test fun confirmingInvalidDraftRollsBackWholeBatch() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
-        ai.reply(
-            """{"kind":"create","reply":"方案","directionName":"设计","trees":[{"name":"树 A","skills":[]},{"name":"树 B","skills":[{"ref":"x","name":"节点","goal":"能解释用途","requires":["x"]}]}]}"""
-        )
-        container.conversations.send(scope, "帮我生成设计技能树")
+        val invalid = """{"kind":"create","reply":"方案","directionName":"设计","trees":[{"name":"树 A","skills":[]},{"name":"树 B","skills":[{"ref":"x","name":"节点","goal":"能解释用途","requires":["x"]}]}]}"""
+        seedLegacyDraft(scope, invalid)
         val preview = container.conversations.watch(scope).first().last()
         assertEquals(TurnKind.DRAFT, preview.kind)
         expectRule { container.conversations.confirmDraft(scope, preview.id, GenerationDestination.New("设计")) }
         assertFalse(container.library.snapshot().entries.any { it.name in setOf("设计", "树 A", "树 B") })
         assertEquals(preview, container.conversations.watch(scope).first().last())
 
-        ai.reply(CREATED)
+        ai.reply(invalid)
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("上一版技能树没有通过校验"))
+            CREATED
+        }
         container.conversations.send(scope, "重新生成数据技能树")
         val secondDraft = container.conversations.watch(scope).first().last()
         container.conversations.confirmDraft(scope, secondDraft.id, GenerationDestination.New("数据能力"))
@@ -207,6 +212,44 @@ class RepositoryTest {
         assertNotNull(treeId)
         assertEquals(2, container.library.snapshot().childrenOf(treeId).size)
         assertEquals(1, container.library.snapshot().edges.size)
+    }
+
+    @Test fun confirmingLegacyDraftKeepsLocalPrerequisitesAndIgnoresForeignReferences() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val direction = container.library.snapshot().childrenOf(null).first()
+        seedLegacyDraft(scope, """
+            {"kind":"create","reply":"已规划","trees":[
+              {"name":"基础","skills":[{"ref":"foreign","name":"外树节点","goal":"能说明用途","requires":[]}]},
+              {"name":"实践","skills":[
+                {"ref":"base","name":"本树前置","goal":"掌握概念","requires":[]},
+                {"ref":"follow","name":"本树后续","goal":"实际运用","requires":[" existing:base ","本树前置","foreign","existing:missing"]}
+              ]}
+            ]}
+        """.trimIndent())
+        val draft = container.conversations.watch(scope).first().single()
+        assertTrue(draft.text.contains("略过 2 条"))
+        assertTrue(container.library.snapshot().childrenOf(direction.id).isEmpty())
+
+        container.conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        val library = container.library.snapshot()
+        val trees = library.childrenOf(direction.id)
+        assertEquals(listOf("基础", "实践"), trees.map(Entry::name))
+        val (base, follow) = library.childrenOf(trees.last().id)
+        assertEquals(setOf(base.id), library.prerequisitesOf(follow.id))
+        val created = container.conversations.watch(scope).first().single()
+        assertEquals(TurnKind.CREATED, created.kind)
+        assertTrue(created.text.contains("略过 2 条"))
+    }
+
+    private suspend fun seedLegacyDraft(scope: ChatScope, raw: String) {
+        val dao = database.skills()
+        val id = "legacy-draft"
+        dao.insertChat(ChatRow(scope.id, scope.ownerId))
+        dao.insertTurn(TurnRow(
+            id = id, chatId = scope.id, speaker = Speaker.ASSISTANT.name, kind = TurnKind.DRAFT.name,
+            text = SecretBox("lifeskill-tests").seal(raw, "$id:turn"), contentVersion = 0,
+            exerciseId = null, resultId = null, choices = null,
+        ))
     }
 
     @Test fun overlappingGenerationAndConfirmationUseOnlyTheSelectedDirection() = runBlocking {

@@ -342,13 +342,14 @@ class MvpFlowTest {
         ui.onNodeWithText("选择方向").performTouchInput { click() }
         await("选择学习方向")
         ui.onNodeWithText("确认添加").assertIsNotEnabled()
+        ui.onNodeWithText("数据质量").assertDoesNotExist()
         ui.onNodeWithText("取消").performClick()
         assertTrue(runBlocking { fixture.container.library.snapshot().entries.none { it.name == "数据质量" } })
         ui.activityRule.scenario.recreate()
         await("选择方向")
         ui.onNodeWithText("选择方向").performClick()
-        ui.onNodeWithText("新建方向").performScrollTo().performTouchInput { click() }
-        ui.onNodeWithText("数据能力").assertIsDisplayed()
+        ui.onNodeWithText("新建 · 数据能力").performScrollTo().performTouchInput { click() }
+        ui.onNodeWithText("方向名称").assertDoesNotExist()
         ui.onNodeWithText("确认添加").assertIsEnabled().performTouchInput { click() }
         await("打开技能树 · 数据质量")
         ui.onNodeWithText("打开技能树 · 数据质量").performClick()

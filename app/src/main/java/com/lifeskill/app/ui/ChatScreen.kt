@@ -43,6 +43,7 @@ import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
@@ -131,11 +132,19 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         open = { app.open(Route.entry(it)) },
                     )
                     if (turn.preview != null) {
-                        Action("选择方向", Glyph.NEXT, {
-                            keyboard?.hide()
-                            chat.clearDraftError()
-                            selectedDraftId = turn.id
-                        }, enabled = canSend)
+                        OutlinedButton(
+                            onClick = {
+                                keyboard?.hide()
+                                chat.clearDraftError()
+                                selectedDraftId = turn.id
+                            },
+                            modifier = Modifier.padding(top = 6.dp), enabled = canSend,
+                            shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Line),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                        ) {
+                            Text("选择方向", style = MaterialTheme.typography.labelMedium)
+                            Mark(Glyph.NEXT, if (canSend) Gold else Muted, Modifier.padding(start = 6.dp).size(14.dp))
+                        }
                     }
                     if (turn.id == latestReply?.id) {
                         if (checkOffered) {
@@ -219,6 +228,11 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         AddDraftDialog(
             checkNotNull(turn.preview), library.childrenOf(null), status.working, status.draftError,
             onDismiss = { selectedDraftId = null },
+            onCreateDirection = {
+                selectedDraftId = null
+                app.add(EntryKind.DIRECTION)
+            },
+            onSelectionChange = chat::clearDraftError,
             onConfirm = { chat.confirmDraft(turn.id, it) },
         )
     }

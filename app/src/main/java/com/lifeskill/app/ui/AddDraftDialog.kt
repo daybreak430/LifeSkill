@@ -12,9 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,14 +37,20 @@ internal fun AddDraftDialog(
     working: Boolean,
     error: String?,
     onDismiss: () -> Unit,
+    onCreateDirection: () -> Unit,
+    onSelectionChange: () -> Unit,
     onConfirm: (GenerationDestination) -> Unit,
 ) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var createNew by rememberSaveable { mutableStateOf(preview.treeNames.isEmpty()) }
-    var name by rememberSaveable { mutableStateOf(preview.suggestedDirectionName.orEmpty()) }
-    val newName = if (createNew) runCatching { LibraryRules.name(name) }.getOrNull() else null
+    var createNew by rememberSaveable { mutableStateOf(false) }
+    val existing = if (preview.treeNames.isEmpty()) emptyList() else directions
+    val newName = preview.suggestedDirectionName?.let { suggestion ->
+        runCatching {
+            LibraryRules.name(suggestion).also { LibraryRules.checkUnique(it, directions.map(Entry::name)) }
+        }.getOrNull()
+    }
     val destination = if (createNew) newName?.let { GenerationDestination.New(it) }
-    else directions.firstOrNull { it.id == selectedId }?.let { GenerationDestination.Existing(it.id) }
+    else existing.firstOrNull { it.id == selectedId }?.let { GenerationDestination.Existing(it.id) }
 
     AlertDialog(
         onDismissRequest = { if (!working) onDismiss() },
@@ -58,29 +62,26 @@ internal fun AddDraftDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                preview.treeNames.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                if (preview.treeNames.isNotEmpty()) {
-                    HorizontalDivider(color = Line)
-                    Column(Modifier.selectableGroup()) {
-                        directions.forEach { direction ->
-                            DirectionChoice(direction.name, !createNew && selectedId == direction.id, working,
-                                recommended = preview.suggestedDirectionId == direction.id,
-                            ) {
-                                selectedId = direction.id
-                                createNew = false
-                            }
+                Column(Modifier.selectableGroup()) {
+                    existing.forEach { direction ->
+                        DirectionChoice(direction.name, !createNew && selectedId == direction.id, working,
+                            recommended = preview.suggestedDirectionId == direction.id,
+                        ) {
+                            selectedId = direction.id
+                            createNew = false
+                            onSelectionChange()
                         }
-                        DirectionChoice("新建方向", createNew, working, preview.suggestedDirectionName != null) {
+                    }
+                    if (newName != null) {
+                        DirectionChoice("新建 · $newName", createNew, working, recommended = false) {
                             createNew = true
+                            onSelectionChange()
                         }
                     }
                 }
-                if (createNew) {
-                    OutlinedTextField(
-                        name, { name = it }, Modifier.fillMaxWidth(), label = { Text("方向名称") },
-                        enabled = !working, singleLine = true, shape = RoundedCornerShape(12.dp),
-                        isError = name.isNotBlank() && newName == null,
-                    )
+                if (existing.isEmpty() && newName == null) {
+                    Text(if (directions.isEmpty()) "还没有学习方向" else "这份草稿没有可添加的方向")
+                    TextButton(onClick = onCreateDirection, enabled = !working) { Text("新增方向") }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -105,7 +106,7 @@ private fun DirectionChoice(
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected, onClick = null, enabled = !working)
-        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         if (recommended) Text("推荐", color = Gold, style = MaterialTheme.typography.labelMedium)
     }
 }
