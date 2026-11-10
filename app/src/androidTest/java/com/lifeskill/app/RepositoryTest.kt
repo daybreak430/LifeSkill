@@ -19,6 +19,7 @@ import com.lifeskill.app.data.TurnRow
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.Mastery
@@ -235,6 +236,8 @@ class RepositoryTest {
         val trees = library.childrenOf(direction.id)
         assertEquals(listOf("基础", "实践"), trees.map(Entry::name))
         val (base, follow) = library.childrenOf(trees.last().id)
+        assertEquals(EntryIcon.BOOK, base.icon)
+        assertEquals(EntryIcon.EXPLORE, follow.icon)
         assertEquals(setOf(base.id), library.prerequisitesOf(follow.id))
         val created = container.conversations.watch(scope).first().single()
         assertEquals(TurnKind.CREATED, created.kind)
@@ -286,14 +289,17 @@ class RepositoryTest {
     @Test fun directionScopedDraftCanBeConfirmedInADifferentDirection() = runBlocking {
         val (source, destination) = container.library.snapshot().childrenOf(null)
         val scope = ChatScope(ChatMode.GENERATE, source.id)
-        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","skills":[]}]}""")
+        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","skills":[{"ref":"intro","name":"认识信息系统","goal":"能说明用途","requires":[],"icon":"CODE"}]}]}""")
         container.conversations.send(scope, "生成信息化技能树")
         val draft = container.conversations.watch(scope).first().last()
         assertEquals(source.id, draft.preview?.suggestedDirectionId)
         assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
         container.conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(destination.id))
-        assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
-        assertEquals("信息化基础", container.library.snapshot().childrenOf(destination.id).single().name)
+        val library = container.library.snapshot()
+        assertTrue(library.childrenOf(source.id).isEmpty())
+        val tree = library.childrenOf(destination.id).single()
+        assertEquals("信息化基础", tree.name)
+        assertEquals(EntryIcon.CODE, library.childrenOf(tree.id).single().icon)
     }
 
     @Test fun scopedGenerationCanAttachOnlyToNodesInItsTargetTree() = runBlocking {
@@ -303,7 +309,7 @@ class RepositoryTest {
         val current = add(tree, EntryKind.SKILL, "当前前置")
         val foreign = add(otherTree, EntryKind.SKILL, "外部前置")
         val scope = ChatScope(ChatMode.GENERATE, tree.id)
-        fun append(id: String) = """{"kind":"create","reply":"追加节点","skills":[{"ref":"followup","name":"后续技能","goal":"能演示操作","requires":["existing:$id"]}]}"""
+        fun append(id: String) = """{"kind":"create","reply":"追加节点","skills":[{"ref":"followup","name":"后续技能","goal":"能演示操作","requires":["existing:$id"],"icon":"PRACTICAL"}]}"""
         ai.reply(append(foreign.id))
         expectRule { container.conversations.send(scope, "追加一个进阶技能点") }
         assertEquals(1, container.library.snapshot().childrenOf(tree.id).size)
@@ -311,6 +317,8 @@ class RepositoryTest {
         container.conversations.retry(scope)
         val library = container.library.snapshot()
         val added = library.childrenOf(tree.id).single { it.id != current.id }
+        assertEquals(EntryIcon.PRACTICAL, added.icon)
+        assertEquals(current.icon, library.byId.getValue(current.id).icon)
         assertEquals(setOf(current.id), library.prerequisitesOf(added.id))
         assertEquals(tree.id, container.conversations.watch(scope).first().last().resultId)
         assertEquals(listOf(foreign), library.childrenOf(otherTree.id))
@@ -625,7 +633,7 @@ class RepositoryTest {
     }
 
     companion object {
-        const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[]},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"]}]}]}"""
+        const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[],"icon":"CHART"},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"],"icon":"UNKNOWN"}]}]}"""
 
         fun verdict(kind: String, text: String, id: String): String =
             JSONObject().put("kind", kind).put("reply", text).put("exerciseId", id).toString()

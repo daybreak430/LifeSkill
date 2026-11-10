@@ -1,6 +1,7 @@
 package com.lifeskill.app
 
 import com.lifeskill.app.ai.AiProtocol
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
@@ -46,6 +47,17 @@ class AiProtocolTest {
             """{"kind":"create","reply":"已规划","trees":${"[".repeat(200)}0${"]".repeat(200)}}""",
         )
         bad.forEach { input -> assertThrows(RuleViolation::class.java) { AiProtocol.generation(input) } }
+    }
+
+    @Test fun generationAcceptsCatalogIconsAndIgnoresInvalidOptionalIcons() {
+        val skills = JSONArray()
+        listOf(" speech ", "UNKNOWN", JSONObject(), "DIAMOND", JSONObject.NULL).forEachIndexed { index, icon ->
+            skills.put(JSONObject().put("ref", "skill_$index").put("name", "技能$index")
+                .put("goal", "能说明用途").put("requires", JSONArray()).put("icon", icon))
+        }
+        val reply = JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills)
+        assertEquals(listOf(EntryIcon.SPEECH, null, null, null, null),
+            AiProtocol.generation(reply.toString()).draft?.skills?.map { it.icon })
     }
 
     @Test fun acceptsExactLimitsAndRejectsOneOver() {

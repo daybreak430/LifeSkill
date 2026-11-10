@@ -8,6 +8,7 @@ import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.GeneratedSkillIcons
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.Mastery
@@ -195,6 +196,8 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val existingIds = existing.map(Entry::id).toSet()
         val names = existing.map(Entry::name).toMutableList()
         val refIds = mutableMapOf<String, String>()
+        val usedIcons = (existing.mapNotNull(Entry::icon) + drafts.mapNotNull(SkillDraft::icon))
+            .groupingBy { it }.eachCount().toMutableMap()
         val additions = drafts.map { draft ->
             if (!REF.matches(draft.ref) || draft.ref in refIds) {
                 throw RuleViolation("AI 返回了重复或无效的技能点标识，请重试。")
@@ -202,7 +205,11 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             val name = LibraryRules.name(draft.name)
             LibraryRules.checkUnique(name, names)
             names.add(name)
-            Entry(newId(), treeId, EntryKind.SKILL, name, LibraryRules.goal(draft.goal), shortName = draft.shortName).also {
+            val goal = LibraryRules.goal(draft.goal)
+            val icon = draft.icon ?: GeneratedSkillIcons.fallback(name, goal, usedIcons).also {
+                usedIcons[it] = usedIcons.getOrDefault(it, 0) + 1
+            }
+            Entry(newId(), treeId, EntryKind.SKILL, name, goal, icon = icon, shortName = draft.shortName).also {
                 refIds[draft.ref] = it.id
             }
         }

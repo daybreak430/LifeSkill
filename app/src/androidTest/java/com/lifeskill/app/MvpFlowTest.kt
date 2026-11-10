@@ -339,7 +339,10 @@ class MvpFlowTest {
 
         fixture.ai.enqueue { throw RuleViolation("模型服务请求过于频繁，请稍后重试。") }
         fixture.ai.reply("""{"kind":"message","reply":"你想用什么主题？"}""")
-        fixture.ai.reply(RepositoryTest.CREATED)
+        fixture.ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("按每个技能点的名称和学习目标选择 icon"))
+            RepositoryTest.CREATED
+        }
         ui.onNodeWithText("AI 生成技能树").performClick()
         await("AI 生成")
         ui.onNodeWithTag("chat-input").performTextInput("测".repeat(4001))
@@ -368,6 +371,8 @@ class MvpFlowTest {
         await("打开技能树 · 数据质量")
         ui.onNodeWithText("打开技能树 · 数据质量").performClick()
         await("技能地图")
+        assertEquals(EntryIcon.CHART, iconOf("基础"))
+        assertEquals(EntryIcon.TOOLS, iconOf("实践"))
 
         val practiceNode = ui.onNodeWithContentDescription("实践")
         practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
