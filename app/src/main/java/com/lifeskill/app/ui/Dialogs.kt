@@ -3,6 +3,7 @@ package com.lifeskill.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -12,6 +13,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -26,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
@@ -37,10 +40,14 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     val siblings = if (skill) library.childrenOf(initial.parentId).filterNot { it.id == initial.id } else emptyList()
     var name by remember(initial) { mutableStateOf(initial.name) }
     var goal by remember(initial) { mutableStateOf(initial.goal) }
+    var shortName by remember(initial) { mutableStateOf(initial.shortName) }
     var selected by remember(initial) { mutableStateOf(initial.prerequisites) }
     var showPrerequisites by remember(initial) { mutableStateOf(initial.prerequisites.isNotEmpty()) }
+    var showIcons by remember(initial) { mutableStateOf(false) }
     val nameTooLong = name.trim().length > LibraryRules.NAME_LIMIT
     val goalTooLong = goal.trim().length > LibraryRules.GOAL_LIMIT
+    val invalidShortName = skill && runCatching { LibraryRules.shortName(shortName) }.isFailure
+    val activeIcon = editor.icon ?: EntryIcon.default(initial.kind, initial.id)
 
     AlertDialog(
         onDismissRequest = app::closeEditor,
@@ -56,9 +63,15 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                 if (skill) {
                     OutlinedTextField(
                         goal, { goal = it }, Modifier.fillMaxWidth(),
-                        label = { Text("学习目标") }, minLines = 2, maxLines = 5, enabled = !editor.saving,
+                        label = { Text("技能说明") }, minLines = 2, maxLines = 5, enabled = !editor.saving,
                         isError = goalTooLong,
-                        supportingText = if (goalTooLong) { { Text("学习目标最多 ${LibraryRules.GOAL_LIMIT} 个字符") } } else null,
+                        supportingText = if (goalTooLong) { { Text("技能说明最多 ${LibraryRules.GOAL_LIMIT} 个字符") } } else null,
+                    )
+                    OutlinedTextField(
+                        shortName, { shortName = it }, Modifier.fillMaxWidth(),
+                        label = { Text("节点简称（选填）") }, placeholder = { Text("2–5 个字") },
+                        singleLine = true, enabled = !editor.saving, isError = invalidShortName,
+                        supportingText = if (invalidShortName) { { Text("请输入 2–5 个字") } } else null,
                     )
                     if (siblings.isNotEmpty()) {
                         Row(
@@ -91,13 +104,52 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                         }
                     }
                 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Mark(activeIcon.glyph, Gold)
+                    Text(
+                        activeIcon.label, Modifier.weight(1f).padding(start = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    TextButton(
+                        onClick = { showIcons = !showIcons },
+                        enabled = !editor.saving && !editor.suggesting,
+                    ) { Text(if (showIcons) "收起图标" else "选择图标") }
+                }
+                if (showIcons) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = editor.icon == null, onClick = {
+                                app.chooseIcon(null)
+                                showIcons = false
+                            },
+                            enabled = !editor.saving && !editor.suggesting, label = { Text("默认") },
+                        )
+                        EntryIcon.entries.forEach { icon ->
+                            FilterChip(
+                                selected = editor.icon == icon, onClick = {
+                                    app.chooseIcon(icon)
+                                    showIcons = false
+                                },
+                                enabled = !editor.saving && !editor.suggesting, label = { Text(icon.label) },
+                                leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted) },
+                            )
+                        }
+                    }
+                }
+                TextButton(
+                    onClick = { app.suggestIcon(name, goal) },
+                    enabled = name.isNotBlank() && !nameTooLong && !editor.saving && !editor.suggesting,
+                ) { Text(if (editor.suggesting) "正在推荐…" else "AI 推荐图标") }
+                editor.iconError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 editor.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { app.saveEntry(initial.copy(name = name, goal = goal, prerequisites = selected)) },
-                enabled = !editor.saving && name.isNotBlank() && !nameTooLong &&
+                onClick = { app.saveEntry(initial.copy(
+                    name = name, goal = goal, prerequisites = selected, icon = editor.icon, shortName = shortName,
+                )) },
+                enabled = !editor.saving && !editor.suggesting && name.isNotBlank() && !nameTooLong && !invalidShortName &&
                     (!skill || goal.isNotBlank() && !goalTooLong),
             ) { Text(if (editor.saving) "正在保存" else "保存") }
         },

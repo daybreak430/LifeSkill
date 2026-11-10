@@ -24,9 +24,15 @@ data class Turn(
     val contentVersion: Long = 0,
     val exerciseId: String? = null,
     val resultId: String? = null,
-)
+    val choices: List<String> = emptyList(),
+) {
+    val modelText get() = if (choices.isEmpty()) text else "$text\n" +
+        choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")
+}
 
-data class Exercise(val id: String, val question: String)
+data class Exercise(val id: String, val question: String, val choices: List<String> = emptyList())
+
+fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
     fun pendingExercise(history: List<Turn>): Exercise? {
@@ -34,7 +40,14 @@ object TutorRules {
         if (last?.kind != TurnKind.EXERCISE && last?.kind != TurnKind.RETRY) return null
         val id = last.exerciseId ?: return null
         val question = history.firstOrNull { it.kind == TurnKind.EXERCISE && it.exerciseId == id } ?: return null
-        return Exercise(id, question.text)
+        return Exercise(id, question.modelText, question.choices)
+    }
+
+    fun canOfferExercise(history: List<Turn>): Boolean {
+        val sinceExercise = history.takeLastWhile {
+            it.speaker != Speaker.ASSISTANT || it.kind !in setOf(TurnKind.EXERCISE, TurnKind.RETRY, TurnKind.PASSED)
+        }
+        return sinceExercise.count { it.speaker == Speaker.ASSISTANT && it.kind == TurnKind.MESSAGE } >= 2
     }
 
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {

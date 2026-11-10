@@ -1,5 +1,6 @@
 package com.lifeskill.app.data
 
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -33,6 +34,8 @@ internal data class EntryRow(
     val contentVersion: Long,
     val masteryVersion: Long,
     val position: Long,
+    val icon: String?,
+    val shortName: String?,
 )
 
 @Entity(
@@ -81,6 +84,7 @@ internal data class TurnRow(
     val contentVersion: Long,
     val exerciseId: String?,
     val resultId: String?,
+    val choices: String?,
 )
 
 internal data class LibraryRows(val entries: List<EntryRow>, val edges: List<EdgeRow>)
@@ -153,8 +157,9 @@ internal abstract class SkillDao {
 
 @Database(
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {
     abstract fun skills(): SkillDao

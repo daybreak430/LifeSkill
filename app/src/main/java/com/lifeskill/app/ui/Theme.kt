@@ -67,7 +67,7 @@ internal fun LifeSkillTheme(content: @Composable () -> Unit) {
 
 internal enum class Glyph {
     TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, FIT, PLUS, MINUS,
-    WORK, SIDE, HOBBY, PRACTICAL, EXPLORE,
+    WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS,
 }
 
 @Composable
@@ -134,6 +134,43 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
             Glyph.HOBBY -> path(12, 3, 14.7, 9, 21, 9.5, 16.2, 14, 17.6, 21, 12, 17.4, 6.4, 21, 7.8, 14, 3, 9.5, 9.3, 9, close = true)
             Glyph.PRACTICAL -> { path(4, 5, 20, 5, 20, 19, 4, 19, close = true); path(8, 12, 11, 15, 16, 9) }
             Glyph.EXPLORE -> { circle(12, 12, 9f); path(16.5, 7.5, 14.5, 14.5, 7.5, 16.5, 9.5, 9.5, close = true) }
+            Glyph.CLOSE -> {
+                line(6, 6, 18, 18)
+                line(18, 6, 6, 18)
+            }
+            Glyph.BOOK -> {
+                path(12, 7, 8, 4, 3, 4, 3, 18, 8, 18, 12, 21, 16, 18, 21, 18, 21, 4, 16, 4, close = true)
+                line(12, 7, 12, 21)
+            }
+            Glyph.CODE -> {
+                path(7, 7, 2, 12, 7, 17)
+                path(17, 7, 22, 12, 17, 17)
+                line(14, 4, 10, 20)
+            }
+            Glyph.CHART -> {
+                path(3, 4, 3, 21, 21, 21)
+                line(8, 17, 8, 12)
+                line(13, 17, 13, 8)
+                line(18, 17, 18, 5)
+            }
+            Glyph.SPEECH -> path(4, 4, 20, 4, 20, 16, 11, 16, 6, 21, 6, 16, 4, 16, close = true)
+            Glyph.MUSIC -> {
+                path(9, 17, 9, 6, 20, 3, 20, 14)
+                circle(6, 18, 3f)
+                circle(17, 15, 3f)
+            }
+            Glyph.CAMERA -> {
+                path(3, 7, 8, 7, 10, 4, 15, 4, 17, 7, 21, 7, 21, 20, 3, 20, close = true)
+                circle(12, 13, 4f)
+            }
+            Glyph.LEAF -> {
+                path(4, 17, 5, 10, 11, 5, 21, 3, 19, 13, 13, 19, 7, 19)
+                line(3, 22, 15, 10)
+            }
+            Glyph.TOOLS -> {
+                path(21, 3, 15, 4, 13, 8, 15, 11, 20, 10, 22, 6)
+                path(13, 8, 3, 18, 3, 21, 6, 21, 15, 11)
+            }
         }
     }
 }

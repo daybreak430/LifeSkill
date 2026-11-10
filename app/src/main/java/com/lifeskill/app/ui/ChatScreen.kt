@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +45,8 @@ import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
+import com.lifeskill.app.model.TutorRules
+import com.lifeskill.app.model.choiceAnswer
 
 @Composable
 internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel) {
@@ -52,6 +55,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
     val pending = history.lastOrNull()?.takeIf { it.speaker == Speaker.USER }
+    val exercise = remember(history, owner?.contentVersion) {
+        TutorRules.pendingExercise(history.filter { it.contentVersion == owner?.contentVersion })
+    }
+    val lastQuizTurn = history.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     var draft by remember(scope) { mutableStateOf("") }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
@@ -96,7 +103,19 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 }
             }
             items(history, key = Turn::id) { turn ->
-                ChatBubble(turn, library.byId[turn.resultId]) { app.open(Route.entry(it)) }
+                val active = exercise != null && turn.id == lastQuizTurn?.id && turn.exerciseId == exercise.id
+                ChatBubble(
+                    turn = turn,
+                    result = library.byId[turn.resultId],
+                    choices = if (active) exercise.choices else turn.choices,
+                    active = active,
+                    canAnswer = !status.working && pending == null,
+                    onAnswer = { answer ->
+                        keyboard?.hide()
+                        chat.send(answer)
+                    },
+                    open = { app.open(Route.entry(it)) },
+                )
             }
             if (footerVisible) {
                 item(key = "chat-status") {
@@ -147,7 +166,15 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
 }
 
 @Composable
-private fun ChatBubble(turn: Turn, result: Entry?, open: (Entry) -> Unit) {
+private fun ChatBubble(
+    turn: Turn,
+    result: Entry?,
+    choices: List<String>,
+    active: Boolean,
+    canAnswer: Boolean,
+    onAnswer: (String) -> Unit,
+    open: (Entry) -> Unit,
+) {
     val user = turn.speaker == Speaker.USER
     val prominent = turn.kind == TurnKind.CREATED || turn.kind == TurnKind.PASSED
     Column(
@@ -176,7 +203,27 @@ private fun ChatBubble(turn: Turn, result: Entry?, open: (Entry) -> Unit) {
                     Text(badge, color = Gold, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 5.dp))
                 }
                 SelectionContainer {
-                    Text(turn.text, style = MaterialTheme.typography.bodyLarge, color = if (prominent) Gold else Ink)
+                    if (user || turn.kind == TurnKind.CREATED) {
+                        Text(turn.text, style = MaterialTheme.typography.bodyLarge, color = if (prominent) Gold else Ink)
+                    } else {
+                        LessonMarkdown(turn.text)
+                    }
+                }
+                if (choices.isNotEmpty()) {
+                    Column(Modifier.padding(top = 7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        choices.forEachIndexed { index, choice ->
+                            val answer = choiceAnswer(index, choice)
+                            if (active) {
+                                OutlinedButton(
+                                    onClick = { onAnswer(answer) }, modifier = Modifier.fillMaxWidth(),
+                                    enabled = canAnswer,
+                                    shape = RoundedCornerShape(9.dp), border = BorderStroke(1.dp, Line),
+                                ) { Text(answer, Modifier.fillMaxWidth()) }
+                            } else {
+                                Text(answer, Modifier.padding(vertical = 3.dp), color = Muted, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
                 }
                 if (result != null) {
                     TextButton(onClick = { open(result) }) {

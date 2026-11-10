@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
@@ -37,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
-import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.Progress
 
 @Composable
@@ -79,7 +76,7 @@ internal fun HomeScreen(library: Library, app: AppViewModel) {
             val trees = library.childrenOf(direction.id)
             val progress = library.progress(direction.id)
             EntryTile(
-                direction, directionGlyph(direction.id),
+                direction,
                 if (trees.isEmpty()) "0 棵技能树" else "${trees.size} 棵树 · ${progress.lit}/${progress.total} 已点亮",
                 onClick = { app.open(Route.entry(direction)) },
             )
@@ -108,53 +105,9 @@ internal fun DirectionScreen(direction: Entry, library: Library, app: AppViewMod
             items(trees, key = Entry::id) { tree ->
                 val progress = library.progress(tree.id)
                 EntryTile(
-                    tree, Glyph.TREE, "${progress.lit}/${progress.total} 个技能点已点亮",
+                    tree, "${progress.lit}/${progress.total} 个技能点已点亮",
                     progress = progress, onClick = { app.open(Route.entry(tree)) },
                 )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
-    val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
-    Column(Modifier.fillMaxSize()) {
-        PageHeader(skill.name, app::back, subtitle = library.byId[skill.parentId]?.name) { EntryMenu(skill, app) }
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Surface(shape = RoundedCornerShape(18.dp), color = Panel, border = BorderStroke(1.dp, if (skill.lit) Gold.copy(alpha = .6f) else Line)) {
-                Column(Modifier.fillMaxWidth().padding(19.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Emblem(if (skill.lit) Glyph.CHECK else Glyph.DIAMOND, if (skill.lit) Gold else Steel, if (skill.lit) GoldGround else Raised)
-                        Text(
-                            when (skill.mastery) {
-                                Mastery.UNLIT -> "待学习"
-                                Mastery.MANUAL -> "已点亮 · 手动"
-                                Mastery.AI -> "已点亮 · AI 检验通过"
-                            },
-                            color = if (skill.lit) Gold else Muted, style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                    Text("学习目标", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    Text(skill.goal, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-            Action("与 AI 老师学习", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) }, Modifier.fillMaxWidth(), primary = true)
-            Action(
-                if (skill.lit) "取消点亮" else "手动点亮", if (skill.lit) Glyph.DIAMOND else Glyph.CHECK,
-                { app.setLit(skill, !skill.lit) }, Modifier.fillMaxWidth(),
-            )
-            if (prerequisites.isNotEmpty()) {
-                Text("建议先学", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-                prerequisites.forEach { entry ->
-                    EntryTile(
-                        entry, if (entry.lit) Glyph.CHECK else Glyph.DIAMOND,
-                        if (entry.lit) "已点亮" else "待学习", onClick = { app.open(Route.entry(entry)) },
-                    )
-                }
             }
         }
     }
@@ -209,8 +162,8 @@ private fun ProgressCard(progress: Progress, treeCount: Int) {
 }
 
 @Composable
-private fun EntryTile(
-    entry: Entry, glyph: Glyph, subtitle: String, onClick: () -> Unit, progress: Progress? = null,
+internal fun EntryTile(
+    entry: Entry, subtitle: String, onClick: () -> Unit, progress: Progress? = null,
 ) {
     Surface(
         onClick = onClick, color = Panel, border = BorderStroke(1.dp, Line.copy(alpha = .8f)),
@@ -221,7 +174,7 @@ private fun EntryTile(
             horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             val tint = if (entry.lit) Gold else Steel
-            Emblem(glyph, tint, if (entry.lit) GoldGround else Raised)
+            Emblem(entry.displayIcon.glyph, tint, if (entry.lit) GoldGround else Raised)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(entry.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = Muted)
@@ -235,12 +188,4 @@ private fun EntryTile(
             Mark(Glyph.NEXT, Muted, Modifier.size(15.dp))
         }
     }
-}
-
-private fun directionGlyph(id: String): Glyph = when (id) {
-    "preset-0" -> Glyph.WORK
-    "preset-1" -> Glyph.SIDE
-    "preset-2" -> Glyph.HOBBY
-    "preset-3" -> Glyph.PRACTICAL
-    else -> Glyph.EXPLORE
 }

@@ -5,14 +5,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lifeskill.app.AppContainer
 import com.lifeskill.app.ai.ModelMessage
+import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.Turn
 import kotlinx.coroutines.CancellationException
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 internal enum class Page { HOME, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS }
 
@@ -46,7 +50,14 @@ internal data class Route(val page: Page, val id: String? = null) {
     }
 }
 
-internal data class Editor(val initial: EntryEdit, val saving: Boolean = false, val error: String? = null)
+internal data class Editor(
+    val initial: EntryEdit,
+    val saving: Boolean = false,
+    val error: String? = null,
+    val icon: EntryIcon? = initial.icon,
+    val suggesting: Boolean = false,
+    val iconError: String? = null,
+)
 
 internal class AppViewModel(private val container: AppContainer, private val state: SavedStateHandle) : ViewModel() {
     private val routes = state.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
@@ -103,7 +114,9 @@ internal class AppViewModel(private val container: AppContainer, private val sta
 
     fun edit(entry: Entry) {
         val requirements = library.value?.prerequisitesOf(entry.id).orEmpty()
-        _editor.value = Editor(EntryEdit(entry.id, entry.parentId, entry.kind, entry.name, entry.goal, requirements))
+        _editor.value = Editor(EntryEdit(
+            entry.id, entry.parentId, entry.kind, entry.name, entry.goal, requirements, entry.icon, entry.shortName.orEmpty(),
+        ))
     }
 
     fun closeEditor() {
@@ -111,7 +124,7 @@ internal class AppViewModel(private val container: AppContainer, private val sta
     }
 
     fun saveEntry(edit: EntryEdit) {
-        val editor = _editor.value?.takeUnless { it.saving } ?: return
+        val editor = _editor.value?.takeUnless { it.saving || it.suggesting } ?: return
         _editor.value = editor.copy(saving = true, error = null)
         viewModelScope.launch {
             try {
@@ -119,6 +132,35 @@ internal class AppViewModel(private val container: AppContainer, private val sta
                 _editor.value = null
             } catch (error: Exception) {
                 _editor.value = editor.copy(error = readable(error, "保存失败，请重试。"))
+            }
+        }
+    }
+
+    fun chooseIcon(icon: EntryIcon?) {
+        val editor = _editor.value?.takeUnless { it.saving || it.suggesting } ?: return
+        _editor.value = editor.copy(icon = icon, iconError = null)
+    }
+
+    fun suggestIcon(name: String, goal: String) {
+        val editor = _editor.value?.takeUnless { it.saving || it.suggesting } ?: return
+        _editor.value = editor.copy(suggesting = true, iconError = null)
+        viewModelScope.launch {
+            try {
+                val data = JSONObject()
+                    .put("type", editor.initial.kind.label)
+                    .put("name", LibraryRules.name(name))
+                    .put("description", goal.trim().take(LibraryRules.GOAL_LIMIT))
+                val config = withContext(Dispatchers.IO) { container.settings.active() }
+                val messages = listOf(ModelMessage("system", AiProtocol.iconPrompt()), ModelMessage("user", data.toString()))
+                val icon = AiProtocol.icon(container.gateway.complete(config, messages, structured = true))
+                _editor.value?.takeIf { it.initial === editor.initial }?.let {
+                    _editor.value = it.copy(icon = icon, suggesting = false)
+                }
+            } catch (error: Exception) {
+                val message = readable(error, "无法推荐图标，请重试或手动选择。")
+                _editor.value?.takeIf { it.initial === editor.initial }?.let {
+                    _editor.value = it.copy(suggesting = false, iconError = message)
+                }
             }
         }
     }

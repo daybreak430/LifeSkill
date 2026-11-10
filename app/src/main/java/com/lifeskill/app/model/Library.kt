@@ -1,6 +1,7 @@
 package com.lifeskill.app.model
 
 import java.text.Normalizer
+import java.text.BreakIterator
 import java.util.Locale
 
 enum class EntryKind(val label: String) {
@@ -25,8 +26,12 @@ data class Entry(
     val mastery: Mastery = Mastery.UNLIT,
     val contentVersion: Long = 0,
     val masteryVersion: Long = 0,
+    val icon: EntryIcon? = null,
+    val shortName: String? = null,
 ) {
     val lit get() = mastery != Mastery.UNLIT
+    val mapName get() = shortName ?: LibraryRules.mapName(name)
+    val displayIcon get() = icon ?: EntryIcon.default(kind, id)
 }
 
 data class Edge(val skillId: String, val prerequisiteId: String)
@@ -61,6 +66,32 @@ open class RuleViolation(message: String) : IllegalArgumentException(message)
 object LibraryRules {
     const val NAME_LIMIT = 48
     const val GOAL_LIMIT = 320
+    const val SHORT_NAME_LIMIT = 5
+
+    fun shortName(value: String): String? {
+        val trimmed = value.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.any(Char::isISOControl) || boundaries(trimmed).size !in 2..SHORT_NAME_LIMIT) {
+            throw RuleViolation("节点简称需要 2–5 个字，且不能换行。")
+        }
+        return trimmed
+    }
+
+    fun mapName(name: String): String {
+        val ends = boundaries(name)
+        return if (ends.size == 1) "${name}课"
+        else ends.getOrNull(SHORT_NAME_LIMIT - 1)?.let { name.substring(0, it) } ?: name
+    }
+
+    private fun boundaries(text: String): List<Int> = buildList {
+        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+        iterator.setText(text)
+        var end = iterator.next()
+        while (end != BreakIterator.DONE) {
+            add(end)
+            end = iterator.next()
+        }
+    }
 
     fun name(value: String): String = value.trim().also {
         if (it.isBlank() || it.length > NAME_LIMIT || it.any(Char::isISOControl)) {
@@ -70,7 +101,7 @@ object LibraryRules {
 
     fun goal(value: String): String = value.trim().also {
         if (it.isBlank() || it.length > GOAL_LIMIT) {
-            throw RuleViolation("学习目标需要 1–${GOAL_LIMIT} 个字符。")
+            throw RuleViolation("技能说明需要 1–${GOAL_LIMIT} 个字符。")
         }
     }
 

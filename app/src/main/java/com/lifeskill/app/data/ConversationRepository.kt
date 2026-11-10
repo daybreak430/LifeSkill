@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
 internal class ConversationRepository(
     private val database: LifeSkillDatabase,
@@ -78,7 +79,7 @@ internal class ConversationRepository(
                 TutorRules.pendingExercise(listOfNotNull(original, last))
             } else null
             val prompt = if (scope.mode == ChatMode.TUTOR) {
-                AiProtocol.tutorPrompt(checkNotNull(owner), pending)
+                AiProtocol.tutorPrompt(checkNotNull(owner), pending, TutorRules.canOfferExercise(recent))
             } else {
                 val candidates = library.snapshot().childrenOf(owner?.id)
                 AiProtocol.generationPrompt(owner, candidates)
@@ -151,7 +152,7 @@ internal class ConversationRepository(
             TurnKind.RETRY, TurnKind.PASSED -> context.pending?.id
             else -> null
         }
-        return Turn(id, Speaker.ASSISTANT, kind, text, context.input.contentVersion, exerciseId)
+        return Turn(id, Speaker.ASSISTANT, kind, text, context.input.contentVersion, exerciseId, choices = reply.choices)
     }
 
     private suspend fun requireOwner(scope: ChatScope): Entry? {
@@ -173,7 +174,7 @@ internal class ConversationRepository(
             remaining >= 0
         }.asReversed().dropWhile { it.speaker != Speaker.USER }.map {
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
-            val text = if (it.kind == TurnKind.CHECK) "【App 发起检验掌握】请出一道当前技能练习。" else it.text
+            val text = if (it.kind == TurnKind.CHECK) "【App 发起检验掌握】请出一道当前技能练习。" else it.modelText
             ModelMessage(role, text)
         }
     }
@@ -182,11 +183,15 @@ internal class ConversationRepository(
         id = id, chatId = scope.id, speaker = speaker.name, kind = kind.name,
         text = secret.seal(text, "$id:turn"), contentVersion = contentVersion,
         exerciseId = exerciseId, resultId = resultId,
+        choices = choices.takeIf(List<String>::isNotEmpty)?.let { secret.seal(JSONArray(it).toString(), "$id:choices") },
     )
 
     private fun TurnRow.toTurn() = Turn(
         id, Speaker.valueOf(speaker), TurnKind.valueOf(kind), secret.open(text, "$id:turn"),
-        contentVersion, exerciseId, resultId,
+        contentVersion, exerciseId, resultId, choices?.let {
+            val values = JSONArray(secret.open(it, "$id:choices"))
+            List(values.length()) { index -> values.getString(index) }
+        }.orEmpty(),
     )
 
     private data class Request(

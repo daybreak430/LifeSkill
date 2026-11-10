@@ -111,12 +111,12 @@ private fun SkillMap(skills: List<Entry>, edges: List<Edge>, onOpen: (Entry) -> 
     val byId = remember(skills) { skills.associateBy(Entry::id) }
     val density = LocalDensity.current
     val scaleText = density.fontScale.coerceIn(1f, 1.5f)
-    val cardWidth = 148.dp * scaleText
-    val cardHeight = 82.dp * scaleText
+    val cardWidth = 108.dp * scaleText
+    val cardHeight = 94.dp * scaleText
     val widthPx = with(density) { cardWidth.toPx() }
     val heightPx = with(density) { cardHeight.toPx() }
     val layout = remember(tiers, widthPx, heightPx, density) {
-        with(density) { mapLayout(tiers, widthPx, heightPx, 18.dp.toPx(), 46.dp.toPx()) }
+        with(density) { mapLayout(tiers, widthPx, heightPx, 20.dp.toPx(), 38.dp.toPx()) }
     }
     var zoom by rememberSaveable { mutableFloatStateOf(1f) }
     var shiftX by rememberSaveable { mutableFloatStateOf(0f) }
@@ -179,7 +179,7 @@ private fun SkillMap(skills: List<Entry>, edges: List<Edge>, onOpen: (Entry) -> 
                 val center = layout.centers.getValue(skill.id)
                 val topLeft = (center - Offset(widthPx / 2, heightPx / 2)) * zoom + originInView
                 MapNode(
-                    skill, { onOpen(skill) },
+                    skill, cardHeight * .66f, { onOpen(skill) },
                     Modifier.offset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }
                         .size(cardWidth, cardHeight)
                         .graphicsLayer {
@@ -211,24 +211,22 @@ private fun SkillMap(skills: List<Entry>, edges: List<Edge>, onOpen: (Entry) -> 
 }
 
 @Composable
-private fun MapNode(skill: Entry, onOpen: () -> Unit, modifier: Modifier) {
+private fun MapNode(skill: Entry, diameter: androidx.compose.ui.unit.Dp, onOpen: () -> Unit, modifier: Modifier) {
     val state = if (skill.lit) "已点亮" else "待学习"
     val tint = if (skill.lit) Gold else Steel
+    val mapName = remember(skill.name, skill.shortName) { skill.mapName }
     Surface(
         onClick = onOpen, shape = RoundedCornerShape(13.dp),
         modifier = modifier.semantics { contentDescription = skill.name; stateDescription = state },
-        color = if (skill.lit) GoldGround else Panel,
-        border = BorderStroke(1.dp, if (skill.lit) Gold.copy(alpha = .78f) else Line),
+        color = androidx.compose.ui.graphics.Color.Transparent,
     ) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 11.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.Center,
+            Modifier.fillMaxSize().padding(horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Text(skill.name, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Mark(if (skill.lit) Glyph.CHECK else Glyph.DIAMOND, tint, Modifier.size(12.dp))
-                Text(state, Modifier.padding(start = 4.dp), color = tint, style = MaterialTheme.typography.labelMedium)
-            }
+            SkillMedallion(skill.displayIcon, skill.lit, diameter)
+            Text(mapName, color = tint, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

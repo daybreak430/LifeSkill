@@ -5,6 +5,7 @@ import com.lifeskill.app.ai.GenerationDraft
 import com.lifeskill.app.ai.SkillDraft
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
@@ -23,6 +24,8 @@ internal data class EntryEdit(
     val name: String,
     val goal: String = "",
     val prerequisites: Set<String> = emptySet(),
+    val icon: EntryIcon? = null,
+    val shortName: String = "",
 )
 
 internal data class Creation(val entry: Entry, val directions: Int, val trees: Int, val skills: Int) {
@@ -70,12 +73,15 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val name = LibraryRules.name(edit.name)
         LibraryRules.checkUnique(name, current.childrenOf(edit.parentId).filterNot { it.id == edit.id }.map(Entry::name))
         val goal = if (edit.kind == EntryKind.SKILL) LibraryRules.goal(edit.goal) else ""
+        val shortName = if (edit.kind == EntryKind.SKILL) LibraryRules.shortName(edit.shortName) else null
         val saved = if (previous == null) {
-            Entry(newId(), edit.parentId, edit.kind, name, goal)
+            Entry(newId(), edit.parentId, edit.kind, name, goal, icon = edit.icon, shortName = shortName)
         } else {
             previous.copy(
                 name = name,
                 goal = goal,
+                icon = edit.icon,
+                shortName = shortName,
                 contentVersion = previous.contentVersion + if (previous.name != name || previous.goal != goal) 1 else 0,
             )
         }
@@ -178,7 +184,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             val name = LibraryRules.name(draft.name)
             LibraryRules.checkUnique(name, names)
             names.add(name)
-            Entry(newId(), tree.id, EntryKind.SKILL, name, LibraryRules.goal(draft.goal)).also {
+            Entry(newId(), tree.id, EntryKind.SKILL, name, LibraryRules.goal(draft.goal), shortName = draft.shortName).also {
                 refIds[draft.ref] = it.id
             }
         }
@@ -206,11 +212,13 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
     private fun Entry.row(position: Long) = EntryRow(
         id, parentId, kind.name, secret.seal(name, "$id:name"), secret.seal(goal, "$id:goal"),
         mastery.name, contentVersion, masteryVersion, position,
+        icon?.name, shortName?.let { secret.seal(it, "$id:shortName") },
     )
 
     private fun EntryRow.toEntry() = Entry(
         id, parentId, EntryKind.valueOf(kind), secret.open(name, "$id:name"), secret.open(goal, "$id:goal"),
         Mastery.valueOf(mastery), contentVersion, masteryVersion,
+        EntryIcon.fromId(icon), shortName?.let { secret.open(it, "$id:shortName") },
     )
 
     private fun invalidScope(): Nothing = throw RuleViolation("AI 返回的新增内容与当前层级不匹配，请重试。")

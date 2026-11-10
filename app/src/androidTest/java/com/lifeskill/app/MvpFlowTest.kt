@@ -31,14 +31,17 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.RuleViolation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class MvpFlowTest {
@@ -77,19 +80,27 @@ class MvpFlowTest {
         await("名称最多 48 个字符")
         ui.onNodeWithText("保存").assertIsNotEnabled()
         nameInput.performTextReplacement("模拟器验证")
+        ui.onNodeWithText("选择图标").performClick()
+        ui.onNodeWithText("阅读").performClick()
         ui.onNodeWithText("保存").performClick()
         await("模拟器验证")
+        assertEquals(EntryIcon.BOOK, iconOf("模拟器验证"))
         ui.onNodeWithText("模拟器验证").performClick()
         ui.onNodeWithText("新增技能树").performClick()
         fill("名称", "手动技能树")
+        fixture.ai.reply("""{"icon":"CODE"}""")
+        ui.onNodeWithText("AI 推荐图标").performClick()
+        await("编程")
         ui.onNodeWithText("保存").performClick()
         await("手动技能树")
+        assertEquals(EntryIcon.CODE, iconOf("手动技能树"))
         ui.onNodeWithText("手动技能树").performClick()
         ui.onNodeWithText("新增技能点").performClick()
         fill("名称", "手动技能点")
-        fill("学习目标", "能解释一个基本概念")
+        fill("技能说明", "能解释一个基本概念")
+        fill("节点简称（选填）", "基础课")
         ui.onNodeWithText("保存").performClick()
-        await("手动技能点")
+        await("基础课")
         ui.onNodeWithContentDescription("手动技能点").performTouchInput { click() }
         ui.onNodeWithText("手动点亮").performClick()
         await("已点亮 · 手动")
@@ -102,13 +113,13 @@ class MvpFlowTest {
         ui.onNode(hasSetTextAction() and hasText("名称")).performTextReplacement("已编辑技能点")
         ui.onNodeWithText("保存").performClick()
         await("已编辑技能点")
-        pressBack()
+        ui.onNodeWithContentDescription("关闭技能详情").performClick()
         await("1 / 1 已点亮")
         ui.onNodeWithText("新增技能点").performClick()
         fill("名称", "练习依赖")
-        val goalInput = ui.onNode(hasSetTextAction() and hasText("学习目标"))
+        val goalInput = ui.onNode(hasSetTextAction() and hasText("技能说明"))
         goalInput.performTextInput("练".repeat(321))
-        await("学习目标最多 320 个字符")
+        await("技能说明最多 320 个字符")
         ui.onNodeWithText("保存").assertIsNotEnabled()
         goalInput.performTextReplacement("使用前置概念完成一项练习")
         ui.onNodeWithText("前置节点").performClick()
@@ -171,16 +182,28 @@ class MvpFlowTest {
         ui.onNodeWithContentDescription("重置地图视图").performClick()
         ui.onNodeWithContentDescription("实践").performTouchInput { click() }
 
-        fixture.ai.reply("""{"kind":"exercise","reply":"怎样识别异常记录？"}""")
-        ui.onNodeWithText("与 AI 老师学习").performClick()
+        ui.onNodeWithText("学习技能").performClick()
+        val fence = "```"
+        val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
+            "${fence}mermaid\nflowchart TD\nA{读取} --> B[核对]\n$fence"
+        fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", lesson).toString())
+        ui.onNodeWithText("开始学习").performClick()
+        await("数据核对 💡")
+        await("原样")
+        await("读取")
+        fixture.ai.reply("""{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}""")
         ui.onNodeWithText("检验掌握").performClick()
         await("怎样识别异常记录？")
         val exerciseId = runBlocking {
             val practice = fixture.container.library.snapshot().entries.single { it.kind == EntryKind.SKILL && it.name == "实践" }
             fixture.container.conversations.watch(ChatScope(ChatMode.TUTOR, practice.id)).first().last().id
         }
-        fixture.ai.reply(RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId))
-        send("先核对必填字段和合理范围。")
+        fixture.ai.enqueue { messages ->
+            assertEquals("B. 核对必填字段", messages.last().text)
+            assertTrue(messages.first().text.contains("A. 直接删除"))
+            RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId)
+        }
+        ui.onNodeWithText("B. 核对必填字段").performClick()
         await("已点亮技能点", substring = true)
         ui.activityRule.scenario.recreate()
         await("已点亮技能点", substring = true)
@@ -188,6 +211,10 @@ class MvpFlowTest {
         await("已点亮 · AI 检验通过")
         pressBack()
         await("1 / 2 已点亮")
+    }
+
+    private fun iconOf(name: String): EntryIcon? = runBlocking {
+        fixture.container.library.snapshot().entries.single { it.name == name }.icon
     }
 
     private fun send(text: String) {
