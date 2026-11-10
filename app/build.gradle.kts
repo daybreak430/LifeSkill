@@ -12,8 +12,8 @@ android {
         applicationId = "com.lifeskill.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.10.11"
+        versionCode = 34
+        versionName = "0.10.12"
         testInstrumentationRunner = "com.lifeskill.app.LifeSkillTestRunner"
     }
 

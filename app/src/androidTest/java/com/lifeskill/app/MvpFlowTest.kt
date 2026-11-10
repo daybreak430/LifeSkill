@@ -277,7 +277,7 @@ class MvpFlowTest {
             val count = ui.onNodeWithText("0/1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val card = ui.onNode(changing).fetchSemanticsNode().boundsInRoot
             assertTrue(count.top > title.bottom)
-            assertEquals(card.center.x, count.center.x, 1f)
+            assertTrue(count.left > card.left && count.right < card.center.x)
             ui.onNodeWithText("0/1", useUnmergedTree = true).performTouchInput { click() }
             await("对齐测试树")
             pressBack()

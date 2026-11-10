@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -261,7 +262,7 @@ internal fun DirectionCard(
                             style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    progress.total > 0 -> DirectionProgressArc(progress, tint)
+                    progress.total > 0 -> DirectionProgress(progress, tint)
                     else -> Text(
                         "暂无技能点", Modifier.padding(start = 41.dp),
                         color = Muted, style = MaterialTheme.typography.labelMedium,
@@ -273,32 +274,20 @@ internal fun DirectionCard(
 }
 
 @Composable
-private fun DirectionProgressArc(progress: Progress, tint: Color) {
-    val track = studyColors.progressTrack
-    // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
-    var seenFraction by rememberSaveable { mutableFloatStateOf(progress.fraction) }
-    val sweep = remember { Animatable(seenFraction) }
-    LaunchedEffect(progress.fraction) {
-        if (sweep.value != progress.fraction) sweep.animateTo(progress.fraction, tween(260))
-        seenFraction = progress.fraction
-    }
-    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp), contentAlignment = Alignment.BottomCenter) {
-        Canvas(Modifier.matchParentSize()) {
-            val stroke = 3.dp.toPx()
-            val arcHeight = ((size.height - stroke) * 2).coerceAtLeast(0f)
-            val arcWidth = minOf(size.width - stroke - 8.dp.toPx(), arcHeight * 1.15f).coerceAtLeast(0f)
-            val origin = Offset((size.width - arcWidth) / 2, stroke / 2)
-            val bounds = Size(arcWidth, arcHeight)
-            val arc = Stroke(stroke, cap = StrokeCap.Round)
-            drawArc(track, 180f, 180f, false, origin, bounds, style = arc)
-            if (sweep.value > 0f) {
-                drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
-            }
-        }
+private fun DirectionProgress(progress: Progress, tint: Color) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
-            "${progress.lit}/${progress.total}", Modifier.padding(top = 12.dp, bottom = 7.dp),
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
-            maxLines = 1,
+            "${progress.lit}/${progress.total}",
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontFeatureSettings = "tnum"),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        SegmentedProgress(
+            progress, Modifier.weight(1f), active = tint, track = studyColors.progressTrack,
+            barHeight = 4.dp, animate = true,
         )
     }
 }
@@ -362,18 +351,31 @@ private fun StudyBookmark() {
 }
 
 @Composable
-private fun SegmentedProgress(progress: Progress, modifier: Modifier = Modifier, active: Color = Gold) {
-    val track = Line
+private fun SegmentedProgress(
+    progress: Progress, modifier: Modifier = Modifier, active: Color = Gold, track: Color = Line,
+    barHeight: Dp = 5.dp, animate: Boolean = false,
+) {
     val segments = progress.total.coerceAtMost(12)
     if (segments == 0) return
-    // 大树用固定上限的分段，确切进度由下方文字呈现。
-    val filled = (progress.fraction * segments).toInt()
-    Canvas(modifier.fillMaxWidth().height(5.dp)) {
+    // 节点较多时按比例压缩成至多 12 段，精确数量仍由文字呈现。
+    val filled = (progress.lit.toLong() * segments / progress.total).toFloat()
+    val motion = if (animate) {
+        // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
+        var seenFill by rememberSaveable { mutableFloatStateOf(filled) }
+        val fill = remember { Animatable(seenFill) }
+        LaunchedEffect(filled) {
+            if (fill.value != filled) fill.animateTo(filled, tween(260))
+            seenFill = filled
+        }
+        fill
+    } else null
+    Canvas(modifier.fillMaxWidth().height(barHeight)) {
         val gap = 3.dp.toPx().coerceAtMost(size.width / (2 * segments))
         val segmentWidth = (size.width - gap * (segments - 1)) / segments
+        val shownFill = motion?.value ?: filled
         repeat(segments) { index ->
             drawRoundRect(
-                color = if (index < filled) active else track,
+                color = lerp(track, active, (shownFill - index).coerceIn(0f, 1f)),
                 topLeft = Offset(index * (segmentWidth + gap), 0f),
                 size = Size(segmentWidth, size.height),
                 cornerRadius = CornerRadius(size.height / 2),
