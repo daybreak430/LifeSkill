@@ -369,6 +369,8 @@ private fun MapNode(
     clock: () -> Float,
 ) {
     val mapName = remember(skill.name, skill.shortName) { skill.mapName }
+    val palette = studyColors.mapNodePalette
+    val locked = state == SkillState.LOCKED
     Surface(
         onClick = onOpen, shape = ControlShape,
         modifier = modifier.semantics {
@@ -394,13 +396,17 @@ private fun MapNode(
                         UnlockingMedallion(skill.displayIcon, diameter, focused, source = false, progress = clock)
                     else -> SkillMedallion(
                         skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f,
-                        mapPalette = studyColors.mapNodePalette,
+                        mapPalette = palette,
                     )
                 }
                 if (references.isNotEmpty()) {
-                    Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape, color = Raised) {
+                    Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape,
+                        color = if (locked) palette.lockedBadgeFill else Raised,
+                    ) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
-                        Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium, color = Ink)
+                        Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium,
+                            color = if (locked) palette.lockedInk else Ink,
+                        )
                     }
                 }
             }
@@ -408,7 +414,7 @@ private fun MapNode(
                 mapName,
                 color = when {
                     focused -> Gold
-                    state == SkillState.LOCKED -> Muted
+                    locked -> palette.lockedInk
                     else -> Ink
                 },
                 style = MaterialTheme.typography.labelLarge.copy(

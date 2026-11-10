@@ -41,7 +41,11 @@ internal fun SkillMedallion(
 ) {
     val lit = state == SkillState.LIT
     val locked = state == SkillState.LOCKED
-    val tint = if (focused) Gold else state.tint()
+    val tint = when {
+        focused -> Gold
+        locked && mapPalette != null -> mapPalette.lockedInk
+        else -> state.tint()
+    }
     val colors = studyColors
     val surface = Panel
     val fill = when {
@@ -71,7 +75,8 @@ internal fun SkillMedallion(
         }
         Mark(icon.glyph, if (lit) colors.earnedInk else tint, Modifier.size(glyphSize))
         if (showBadge && (lit || locked)) {
-            Surface(Modifier.align(Alignment.TopEnd).size(diameter * .30f), shape = CircleShape, color = surface) {
+            val badgeFill = if (locked) mapPalette?.lockedBadgeFill ?: surface else surface
+            Surface(Modifier.align(Alignment.TopEnd).size(diameter * .30f), shape = CircleShape, color = badgeFill) {
                 Box(contentAlignment = Alignment.Center) {
                     Mark(if (lit) Glyph.CHECK else Glyph.LOCK, tint, Modifier.size(diameter * .19f))
                 }
@@ -110,22 +115,22 @@ internal fun UnlockingMedallion(
         if (!source) {
             UnlockingLock(
                 Modifier.align(Alignment.TopEnd).size(diameter * .30f),
-                diameter * .19f, progress,
+                diameter * .19f, mapPalette, progress,
             )
         }
     }
 }
 
 @Composable
-private fun UnlockingLock(modifier: Modifier, size: Dp, progress: () -> Float) {
-    val tint = Muted
+private fun UnlockingLock(modifier: Modifier, size: Dp, palette: MapNodePalette, progress: () -> Float) {
+    val tint = palette.lockedInk
     Surface(
         modifier.graphicsLayer {
             val leave = motionPhase(progress(), MAP_LOCK_RELEASE_AT, 1f)
             alpha = 1f - leave
             translationY = -8.dp.toPx() * leave
         },
-        shape = CircleShape, color = Panel,
+        shape = CircleShape, color = palette.lockedBadgeFill,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Canvas(Modifier.size(size)) {
