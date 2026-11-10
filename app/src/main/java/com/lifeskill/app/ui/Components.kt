@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -85,9 +87,11 @@ internal fun Action(
 }
 
 @Composable
-internal fun Emblem(glyph: Glyph, tint: Color = Gold, background: Color = GoldGround) {
-    Surface(shape = RoundedCornerShape(11.dp), color = background, modifier = Modifier.size(42.dp)) {
-        Box(contentAlignment = Alignment.Center) { Mark(glyph, tint) }
+internal fun Emblem(glyph: Glyph, tint: Color = Gold, background: Color = GoldGround, diameter: Dp = 42.dp) {
+    Surface(
+        modifier = Modifier.size(diameter), shape = CircleShape, color = background, border = BorderStroke(1.dp, Line),
+    ) {
+        Box(contentAlignment = Alignment.Center) { Mark(glyph, tint, Modifier.size(diameter * .55f)) }
     }
 }
 

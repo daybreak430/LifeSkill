@@ -43,6 +43,7 @@ internal fun LifeSkillApp(
     val appearance by app.appearance.collectAsStateWithLifecycle()
     val dark = appearance.isDark(isSystemInDarkTheme())
     val library by app.library.collectAsStateWithLifecycle()
+    val latestStudySkillId by app.latestStudySkillId.collectAsStateWithLifecycle()
     val route by app.route.collectAsStateWithLifecycle()
     val editor by app.editor.collectAsStateWithLifecycle()
     val deletion by app.deletion.collectAsStateWithLifecycle()
@@ -75,10 +76,11 @@ internal fun LifeSkillApp(
                     else Action("$problem 点击重试", Glyph.TREE, app::load, Modifier.align(Alignment.Center))
                 } else {
                     val entry = current.byId[route.id]
+                    val latestStudySkill = current.byId[latestStudySkillId]
                     stateHolder.SaveableStateProvider(route.encode()) {
                         when (route.page) {
-                            Page.HOME -> HomeScreen(current, app)
-                            Page.DIRECTION -> entry?.let { DirectionScreen(it, current, app) }
+                            Page.HOME -> HomeScreen(current, latestStudySkill, app)
+                            Page.DIRECTION -> entry?.let { DirectionScreen(it, current, latestStudySkill?.parentId, app) }
                             Page.TREE -> entry?.let { SkillTreeScreen(it, current, app) }
                             Page.SKILL -> entry?.let {
                                 val tutor = conversationModel(container, ChatScope(ChatMode.TUTOR, it.id))

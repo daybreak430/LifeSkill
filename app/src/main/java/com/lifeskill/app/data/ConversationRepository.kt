@@ -30,6 +30,8 @@ internal class ConversationRepository(
 ) {
     private val dao = database.skills()
 
+    fun watchLatestStudySkillId() = dao.watchLatestStudySkillId()
+
     fun watch(scope: ChatScope) = dao.watchTurns(scope.id)
         .map { turns -> turns.map { it.toTurn() } }
         .flowOn(Dispatchers.IO)

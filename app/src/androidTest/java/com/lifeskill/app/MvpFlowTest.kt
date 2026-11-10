@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
@@ -86,6 +88,67 @@ class MvpFlowTest {
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
         ui.onNodeWithText("AI 生成").assertIsDisplayed()
+    }
+
+    @Test fun homeResumesLatestLessonAndTreeCardsStayUsableWhileScrolling() {
+        await("本职工作")
+        val library = fixture.container.library
+        val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "研习方向")) }
+        val fillers = runBlocking {
+            List(16) { index -> library.save(EntryEdit(null, null, EntryKind.DIRECTION, "方向卡片 ${index + 1}")) }
+        }
+        try {
+            val skill = runBlocking {
+                val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "续学技能树"))
+                val skill = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "课程回顾", "掌握复习方法"))
+                repeat(12) { index ->
+                    library.save(EntryEdit(null, direction.id, EntryKind.TREE, "技能树卡片 ${index + 1}"))
+                }
+                fixture.ai.reply("""{"kind":"teach","reply":"先梳理已学的要点。"}""")
+                fixture.container.conversations.send(ChatScope(ChatMode.TUTOR, skill.id), "开始复习")
+                skill
+            }
+            await("继续学习")
+            ui.onNodeWithText("继续学习").performTouchInput { click() }
+            await("先梳理已学的要点。")
+            ui.activityRule.scenario.recreate()
+            await("先梳理已学的要点。")
+            pressBack()
+            await("继续学习")
+            val grid = ui.onNodeWithTag("learning-directions")
+            grid.performTouchInput {
+                swipe(Offset(width * .86f, height * .61f), Offset(width * .13f, height * .61f))
+            }
+            ui.onNodeWithText("继续学习").assertIsDisplayed()
+            grid.performTouchInput {
+                swipe(Offset(width * .35f, height * .87f), Offset(width * .35f, height * .24f))
+            }
+            ui.onNodeWithText("继续学习").assertIsNotDisplayed()
+            grid.performScrollToIndex(0)
+            ui.onNodeWithText("研习方向").performTouchInput { click() }
+            await("上次学习")
+            ui.onNodeWithText("续学技能树").assertIsDisplayed()
+            val trees = ui.onNodeWithTag("skill-tree-list")
+            trees.performTouchInput {
+                swipe(Offset(width * .50f, height * .89f), Offset(width * .50f, height * .17f))
+            }
+            ui.onNodeWithText("续学技能树").assertIsNotDisplayed()
+            trees.performScrollToIndex(14)
+            ui.onNodeWithText("技能树卡片 12").performTouchInput { click() }
+            await("新增技能点")
+            pressBack()
+            ui.onNodeWithText("技能树卡片 12").assertIsDisplayed()
+            pressBack()
+            runBlocking { library.delete(skill.id) }
+            ui.waitUntil(8_000) {
+                ui.onAllNodesWithText("课程回顾").fetchSemanticsNodes().isEmpty()
+            }
+        } finally {
+            runBlocking {
+                library.delete(direction.id)
+                fillers.forEach { library.delete(it.id) }
+            }
+        }
     }
 
     @Test fun conflictingDependenciesRemainVisibleInTheReferenceList() {

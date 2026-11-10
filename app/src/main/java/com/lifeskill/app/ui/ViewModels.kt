@@ -73,6 +73,9 @@ internal class AppViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, Route.decode(routes.value.last()))
     private val _library = MutableStateFlow<Library?>(null)
     val library = _library.asStateFlow()
+    val latestStudySkillId = container.conversations.watchLatestStudySkillId()
+        .catch { error -> if (error is CancellationException) throw error }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     private val _editor = MutableStateFlow<Editor?>(null)
     val editor = _editor.asStateFlow()
     private val _delete = MutableStateFlow<Entry?>(null)
@@ -115,6 +118,8 @@ internal class AppViewModel(
     fun back() {
         if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
     }
+
+    fun continueStudy(skill: Entry) = open(Route(Page.TUTOR, skill.id))
 
     private fun discardMissingRoutes(library: Library) {
         val stack = routes.value

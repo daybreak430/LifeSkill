@@ -136,6 +136,15 @@ internal abstract class SkillDao {
     @Query("SELECT * FROM turns WHERE chatId = :chatId ORDER BY sequence")
     abstract fun watchTurns(chatId: String): Flow<List<TurnRow>>
 
+    // 以用户的学习操作排序，避免较早的对话收到迟到回复后抢占续学入口。
+    @Query("""
+        SELECT chats.ownerId FROM turns
+        JOIN chats ON chats.id = turns.chatId
+        WHERE turns.speaker = 'USER' AND chats.id = 'tutor:' || chats.ownerId
+        ORDER BY turns.sequence DESC LIMIT 1
+    """)
+    abstract fun watchLatestStudySkillId(): Flow<String?>
+
     @Query("SELECT * FROM turns WHERE chatId = :chatId ORDER BY sequence DESC LIMIT :limit")
     abstract suspend fun recentTurns(chatId: String, limit: Int): List<TurnRow>
 

@@ -79,6 +79,45 @@ class RepositoryTest {
         assertEquals(4, container.library.snapshot().childrenOf(null).size)
     }
 
+    @Test fun latestStudyFollowsUserRequestsAndFallsBackAfterDeletion() = runBlocking {
+        withTimeout(10_000) {
+            val library = container.library
+            val conversations = container.conversations
+            val direction = library.snapshot().childrenOf(null).first()
+            val tree = add(direction, EntryKind.TREE, "续学测试")
+            val earlier = add(tree, EntryKind.SKILL, "较早课程")
+            val later = add(tree, EntryKind.SKILL, "最近课程")
+            val latest = conversations.watchLatestStudySkillId()
+            assertEquals(null, latest.first())
+
+            val waiting = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            ai.enqueue {
+                waiting.complete(Unit)
+                release.await()
+                """{"kind":"teach","reply":"较早课程的答复。"}"""
+            }
+            val earlierRequest = async {
+                conversations.send(ChatScope(ChatMode.TUTOR, earlier.id), "学习第一课")
+            }
+            waiting.await()
+            assertEquals(earlier.id, latest.first())
+
+            ai.reply("""{"kind":"teach","reply":"最近课程的答复。"}""")
+            conversations.send(ChatScope(ChatMode.TUTOR, later.id), "学习第二课")
+            release.complete(Unit)
+            earlierRequest.await()
+            ai.reply("""{"kind":"message","reply":"你想生成什么？"}""")
+            conversations.send(ChatScope(ChatMode.GENERATE), "生成技能树")
+            assertEquals(later.id, latest.first())
+
+            library.delete(later.id)
+            assertEquals(earlier.id, latest.first())
+            library.delete(tree.id)
+            assertEquals(null, latest.first())
+        }
+    }
+
     @Test fun generationRollsBackWholeBatchAndRetriesSameRequest() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
         ai.reply(
