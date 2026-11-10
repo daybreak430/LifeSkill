@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.Entry
@@ -101,29 +103,42 @@ internal fun HomeStudyCard(
         BoxWithConstraints(
             Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape).background(Brush.linearGradient(colors.hero)),
         ) {
-            // 窄屏和大字号优先保留标题、进度与操作空间。
-            val artWidth = if (maxWidth >= 328.dp && fontScale < 1.3f) minOf(maxWidth * .41f, 200.dp) else 0.dp
-            if (artWidth > 0.dp) {
-                val glyph = when (study?.state) {
-                    null -> Glyph.TREE
-                    HomeStudyState.COMPLETED -> Glyph.CHECK
-                    else -> study.skill.displayIcon.glyph
-                }
+            val wideArt = maxWidth >= 328.dp && fontScale < 1.3f
+            val compactArt = !wideArt && maxWidth >= 256.dp
+            val artWidth = minOf(maxWidth * .41f, 200.dp)
+            val compactWidth = minOf(maxWidth * (if (fontScale >= 1.6f) .19f else .25f), 92.dp)
+            val glyph = when (study?.state) {
+                null -> Glyph.TREE
+                HomeStudyState.COMPLETED -> Glyph.CHECK
+                else -> study.skill.displayIcon.glyph
+            }
+            if (wideArt) {
                 StudyMotif(glyph, Modifier.align(Alignment.CenterEnd).width(artWidth).height(156.dp))
             }
             Column(
                 Modifier.fillMaxWidth().heightIn(min = 166.dp)
-                    .padding(start = 20.dp, end = maxOf(artWidth + 8.dp, 20.dp), top = 20.dp, bottom = 20.dp),
+                    .padding(start = 20.dp, end = if (wideArt) artWidth + 8.dp else 20.dp, top = 20.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterVertically),
             ) {
-                if (context != null && study != null) {
-                    val highlighted = study.state == HomeStudyState.NEXT || study.state == HomeStudyState.COMPLETED
-                    Text(
-                        context, style = MaterialTheme.typography.bodyMedium, color = if (highlighted) Gold else Muted,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    )
+                Row(
+                    Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        if (context != null && study != null) {
+                            val highlighted = study.state == HomeStudyState.NEXT || study.state == HomeStudyState.COMPLETED
+                            Text(
+                                context, style = MaterialTheme.typography.bodyMedium, color = if (highlighted) Gold else Muted,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(title, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (compactArt) {
+                        // 小插图只与标题同排，进度和按钮仍能使用整张卡片的宽度。
+                        StudyMotif(glyph, Modifier.width(compactWidth).height(70.dp).clipToBounds(), emblemSize = 38.dp)
+                    }
                 }
-                Text(title, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (study != null) {
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -211,7 +226,7 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
         shape = PanelShape,
-        modifier = modifier.fillMaxWidth().heightIn(min = 156.dp).panelShadow()
+        modifier = modifier.fillMaxWidth().panelShadow()
             .semantics {
                 role = Role.Button
                 stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
@@ -223,7 +238,7 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(Modifier.fillMaxWidth(.82f), contentAlignment = Alignment.BottomCenter) {
-                Canvas(Modifier.widthIn(max = 146.dp).fillMaxWidth().aspectRatio(2f)) {
+                Canvas(Modifier.widthIn(max = 112.dp).fillMaxWidth().aspectRatio(2f)) {
                     val stroke = 4.5.dp.toPx()
                     val diameter = minOf(size.width - stroke, (size.height - stroke) * 2).coerceAtLeast(0f)
                     val origin = Offset((size.width - diameter) / 2, stroke / 2)
@@ -256,7 +271,7 @@ internal fun CompactDirectionCard(
     Surface(modifier.fillMaxWidth().panelShadow(), color = Panel, contentColor = Ink, shape = PanelShape) {
         val open = Modifier.clickable(role = Role.Button, onClick = onClick)
         Column(
-            (if (createTree == null) open else Modifier).heightIn(min = 104.dp).padding(horizontal = 10.dp, vertical = 5.dp),
+            (if (createTree == null) open else Modifier).padding(horizontal = 10.dp, vertical = 5.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             Row(
@@ -366,13 +381,14 @@ private fun SegmentedProgress(progress: Progress, modifier: Modifier = Modifier,
 }
 
 @Composable
-private fun StudyMotif(glyph: Glyph, modifier: Modifier) {
+private fun StudyMotif(glyph: Glyph, modifier: Modifier, emblemSize: Dp = 66.dp) {
     val colors = studyColors
     val panel = Panel
     val grid = Steel.copy(alpha = .18f)
-    Box(modifier, contentAlignment = Alignment.Center) {
+    val scale = emblemSize / 66.dp
+    Box(modifier.testTag("home-study-motif"), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
-            val radius = 35.dp.toPx()
+            val radius = (35.dp * scale).toPx()
             val satellites = listOf(Offset(size.width * .22f, size.height * .27f),
                 Offset(size.width * .79f, size.height * .18f), Offset(size.width * .77f, size.height * .81f))
             val step = 15.dp.toPx()
@@ -394,17 +410,17 @@ private fun StudyMotif(glyph: Glyph, modifier: Modifier) {
                     moveTo(center.x, center.y)
                     cubicTo(center.x, node.y, (center.x + node.x) / 2, node.y, node.x, node.y)
                 }
-                drawPath(path, colors.route.copy(alpha = .34f), style = Stroke(1.4.dp.toPx(), cap = StrokeCap.Round))
-                drawCircle(colors.route.copy(alpha = .13f), 10.dp.toPx(), node)
-                drawCircle(panel.copy(alpha = .89f), 6.dp.toPx(), node)
-                drawCircle(colors.route.copy(alpha = .72f), 2.3.dp.toPx(), node)
+                drawPath(path, colors.route.copy(alpha = .34f), style = Stroke((1.4.dp * scale).toPx(), cap = StrokeCap.Round))
+                drawCircle(colors.route.copy(alpha = .13f), (10.dp * scale).toPx(), node)
+                drawCircle(panel.copy(alpha = .89f), (6.dp * scale).toPx(), node)
+                drawCircle(colors.route.copy(alpha = .72f), (2.3.dp * scale).toPx(), node)
             }
         }
         Box(
-            Modifier.size(66.dp).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
+            Modifier.size(emblemSize).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Mark(glyph, Color.White, Modifier.size(31.dp))
+            Mark(glyph, Color.White, Modifier.size(31.dp * scale))
         }
     }
 }
