@@ -2,13 +2,12 @@ package com.lifeskill.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +15,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,14 +55,14 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
     val sidePadding = 16.dp
     val gap = 12.dp
     val typography = MaterialTheme.typography
-    val progressHeight = with(density) {
-        92.dp + typography.titleMedium.lineHeight.toDp() * 2 + typography.bodySmall.lineHeight.toDp()
-    }
-    val compactHeight = with(density) {
-        maxOf(48.dp, typography.titleMedium.lineHeight.toDp() * 2 + 2.dp) +
+    // 同一字号下卡片共用固定高度，为两行方向名称和建树操作保留空间。
+    val directionCardHeight = with(density) {
+        val titleHeight = typography.titleMedium.lineHeight.toDp() * 2
+        val progressHeight = 62.dp + titleHeight + typography.bodySmall.lineHeight.toDp()
+        val compactHeight = maxOf(48.dp, titleHeight + 2.dp) +
             maxOf(48.dp, typography.labelMedium.lineHeight.toDp() * 2 + 2.dp) + 10.dp
+        maxOf(progressHeight, compactHeight)
     }
-    val directionProgress = remember(library) { directions.map { library.progress(it.id) } }
     val state = rememberLazyGridState()
     val addition = directions.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }
         ?.plus(if (study == null) 3 else 4)
@@ -79,80 +78,69 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         scroll = { state.animateScrollToItem(it) }, onShown = app::finishShowingAddition,
     )
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val columns = with(density) {
-            val available = constraints.maxWidth - 2 * sidePadding.roundToPx()
-            ((available + gap.roundToPx()) / (columnWidth.roundToPx() + gap.roundToPx())).coerceAtLeast(1)
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(columnWidth),
+        state = state,
+        modifier = Modifier.fillMaxSize().testTag("learning-directions"),
+        verticalArrangement = Arrangement.spacedBy(gap),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = 6.dp, bottom = 20.dp),
+    ) {
+        item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("LifeSkill", Modifier.weight(1f), style = LibraryTitle)
+                GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
+            }
         }
-        val progressRows = remember(directionProgress, columns) {
-            directionProgress.chunked(columns).map { row -> row.any { it.total > 0 } }
+        item(key = "home-study", span = { GridItemSpan(maxLineSpan) }) {
+            HomeStudyCard(study, Modifier.animateItem()) {
+                when (study?.state) {
+                    null -> app.open(Route(Page.GENERATE))
+                    HomeStudyState.COMPLETED -> app.open(Route.entry(study.tree))
+                    else -> app.continueStudy(study.skill)
+                }
+            }
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            state = state,
-            modifier = Modifier.fillMaxSize().testTag("learning-directions"),
-            verticalArrangement = Arrangement.spacedBy(gap),
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = 6.dp, bottom = 20.dp),
-        ) {
-            item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("LifeSkill", Modifier.weight(1f), style = LibraryTitle)
-                    GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
+        if (study != null) {
+            item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
+                AiAction(
+                    label = "AI 生成技能树",
+                    onClick = { app.open(Route(Page.GENERATE)) },
+                    modifier = Modifier.fillMaxWidth().animateItem(),
+                    wide = true,
+                )
+            }
+        }
+        item(key = "directions-heading", span = { GridItemSpan(maxLineSpan) }) {
+            LibrarySection("学习方向", Modifier.animateItem().padding(top = 6.dp)) {
+                TextButton(onClick = { app.add(EntryKind.DIRECTION) }) {
+                    Mark(Glyph.ADD, Gold, Modifier.size(16.dp))
+                    Text("新增方向", Modifier.padding(start = 4.dp))
                 }
             }
-            item(key = "home-study", span = { GridItemSpan(maxLineSpan) }) {
-                HomeStudyCard(study, Modifier.animateItem()) {
-                    when (study?.state) {
-                        null -> app.open(Route(Page.GENERATE))
-                        HomeStudyState.COMPLETED -> app.open(Route.entry(study.tree))
-                        else -> app.continueStudy(study.skill)
-                    }
-                }
+        }
+        items(directions, key = Entry::id) { direction ->
+            val progress = library.progress(direction.id)
+            val card = Modifier.animateItem().height(directionCardHeight).testTag("direction-card-${direction.id}")
+            val open = { app.open(Route.entry(direction)) }
+            if (progress.total > 0) {
+                DirectionCard(direction, progress, card, open)
+            } else {
+                CompactDirectionCard(
+                    direction, card, open,
+                    createTree = if (library.childrenOf(direction.id).isEmpty()) {
+                        { app.add(EntryKind.TREE, direction.id) }
+                    } else null,
+                )
             }
-            if (study != null) {
-                item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
-                    AiAction(
-                        label = "AI 生成技能树",
-                        onClick = { app.open(Route(Page.GENERATE)) },
-                        modifier = Modifier.fillMaxWidth().animateItem(),
-                        wide = true,
-                    )
-                }
-            }
-            item(key = "directions-heading", span = { GridItemSpan(maxLineSpan) }) {
-                LibrarySection("学习方向", Modifier.animateItem().padding(top = 6.dp)) {
-                    TextButton(onClick = { app.add(EntryKind.DIRECTION) }) {
-                        Mark(Glyph.ADD, Gold, Modifier.size(16.dp))
-                        Text("新增方向", Modifier.padding(start = 4.dp))
-                    }
-                }
-            }
-            itemsIndexed(directions, key = { _, direction -> direction.id }) { index, direction ->
-                val progress = directionProgress[index]
-                // 混排按进度卡的尺寸预留整行高度，只有没有进度卡的行使用紧凑尺寸。
-                val height = if (progressRows[index / columns]) maxOf(progressHeight, compactHeight) else compactHeight
-                val card = Modifier.animateItem().heightIn(min = height).testTag("direction-card-${direction.id}")
-                val open = { app.open(Route.entry(direction)) }
-                if (progress.total > 0) {
-                    DirectionCard(direction, progress, card, open)
-                } else {
-                    CompactDirectionCard(
-                        direction, card, open,
-                        createTree = if (library.childrenOf(direction.id).isEmpty()) {
-                            { app.add(EntryKind.TREE, direction.id) }
-                        } else null,
-                    )
-                }
-            }
-            if (directions.isEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    LibraryEmpty("还没有学习方向", Glyph.EXPLORE)
-                }
+        }
+        if (directions.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LibraryEmpty("还没有学习方向", Glyph.EXPLORE)
             }
         }
     }

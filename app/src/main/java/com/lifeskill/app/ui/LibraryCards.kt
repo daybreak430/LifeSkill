@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -136,7 +135,7 @@ internal fun HomeStudyCard(
                     }
                     if (compactArt) {
                         // 小插图只与标题同排，进度和按钮仍能使用整张卡片的宽度。
-                        StudyMotif(glyph, Modifier.width(compactWidth).height(70.dp).clipToBounds(), emblemSize = 38.dp)
+                        StudyMotif(glyph, Modifier.width(compactWidth).height(70.dp), emblemSize = 38.dp)
                     }
                 }
                 if (study != null) {
@@ -233,13 +232,13 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
             },
     ) {
         Column(
-            Modifier.padding(horizontal = 12.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.fillMaxWidth(.82f), contentAlignment = Alignment.BottomCenter) {
-                Canvas(Modifier.widthIn(max = 112.dp).fillMaxWidth().aspectRatio(2f)) {
-                    val stroke = 4.5.dp.toPx()
+            Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.BottomCenter) {
+                Canvas(Modifier.matchParentSize()) {
+                    val stroke = 4.dp.toPx()
                     val diameter = minOf(size.width - stroke, (size.height - stroke) * 2).coerceAtLeast(0f)
                     val origin = Offset((size.width - diameter) / 2, stroke / 2)
                     val bounds = Size(diameter, diameter)
@@ -249,7 +248,7 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
                         drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
                     }
                 }
-                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 4.dp).size(21.dp))
+                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 2.dp).size(19.dp))
             }
             Text(
                 entry.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
@@ -258,6 +257,7 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
             Text(
                 "${progress.lit}/${progress.total}",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
+                maxLines = 1,
             )
         }
     }
@@ -293,7 +293,7 @@ internal fun CompactDirectionCard(
                     Text(
                         "创建技能树",
                         Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}创建技能树" },
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -385,39 +385,41 @@ private fun StudyMotif(glyph: Glyph, modifier: Modifier, emblemSize: Dp = 66.dp)
     val colors = studyColors
     val panel = Panel
     val grid = Steel.copy(alpha = .18f)
-    val scale = emblemSize / 66.dp
-    Box(modifier.testTag("home-study-motif"), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier.testTag("home-study-motif"), contentAlignment = Alignment.Center) {
+        val diameter = minOf(emblemSize, minOf(maxWidth, maxHeight) * .57f)
+        val scale = diameter / 66.dp
         Canvas(Modifier.matchParentSize()) {
-            val radius = (35.dp * scale).toPx()
-            val satellites = listOf(Offset(size.width * .22f, size.height * .27f),
-                Offset(size.width * .79f, size.height * .18f), Offset(size.width * .77f, size.height * .81f))
+            // 按插图的短边缩放外圈、光晕和卫星点，让所有图形都落在同一个圆形范围内。
+            val outerRadius = size.minDimension * .46f
+            val nodeRadius = (10.dp * scale).toPx()
+            val orbit = outerRadius - nodeRadius
+            val satellites = listOf(Offset(-.87f, -.50f), Offset(.68f, -.73f), Offset(.61f, .79f))
+                .map { center + it * orbit }
+            val glow = Brush.radialGradient(listOf(colors.heroGlow, colors.heroGlow.copy(alpha = 0f)), center, outerRadius)
+            drawCircle(glow, radius = outerRadius)
             val step = 15.dp.toPx()
-            for (row in 1..(size.height / step).toInt()) {
-                for (column in 1..(size.width / step).toInt()) {
-                    drawCircle(grid, .55.dp.toPx(), Offset(column * step, row * step))
+            val gridSteps = (outerRadius / step).toInt()
+            for (row in -gridSteps..gridSteps) {
+                for (column in -gridSteps..gridSteps) {
+                    val offset = Offset(column * step, row * step)
+                    if (offset.getDistance() < orbit) drawCircle(grid, .55.dp.toPx(), center + offset)
                 }
             }
-            repeat(2) { index ->
-                drawCircle(colors.route.copy(alpha = .17f), radius * (1.5f + index * .62f),
-                    Offset(size.width, size.height * .84f), style = Stroke(.75.dp.toPx()))
-            }
-            // 装饰只突出当前技能图标，外围圆点用于表现技能树意象。
-            drawCircle(Brush.radialGradient(listOf(colors.heroGlow, Color.Transparent), center, radius * 2.18f),
-                radius = radius * 2.18f)
-            drawCircle(panel.copy(alpha = .44f), radius * 1.30f, style = Stroke(1.2.dp.toPx()))
+            drawCircle(colors.route.copy(alpha = .16f), outerRadius, style = Stroke(.75.dp.toPx()))
+            drawCircle(panel.copy(alpha = .44f), orbit, style = Stroke(1.2.dp.toPx()))
             satellites.forEach { node ->
                 val path = Path().apply {
                     moveTo(center.x, center.y)
                     cubicTo(center.x, node.y, (center.x + node.x) / 2, node.y, node.x, node.y)
                 }
                 drawPath(path, colors.route.copy(alpha = .34f), style = Stroke((1.4.dp * scale).toPx(), cap = StrokeCap.Round))
-                drawCircle(colors.route.copy(alpha = .13f), (10.dp * scale).toPx(), node)
+                drawCircle(colors.route.copy(alpha = .13f), nodeRadius, node)
                 drawCircle(panel.copy(alpha = .89f), (6.dp * scale).toPx(), node)
                 drawCircle(colors.route.copy(alpha = .72f), (2.3.dp * scale).toPx(), node)
             }
         }
         Box(
-            Modifier.size(emblemSize).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
+            Modifier.size(diameter).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Mark(glyph, Color.White, Modifier.size(31.dp * scale))

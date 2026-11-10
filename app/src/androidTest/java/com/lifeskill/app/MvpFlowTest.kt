@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -234,32 +236,39 @@ class MvpFlowTest {
         }
     }
 
-    @Test fun homeShowsItsMotifAndAlignsMixedDirectionCards() {
+    @Test fun homeShowsItsMotifAndKeepsDirectionCardHeightsAcrossStates() {
         await("LifeSkill")
         ui.onNodeWithTag("home-study-motif").assertIsDisplayed()
         val library = fixture.container.library
-        val (spacer, empty, populated) = runBlocking {
-            val spacer = if (library.snapshot().childrenOf(null).size % 2 == 0) null else {
-                library.save(EntryEdit(null, null, EntryKind.DIRECTION, "对齐测试占位"))
+        val directions = runBlocking {
+            listOf("待建树方向", "跨行对齐方向", "保持为空的方向").map { name ->
+                library.save(EntryEdit(null, null, EntryKind.DIRECTION, name))
             }
-            val empty = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "待建树方向"))
-            val populated = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "已有进度方向"))
-            val tree = library.save(EntryEdit(null, populated.id, EntryKind.TREE, "对齐测试树"))
-            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "测试技能", "掌握测试概念"))
-            Triple(spacer, empty, populated)
         }
         try {
             val grid = ui.onNodeWithTag("learning-directions")
-            grid.performScrollToNode(hasTestTag("direction-card-${populated.id}"))
-            val emptyBounds = ui.onNodeWithTag("direction-card-${empty.id}").fetchSemanticsNode().boundsInRoot
-            val progressBounds = ui.onNodeWithTag("direction-card-${populated.id}").fetchSemanticsNode().boundsInRoot
-            assertTrue(emptyBounds.right < progressBounds.left)
-            assertEquals(progressBounds.top, emptyBounds.top, 1f)
-            assertEquals(progressBounds.bottom, emptyBounds.bottom, 1f)
-        } finally {
-            runBlocking {
-                listOfNotNull(spacer, empty, populated).forEach { library.delete(it.id) }
+            val changing = hasTestTag("direction-card-${directions.first().id}")
+            fun cardHeight(card: SemanticsMatcher) =
+                ui.onNode(card).getUnclippedBoundsInRoot().let { (it.bottom - it.top).value }
+            fun waitForCardText(text: String) {
+                val status = hasText(text) and (changing or hasAnyAncestor(changing))
+                ui.waitUntil(8_000) { ui.onAllNodes(status).fetchSemanticsNodes().isNotEmpty() }
             }
+            grid.performScrollToNode(changing)
+            val initial = cardHeight(changing)
+            val tree = runBlocking {
+                library.save(EntryEdit(null, directions.first().id, EntryKind.TREE, "对齐测试树"))
+            }
+            waitForCardText("暂无技能点")
+            assertEquals(initial, cardHeight(changing), .5f)
+            runBlocking { library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "测试技能", "掌握测试概念")) }
+            waitForCardText("0/1")
+            assertEquals(initial, cardHeight(changing), .5f)
+            val otherRow = hasTestTag("direction-card-${directions.last().id}")
+            grid.performScrollToNode(otherRow)
+            assertEquals(initial, cardHeight(otherRow), .5f)
+        } finally {
+            runBlocking { directions.forEach { library.delete(it.id) } }
         }
     }
 
