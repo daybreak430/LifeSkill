@@ -4,6 +4,7 @@ import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.OpenAiGateway
 import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.model.RuleViolation
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -59,18 +60,25 @@ class AiGatewayTest {
         codes.forEach { (code, text) ->
             expectError(Response(body = """{"base_resp":{"status_code":$code}}"""), text)
         }
-        expectError(Response(body = "网关临时不可用"), "格式有误")
-        expectError(Response(body = """{"choices":[]}"""), "没有返回文字")
-        expectError(Response(body = """{"choices":[{"message":{"content":" "}}]}"""), "没有返回文字")
-        expectError(Response(body = """{"choices":[{"finish_reason":"length","message":{"content":"半条消息"}}]}"""), "未完成")
+        expectError(Response(body = "网关临时不可用"), "格式有误", recoverable = true)
+        expectError(Response(body = """{"choices":[]}"""), "没有返回文字", recoverable = true)
+        expectError(
+            Response(body = """{"choices":[{"finish_reason":"stop","message":{"content":"  ","reasoning_content":"内部推理"}}]}"""),
+            "没有返回文字", recoverable = true,
+        )
+        expectError(
+            Response(body = """{"choices":[{"finish_reason":"length","message":{"content":"半条消息"}}]}"""),
+            "未完成", recoverable = true,
+        )
         expectError(Response(body = """{"choices":[{"finish_reason":"content_filter","message":{"content":"截断"}}]}"""), "拦截")
         expectError(Response(body = """{"choices":[{"finish_reason":"tool_calls","message":{"content":"工具调用"}}]}"""), "工具调用")
         expectError(Response(body = "a".repeat(512_001)), "过长")
     }
 
-    private suspend fun expectError(connection: Response, text: String) {
+    private suspend fun expectError(connection: Response, text: String, recoverable: Boolean = false) {
         val failure = runCatching { OpenAiGateway { connection }.complete(settings, messages, true) }.exceptionOrNull()
         assertTrue("预期包含 $text，实际是 ${failure?.message}", failure is RuleViolation && failure.message.orEmpty().contains(text))
+        assertEquals(recoverable, failure is RecoverableReply)
         assertTrue(connection.disconnected)
     }
 

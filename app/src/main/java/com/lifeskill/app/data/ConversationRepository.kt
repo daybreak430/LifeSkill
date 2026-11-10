@@ -3,8 +3,8 @@ package com.lifeskill.app.data
 import androidx.room.withTransaction
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.AiProtocol
-import com.lifeskill.app.ai.GenerationLimitExceeded
 import com.lifeskill.app.ai.ModelMessage
+import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
@@ -119,23 +119,18 @@ internal class ConversationRepository(
                 } else emptyMap()
                 AiProtocol.generationPrompt(owner, candidates, remaining)
             }
-            Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(recent))
+            Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, recent))
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
-        val raw = gateway.complete(config, context.messages, structured = true)
         try {
+            val raw = gateway.complete(config, context.messages, structured = true)
             persistResponse(scope, requestId, context, raw)
-        } catch (error: GenerationLimitExceeded) {
-            // 首次回复未落库。仅对数量越界补做一次，保留原始请求与会话意图。
+        } catch (error: RecoverableReply) {
+            // 只补试一次。沿用原请求标识，撤回、重学或已完成的请求无需再发。
             if (lastPending(scope)?.id != requestId) return
             val system = context.messages.first()
-            val instruction = """
-                上一次回复的数组数量超过上限：${error.message}
-                请重新回答最后一条用户消息。按原请求和当前入口的上限核对每个数组的实际长度，使用连续编号的 ref，达到指定数量后结束。
-                若用户要的数量超过上限、要求预览或尚未确认，返回仅含 kind 和 reply 的 message，说明分批办法。
-            """.trimIndent()
-            val messages = listOf(system.copy(text = "${system.text}\n\n$instruction")) + context.messages.drop(1)
+            val messages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + context.messages.drop(1)
             val corrected = gateway.complete(config, messages, structured = true)
             persistResponse(scope, requestId, context, corrected)
         }
@@ -208,21 +203,23 @@ internal class ConversationRepository(
     private suspend fun lastPending(scope: ChatScope): Turn? =
         dao.recentTurns(scope.id, 1).firstOrNull { it.speaker == Speaker.USER.name }?.toTurn()
 
-    private fun messageWindow(recent: List<Turn>): List<ModelMessage> {
-        var remaining = CONTEXT_CHARS
-        return recent.asReversed().takeWhile {
-            remaining -= it.text.length
-            remaining >= 0
-        }.asReversed().dropWhile { it.speaker != Speaker.USER }.map {
+    private fun messageWindow(mode: ChatMode, recent: List<Turn>): List<ModelMessage> {
+        val messages = recent.map {
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
-            val text = when (it.kind) {
-                TurnKind.CHECK -> "【App 发起检验掌握】请出一道当前技能练习。"
-                TurnKind.RESTART -> "【App 发起重新学习】请按当前技能说明重新组织这节课。" +
+            val text = when {
+                mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
+                it.kind == TurnKind.CHECK -> "【App 发起检验掌握】请出一道当前技能练习。"
+                it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按当前技能说明重新组织这节课。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
                 else -> it.modelText
             }
             ModelMessage(role, text)
         }
+        var remaining = CONTEXT_CHARS
+        return messages.takeLastWhile {
+            remaining -= it.text.length
+            remaining >= 0
+        }.dropWhile { it.role != "user" }
     }
 
     private fun Turn.row(scope: ChatScope) = TurnRow(

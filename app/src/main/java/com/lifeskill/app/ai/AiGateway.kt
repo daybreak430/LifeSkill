@@ -13,6 +13,8 @@ import javax.net.ssl.SSLException
 
 internal data class ModelMessage(val role: String, val text: String)
 
+internal class RecoverableReply(message: String, val retryInstruction: String) : RuleViolation(message)
+
 internal interface AiGateway {
     suspend fun complete(settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean): String
 }
@@ -89,19 +91,27 @@ internal class OpenAiGateway(
         }
 
     private fun readCompletion(raw: String): String {
-        val response = AiJson.objectOrNull(raw)
-            ?: throw RuleViolation("模型服务返回的格式有误，请重试。")
+        val response = AiJson.objectOrNull(raw) ?: throw RecoverableReply(
+            "模型服务返回的格式有误，请重试。",
+            "请重新回答最后一条用户消息，直接输出一个完整的 JSON 对象。",
+        )
         checkMiniMaxStatus(response.optJSONObject("base_resp")?.optInt("status_code"))
         val choice = response.optJSONArray("choices")?.optJSONObject(0)
         when (choice?.optString("finish_reason")) {
-            "length" -> throw RuleViolation("模型回复未完成，请缩小本次请求后重试。")
+            "length" -> throw RecoverableReply(
+                "模型回复未完成，请重试或缩小本次请求。",
+                "上一次回复被截断。请重新回答最后一条用户消息，精简说明，保留原请求的范围和必要字段，输出完整的 JSON 对象。",
+            )
             "content_filter" -> throw RuleViolation("模型服务拦截了这次回复，请调整输入后重试。")
             "tool_calls", "function_call" -> throw RuleViolation("模型返回了工具调用，请检查模型设置后重试。")
         }
         val text = (choice?.optJSONObject("message")?.opt("content") as? String)
             ?.replace(Regex("(?is)^\\s*(?:<think>.*?</think>\\s*)+"), "")
             ?.trim()
-        return text?.takeIf(String::isNotEmpty) ?: throw RuleViolation("模型没有返回文字，请检查配置后重试。")
+        return text?.takeIf(String::isNotEmpty) ?: throw RecoverableReply(
+            "模型没有返回文字，请重试。",
+            "上一次没有返回正文。请重新回答最后一条用户消息，直接输出一个完整的 JSON 对象。",
+        )
     }
 
     private fun checkMiniMaxStatus(status: Int?) {

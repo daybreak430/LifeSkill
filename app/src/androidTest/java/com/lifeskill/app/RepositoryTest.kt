@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
@@ -322,6 +323,7 @@ class RepositoryTest {
             assertEquals(atLimit, messages.last().text)
             """{"kind":"create","reply":"返回截断"""
         }
+        ai.reply("""{"kind":"create","reply":"再次截断"""")
         expectRule { container.conversations.send(scope, " $atLimit ") }
         assertEquals(original, container.library.snapshot())
         val pending = container.conversations.watch(scope).first().single()
@@ -331,6 +333,32 @@ class RepositoryTest {
         container.conversations.send(scope, "请先给建议")
         assertEquals(listOf("请先给建议", "可以从小练习开始。"), container.conversations.watch(scope).first().map { it.text })
         assertEquals(original, container.library.snapshot())
+    }
+
+    @Test fun blankTutorReplyRetriesOnceAndKeepsTheOriginalMessageIfRepairFails() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "回复恢复")
+        val skill = add(tree, EntryKind.SKILL, "分辨目标用户")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        val conversations = container.conversations
+        val request = "好的，继续"
+
+        ai.enqueue { throw RecoverableReply("模型没有返回文字，请重试。", "请返回一个完整的 JSON 对象。") }
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("请返回一个完整的 JSON 对象。"))
+            assertEquals(request, messages.last().text)
+            """{"kind":"teach","reply":""}"""
+        }
+        ai.reply("""{"kind":"teach","reply":"下一步是核对角色。"}""")
+
+        expectRule { conversations.send(scope, request) }
+        val pending = conversations.watch(scope).first().single()
+        assertEquals(request, pending.text)
+        conversations.retry(scope)
+        val history = conversations.watch(scope).first()
+        assertEquals(2, history.size)
+        assertEquals(pending.id, history.first().id)
+        assertEquals("下一步是核对角色。", history.last().text)
     }
 
     @Test fun overLimitGenerationRepairsOnceBeforeWriting() = runBlocking {

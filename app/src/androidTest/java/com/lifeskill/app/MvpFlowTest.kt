@@ -362,7 +362,12 @@ class MvpFlowTest {
         await("原样")
         await("读取")
         masteryCheck.assertDoesNotExist()
+        fixture.ai.reply("没有按 JSON 格式输出的讲解。")
         fixture.ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("上一次回复未通过格式校验"))
+            val previous = JSONObject(messages.single { it.role == "assistant" }.text)
+            assertEquals("teach", previous.getString("kind"))
+            assertEquals(lesson, previous.getString("reply"))
             assertEquals("好的，继续", messages.last().text)
             """{"kind":"offer_check","reply":"现在已经讲完核对步骤。"}"""
         }
