@@ -19,21 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,7 +79,6 @@ internal fun SkillTreeScreen(
         library.edges.filter { it.skillId in ids && it.prerequisiteId in ids }
     }
     val layout = remember(skills.map(Entry::id), edges) { SkillMapLayout.arrange(skills.map(Entry::id), edges) }
-    var showReferences by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
@@ -108,9 +99,6 @@ internal fun SkillTreeScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("技能地图", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            if (layout.references.isNotEmpty()) {
-                TextButton(onClick = { showReferences = true }) { Text("关联 ${layout.references.size}") }
-            }
             Surface(shape = CircleShape, color = GoldGround) {
                 Text(
                     "${progress.lit} / ${progress.total} 已点亮", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -142,24 +130,6 @@ internal fun SkillTreeScreen(
                 }
             }
         }
-    }
-    if (active && showReferences && layout.references.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { showReferences = false },
-            shape = DialogShape, containerColor = Panel,
-            title = { Text("前置关联") },
-            text = {
-                Column(
-                    Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(9.dp),
-                ) {
-                    layout.references.forEachIndexed { index, edge ->
-                        Text("${index + 1}　${library.byId[edge.prerequisiteId]?.name} → ${library.byId[edge.skillId]?.name}")
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showReferences = false }) { Text("关闭") } },
-        )
     }
 }
 
@@ -251,11 +221,6 @@ private fun SkillMap(
             }
         }.groupBy { it.start.row }
     }
-    val referencesByNode = remember(layout.references) {
-        layout.references.flatMapIndexed { index, edge ->
-            listOf(edge.prerequisiteId to index + 1, edge.skillId to index + 1)
-        }.groupBy({ it.first }, { it.second })
-    }
     val ready = skills.filter { library.skillState(it.id) == SkillState.AVAILABLE }
     val focusId = ready.firstOrNull { it.id == latestStudySkillId }?.id ?: ready.minWithOrNull(
         compareBy({ layout.nodes.getValue(it.id).row }, { layout.nodes.getValue(it.id).column }),
@@ -319,7 +284,6 @@ private fun SkillMap(
                         val point = layout.nodes.getValue(skill.id)
                         MapNode(
                             skill, library.skillState(skill.id), diameter, skill.id == focusId,
-                            referencesByNode[skill.id].orEmpty(),
                             { onOpen(skill) },
                             Modifier.absoluteOffset(x = left + cardWidth * (point.column - .5f))
                                 .width(cardWidth).padding(bottom = gap),
@@ -361,7 +325,6 @@ private fun MapNode(
     state: SkillState,
     diameter: Dp,
     focused: Boolean,
-    references: List<Int>,
     onOpen: () -> Unit,
     modifier: Modifier,
     unlockSource: Boolean,
@@ -376,11 +339,7 @@ private fun MapNode(
         onClick = onOpen, shape = ControlShape,
         modifier = modifier.semantics {
             contentDescription = skill.name
-            stateDescription = buildString {
-                append(state.label)
-                if (focused) append("，下一步")
-                if (references.isNotEmpty()) append("，前置关联 ${references.joinToString()}")
-            }
+            stateDescription = if (focused) "${state.label}，下一步" else state.label
         },
         color = Color.Transparent,
     ) {
@@ -389,27 +348,15 @@ private fun MapNode(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Box {
-                when {
-                    unlockSource && state == SkillState.LIT ->
-                        UnlockingMedallion(skill.displayIcon, diameter, focused, source = true, progress = clock)
-                    unlockTarget && state == SkillState.AVAILABLE ->
-                        UnlockingMedallion(skill.displayIcon, diameter, focused, source = false, progress = clock)
-                    else -> SkillMedallion(
-                        skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f,
-                        mapPalette = palette,
-                    )
-                }
-                if (references.isNotEmpty()) {
-                    Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape,
-                        color = lockedPalette?.lockedBadgeFill ?: Raised,
-                    ) {
-                        val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
-                        Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium,
-                            color = lockedPalette?.lockedInk ?: Ink,
-                        )
-                    }
-                }
+            when {
+                unlockSource && state == SkillState.LIT ->
+                    UnlockingMedallion(skill.displayIcon, diameter, focused, source = true, progress = clock)
+                unlockTarget && state == SkillState.AVAILABLE ->
+                    UnlockingMedallion(skill.displayIcon, diameter, focused, source = false, progress = clock)
+                else -> SkillMedallion(
+                    skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f,
+                    mapPalette = palette,
+                )
             }
             Text(
                 mapName,

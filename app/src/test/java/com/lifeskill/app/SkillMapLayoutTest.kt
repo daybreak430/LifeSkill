@@ -1,6 +1,7 @@
 package com.lifeskill.app
 
 import com.lifeskill.app.model.Edge
+import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillMapLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -16,18 +17,17 @@ class SkillMapLayoutTest {
             Edge("leftLesson", "left"), Edge("rightLesson", "right"),
         )
         val map = SkillMapLayout.arrange(nodes, edges)
-        assertTrue(map.references.isEmpty())
+        assertEquals(edges.toSet(), map.connections.map { it.edge }.toSet())
         assertTrue(map.nodes.getValue("leftLesson").column < map.nodes.getValue("rightLesson").column)
         assertSeparated(map, edges)
     }
 
-    @Test fun showsOldCrossTierEdgesOnlyAsReferences() {
+    @Test fun leavesOldCrossTierEdgesUndrawn() {
         val nodes = listOf("a", "b", "c", "d")
         val longEdge = Edge("d", "a")
         val edges = listOf(Edge("b", "a"), Edge("c", "b"), Edge("d", "c"), longEdge)
         val map = SkillMapLayout.arrange(nodes, edges)
-        assertEquals(listOf(longEdge), map.references)
-        assertEquals(3, map.connections.size)
+        assertEquals((edges - longEdge).toSet(), map.connections.map { it.edge }.toSet())
         assertSeparated(map, edges)
     }
 
@@ -36,14 +36,12 @@ class SkillMapLayoutTest {
         val edge = Edge("child", "first")
         val map = SkillMapLayout.arrange(nodes, listOf(edge))
         assertEquals(listOf(0, 1, 2), map.connections.single().points.map { it.row })
-        assertTrue(map.references.isEmpty())
     }
 
-    @Test fun keepsConflictingDependenciesAsReferences() {
+    @Test fun leavesConflictingConnectionsUndrawn() {
         val edges = listOf(Edge("c", "a"), Edge("d", "a"), Edge("c", "b"), Edge("d", "b"))
         val map = SkillMapLayout.arrange(listOf("a", "b", "c", "d"), edges)
         assertEquals(3, map.connections.size)
-        assertEquals(1, map.references.size)
         assertSeparated(map, edges)
     }
 
@@ -56,7 +54,7 @@ class SkillMapLayoutTest {
         assertSeparated(map, edges)
     }
 
-    @Test fun keepsAllDependenciesAndNeverCrossesAcrossVariedGraphs() {
+    @Test fun neverDrawsCrossingOrCrossTierConnectionsAcrossVariedGraphs() {
         val random = Random(15)
         val ids = (0..19).map { it.toString() }
         repeat(24) {
@@ -70,9 +68,10 @@ class SkillMapLayoutTest {
     private fun assertSeparated(map: SkillMapLayout, edges: List<Edge>) {
         assertTrue(map.nodes.values.groupingBy { it.row }.eachCount().values.all { it <= 2 })
         assertTrue(map.width <= 3.11f)
-        val represented = map.connections.map { it.edge } + map.references
-        assertEquals(edges.size, represented.size)
-        assertEquals(edges.toSet(), represented.toSet())
+        val drawn = map.connections.map { it.edge }
+        assertEquals(drawn.size, drawn.toSet().size)
+        val levels = SkillGraph.levels(map.nodes.keys, edges)
+        assertTrue(drawn.all { it in edges && SkillGraph.isAdjacent(it, levels) })
         val segments = map.connections.flatMap { route ->
             for (track in route.points.drop(1).dropLast(1)) {
                 assertTrue(map.nodes.values.none { it.row == track.row && abs(it.column - track.column) <= .5f })

@@ -236,7 +236,7 @@ class MvpFlowTest {
         }
     }
 
-    @Test fun homeShowsItsMotifAndKeepsDirectionCardHeightsAcrossStates() {
+    @Test fun homeShowsItsMotifAndKeepsDirectionCardHeadersAndHeightsAcrossStates() {
         await("LifeSkill")
         ui.onNodeWithTag("home-study-motif").assertIsDisplayed()
         val library = fixture.container.library
@@ -250,20 +250,38 @@ class MvpFlowTest {
             val changing = hasTestTag("direction-card-${directions.first().id}")
             fun cardHeight(card: SemanticsMatcher) =
                 ui.onNode(card).getUnclippedBoundsInRoot().let { (it.bottom - it.top).value }
+            fun titleOffset(): Offset {
+                val card = ui.onNode(changing).fetchSemanticsNode().boundsInRoot
+                val title = ui.onNodeWithText(directions.first().name, useUnmergedTree = true)
+                    .fetchSemanticsNode().boundsInRoot
+                return title.topLeft - card.topLeft
+            }
             fun waitForCardText(text: String) {
                 val status = hasText(text) and (changing or hasAnyAncestor(changing))
                 ui.waitUntil(8_000) { ui.onAllNodes(status).fetchSemanticsNodes().isNotEmpty() }
             }
             grid.performScrollToNode(changing)
             val initial = cardHeight(changing)
+            val initialTitle = titleOffset()
             val tree = runBlocking {
                 library.save(EntryEdit(null, directions.first().id, EntryKind.TREE, "对齐测试树"))
             }
             waitForCardText("暂无技能点")
             assertEquals(initial, cardHeight(changing), .5f)
+            assertEquals(initialTitle, titleOffset())
             runBlocking { library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "测试技能", "掌握测试概念")) }
             waitForCardText("0/1")
             assertEquals(initial, cardHeight(changing), .5f)
+            assertEquals(initialTitle, titleOffset())
+            val title = ui.onNodeWithText(directions.first().name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val count = ui.onNodeWithText("0/1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val card = ui.onNode(changing).fetchSemanticsNode().boundsInRoot
+            assertTrue(count.top > title.bottom)
+            assertEquals(card.center.x, count.center.x, 1f)
+            ui.onNodeWithText("0/1", useUnmergedTree = true).performTouchInput { click() }
+            await("对齐测试树")
+            pressBack()
+            await("学习方向")
             val otherRow = hasTestTag("direction-card-${directions.last().id}")
             grid.performScrollToNode(otherRow)
             assertEquals(initial, cardHeight(otherRow), .5f)
@@ -284,7 +302,7 @@ class MvpFlowTest {
         conversations.send(scope, "A. 先核对")
     }
 
-    @Test fun conflictingDependenciesRemainVisibleInTheReferenceList() {
+    @Test fun conflictingDependenciesStayInSkillDetailsWithoutMapReferences() {
         await("本职工作")
         runBlocking {
             val library = fixture.container.library
@@ -299,15 +317,14 @@ class MvpFlowTest {
         ui.onNodeWithText("本职工作").performClick()
         await("连线分支")
         ui.onNodeWithText("连线分支").performClick()
-        await("关联 1")
+        await("技能地图")
+        ui.onNodeWithText("关联", substring = true).assertDoesNotExist()
         val mapBounds = ui.onNodeWithTag("skill-map").fetchSemanticsNode().boundsInRoot
         val lastNode = ui.onNodeWithContentDescription("左下游").fetchSemanticsNode().boundsInRoot
         assertTrue(mapBounds.bottom - lastNode.bottom < lastNode.height / 2)
-        ui.onNodeWithText("关联 1").performClick()
-        await("前置关联")
-        await("右起点 → 左下游", substring = true)
-        ui.onNodeWithText("关闭").performClick()
-        ui.onNodeWithContentDescription("左下游").performTouchInput { click() }
+        ui.onNodeWithContentDescription("左下游")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
+            .performTouchInput { click() }
         await("前置技能")
         await("右起点")
         await("左起点")

@@ -55,7 +55,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -70,22 +69,20 @@ internal val LibraryTitle = TextStyle(
     fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 35.sp,
 )
 
-private val DirectionArcHeight = 32.dp
-private val DirectionProgressPadding = 3.dp
-private val DirectionProgressGap = 2.dp
+private val DirectionCardVerticalPadding = 5.dp
+
+@Composable
+private fun directionHeaderHeight(): Dp = with(LocalDensity.current) {
+    maxOf(48.dp, MaterialTheme.typography.titleMedium.lineHeight.toDp() * 2 + 2.dp)
+}
 
 @Composable
 internal fun directionCardHeight(): Dp {
     val typography = MaterialTheme.typography
-    return with(LocalDensity.current) {
-        // 以空卡的点击区为基准，进度布局也预留两行方向名称。
-        val titleHeight = typography.titleMedium.lineHeight.toDp() * 2
-        val progressHeight = DirectionArcHeight + DirectionProgressPadding * 2 + DirectionProgressGap * 2 +
-            titleHeight + typography.bodySmall.lineHeight.toDp() + 2.dp
-        val compactHeight = maxOf(48.dp, titleHeight + 2.dp) +
-            maxOf(48.dp, typography.labelMedium.lineHeight.toDp() * 2 + 2.dp) + 10.dp
-        maxOf(progressHeight, compactHeight)
+    val footerHeight = with(LocalDensity.current) {
+        maxOf(48.dp, typography.labelMedium.lineHeight.toDp() * 2 + 2.dp)
     }
+    return directionHeaderHeight() + footerHeight + DirectionCardVerticalPadding * 2
 }
 
 @Composable
@@ -230,71 +227,22 @@ internal fun LibrarySection(
 }
 
 @Composable
-internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val tint = entryTint(entry)
-    val colors = studyColors
-    // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
-    var seenFraction by rememberSaveable { mutableFloatStateOf(progress.fraction) }
-    val sweep = remember { Animatable(seenFraction) }
-    LaunchedEffect(progress.fraction) {
-        if (sweep.value != progress.fraction) sweep.animateTo(progress.fraction, tween(260))
-        seenFraction = progress.fraction
-    }
-    Surface(
-        onClick = onClick, color = Panel, contentColor = Ink,
-        shape = PanelShape,
-        modifier = modifier.fillMaxWidth().panelShadow()
-            .semantics {
-                role = Role.Button
-                stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
-            },
-    ) {
-        Column(
-            Modifier.padding(horizontal = 12.dp, vertical = DirectionProgressPadding),
-            verticalArrangement = Arrangement.spacedBy(DirectionProgressGap, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(Modifier.fillMaxWidth().height(DirectionArcHeight), contentAlignment = Alignment.BottomCenter) {
-                Canvas(Modifier.matchParentSize()) {
-                    val stroke = 3.5.dp.toPx()
-                    val arcHeight = ((size.height - stroke) * 2).coerceAtLeast(0f)
-                    val arcWidth = minOf(size.width - stroke, arcHeight * 1.25f).coerceAtLeast(0f)
-                    val origin = Offset((size.width - arcWidth) / 2, stroke / 2)
-                    val bounds = Size(arcWidth, arcHeight)
-                    val arc = Stroke(stroke, cap = StrokeCap.Round)
-                    drawArc(colors.progressTrack, 180f, 180f, false, origin, bounds, style = arc)
-                    if (sweep.value > 0f) {
-                        drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
-                    }
-                }
-                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 2.dp).size(17.dp))
-            }
-            Text(
-                entry.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                "${progress.lit}/${progress.total}",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun CompactDirectionCard(
-    entry: Entry, modifier: Modifier = Modifier, onClick: () -> Unit, createTree: (() -> Unit)?,
+internal fun DirectionCard(
+    entry: Entry, progress: Progress, modifier: Modifier = Modifier, onClick: () -> Unit, createTree: (() -> Unit)?,
 ) {
     val tint = entryTint(entry)
+    val open = Modifier.clickable(role = Role.Button, onClick = onClick)
+    val status = if (progress.total > 0) Modifier.semantics {
+        stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
+    } else Modifier
     Surface(modifier.fillMaxWidth().panelShadow(), color = Panel, contentColor = Ink, shape = PanelShape) {
-        val open = Modifier.clickable(role = Role.Button, onClick = onClick)
         Column(
-            (if (createTree == null) open else Modifier).padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalArrangement = Arrangement.Center,
+            (if (createTree == null) open.then(status) else Modifier)
+                .padding(horizontal = 10.dp, vertical = DirectionCardVerticalPadding),
         ) {
             Row(
-                (if (createTree == null) Modifier else open).fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+                (if (createTree == null) Modifier else open).fillMaxWidth().height(directionHeaderHeight())
+                    .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
                 Emblem(entry.displayIcon.glyph, tint, tint.copy(alpha = .12f), diameter = 30.dp)
@@ -303,20 +251,55 @@ internal fun CompactDirectionCard(
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (createTree == null) {
-                Text("暂无技能点", Modifier.padding(start = 41.dp, bottom = 9.dp),
-                    color = Muted, style = MaterialTheme.typography.labelMedium)
-            } else {
-                TextButton(onClick = createTree, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
-                    Text(
-                        "创建技能树",
-                        Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}创建技能树" },
-                        style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
+                when {
+                    createTree != null -> TextButton(onClick = createTree, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
+                        Text(
+                            "创建技能树",
+                            Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}创建技能树" },
+                            style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    progress.total > 0 -> DirectionProgressArc(progress, tint)
+                    else -> Text(
+                        "暂无技能点", Modifier.padding(start = 41.dp),
+                        color = Muted, style = MaterialTheme.typography.labelMedium,
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DirectionProgressArc(progress: Progress, tint: Color) {
+    val track = studyColors.progressTrack
+    // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
+    var seenFraction by rememberSaveable { mutableFloatStateOf(progress.fraction) }
+    val sweep = remember { Animatable(seenFraction) }
+    LaunchedEffect(progress.fraction) {
+        if (sweep.value != progress.fraction) sweep.animateTo(progress.fraction, tween(260))
+        seenFraction = progress.fraction
+    }
+    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp), contentAlignment = Alignment.BottomCenter) {
+        Canvas(Modifier.matchParentSize()) {
+            val stroke = 3.dp.toPx()
+            val arcHeight = ((size.height - stroke) * 2).coerceAtLeast(0f)
+            val arcWidth = minOf(size.width - stroke - 8.dp.toPx(), arcHeight * 1.15f).coerceAtLeast(0f)
+            val origin = Offset((size.width - arcWidth) / 2, stroke / 2)
+            val bounds = Size(arcWidth, arcHeight)
+            val arc = Stroke(stroke, cap = StrokeCap.Round)
+            drawArc(track, 180f, 180f, false, origin, bounds, style = arc)
+            if (sweep.value > 0f) {
+                drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
+            }
+        }
+        Text(
+            "${progress.lit}/${progress.total}", Modifier.padding(top = 12.dp, bottom = 7.dp),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
+            maxLines = 1,
+        )
     }
 }
 

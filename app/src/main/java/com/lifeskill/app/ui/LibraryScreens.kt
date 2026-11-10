@@ -118,16 +118,12 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             val progress = library.progress(direction.id)
             val card = Modifier.animateItem().height(cardHeight).testTag("direction-card-${direction.id}")
             val open = { app.open(Route.entry(direction)) }
-            if (progress.total > 0) {
-                DirectionCard(direction, progress, card, open)
-            } else {
-                CompactDirectionCard(
-                    direction, card, open,
-                    createTree = if (library.childrenOf(direction.id).isEmpty()) {
-                        { app.add(EntryKind.TREE, direction.id) }
-                    } else null,
-                )
-            }
+            DirectionCard(
+                direction, progress, card, open,
+                createTree = if (library.childrenOf(direction.id).isEmpty()) {
+                    { app.add(EntryKind.TREE, direction.id) }
+                } else null,
+            )
         }
         if (directions.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {

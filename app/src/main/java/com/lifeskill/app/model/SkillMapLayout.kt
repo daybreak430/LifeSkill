@@ -8,7 +8,6 @@ internal data class SkillMapLayout(
     val width: Float,
     val rowCount: Int,
     val connections: List<MapConnection>,
-    val references: List<Edge>,
 ) {
     companion object {
         fun arrange(ids: List<String>, edges: List<Edge>): SkillMapLayout = LayeredMap(ids, edges).arrange()
@@ -26,12 +25,11 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
         skills.map { addVertex(row, it) }.toMutableList()
     }
     private val skills = vertices.mapIndexed { index, vertex -> checkNotNull(vertex.skill) to index }.toMap()
-    // 旧跨层依赖仍用于解锁，在画布上只显示关联编号。
-    private val edgesByAdjacency = edges.distinct().filter { it.prerequisiteId in skills && it.skillId in skills }
-        .partition { SkillGraph.isAdjacent(it, levels) }
-    private val routes = edgesByAdjacency.first.map { edge ->
-        val source = skills.getValue(edge.prerequisiteId)
-        val target = skills.getValue(edge.skillId)
+    // 旧跨层依赖仍用于分层和解锁，地图只绘制相邻逻辑层之间的连线。
+    private val routes = edges.distinct().mapNotNull { edge ->
+        val source = skills[edge.prerequisiteId] ?: return@mapNotNull null
+        val target = skills[edge.skillId] ?: return@mapNotNull null
+        if (!SkillGraph.isAdjacent(edge, levels)) return@mapNotNull null
         val firstRow = vertices[source].row
         val lastRow = vertices[target].row
         // 相邻逻辑层仍可能因换行而隔开，给连线留窄通道。
@@ -86,7 +84,7 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
         for (route in routes) {
             val source = route.vertices.first()
             val trackRows = vertices[source].row + 1 until vertices[route.vertices.last()].row
-            // 固定横向通道预算。旧树的额外分支及挤不下的跨行关系转成关联编号。
+            // 固定横向通道预算，避免额外分支和跨行连线挤压技能节点。
             if (branches[source] >= SkillGraph.BRANCH_LIMIT || trackRows.any { tracks[it] >= TRACKS_PER_ROW }) continue
             val segments = route.vertices.zipWithNext(::Segment)
             val blocked = segments.any { segment ->
@@ -125,7 +123,6 @@ private class LayeredMap(ids: List<String>, edges: List<Edge>) {
             width = worldWidth.toFloat(),
             rowCount = visible.size,
             connections = accepted.map { route -> MapConnection(route.edge, route.vertices.map(points::getValue)) },
-            references = routes.filterNot { it in accepted }.map(Route::edge) + edgesByAdjacency.second,
         )
     }
 
