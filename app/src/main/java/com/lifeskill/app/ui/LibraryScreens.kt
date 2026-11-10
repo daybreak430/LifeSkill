@@ -1,6 +1,5 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -48,8 +46,8 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
     LazyVerticalGrid(
         columns = GridCells.Adaptive(columnWidth),
         modifier = Modifier.fillMaxSize().testTag("learning-directions"),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 20.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -75,11 +73,11 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
                 label = "AI 生成技能树",
                 onClick = { app.open(Route(Page.GENERATE)) },
                 modifier = Modifier.fillMaxWidth(),
-                featured = true,
+                wide = true,
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            LibrarySection("学习方向", Modifier.padding(top = 4.dp), divider = false) {
+            LibrarySection("学习方向", Modifier.padding(top = 6.dp)) {
                 TextButton(onClick = { app.add(EntryKind.DIRECTION) }) {
                     Mark(Glyph.ADD, Gold, Modifier.size(16.dp))
                     Text("新增方向", Modifier.padding(start = 4.dp))
@@ -104,7 +102,7 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
     val trees = library.childrenOf(direction.id)
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             GlyphButton(Glyph.BACK, "返回", app::back)
@@ -122,10 +120,11 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        LibrarySection("学习方向", style = MaterialTheme.typography.labelLarge, color = Muted)
+                        Text("学习方向", style = MaterialTheme.typography.labelLarge, color = Muted)
                         Text(direction.name, style = LibraryTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    Emblem(direction.displayIcon.glyph, background = Raised, diameter = 58.dp)
+                    val tint = entryTint(direction)
+                    Emblem(direction.displayIcon.glyph, tint, tint.copy(alpha = .14f), diameter = 54.dp)
                 }
             }
             item {
@@ -152,7 +151,7 @@ internal fun EntryMenu(entry: Entry, app: AppViewModel) {
     var open by remember { mutableStateOf(false) }
     Box {
         GlyphButton(Glyph.MORE, "更多操作", { open = true })
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = ControlShape, containerColor = Panel) {
             DropdownMenuItem(text = { Text("编辑${entry.kind.label}") }, onClick = { open = false; app.edit(entry) })
             DropdownMenuItem(
                 text = { Text("删除${entry.kind.label}", color = MaterialTheme.colorScheme.error) },
@@ -165,8 +164,8 @@ internal fun EntryMenu(entry: Entry, app: AppViewModel) {
 @Composable
 internal fun EntryTile(entry: Entry, state: SkillState, onClick: () -> Unit) {
     Surface(
-        onClick = onClick, color = Panel, border = BorderStroke(1.dp, Line.copy(alpha = .8f)),
-        shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth(),
+        onClick = onClick, color = Raised,
+        shape = ControlShape, modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             Modifier.padding(horizontal = 13.dp, vertical = 10.dp),

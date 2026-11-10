@@ -46,7 +46,7 @@ internal fun AiChatHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(if (onRestart != null) 96.dp else 48.dp)) {
-            ChatHeaderButton(Glyph.BACK, "返回", onBack)
+            GlyphButton(Glyph.BACK, "返回", onBack, background = aiColors.panel)
         }
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
@@ -55,25 +55,17 @@ internal fun AiChatHeader(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
-        if (onRestart != null) ChatHeaderButton(Glyph.RESTART, "重新学习", onRestart, restartEnabled)
-        ChatHeaderButton(Glyph.SETTINGS, "设置", onSettings)
-    }
-}
-
-@Composable
-private fun ChatHeaderButton(glyph: Glyph, label: String, onClick: () -> Unit, enabled: Boolean = true) {
-    IconButton(onClick, Modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled) {
-        Surface(Modifier.size(37.dp), shape = CircleShape, color = aiColors.panel, shadowElevation = 1.dp) {
-            Box(contentAlignment = Alignment.Center) {
-                Mark(glyph, if (enabled) Ink else Muted, Modifier.size(19.dp))
-            }
+        if (onRestart != null) {
+            GlyphButton(Glyph.RESTART, "重新学习", onRestart, enabled = restartEnabled, background = aiColors.panel)
         }
+        GlyphButton(Glyph.SETTINGS, "设置", onSettings, background = aiColors.panel)
     }
 }
 
 @Composable
 internal fun ChatPill(
     label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, glyph: Glyph? = null,
+    trailingGlyph: Glyph? = null,
 ) {
     val colors = aiColors
     TextButton(
@@ -86,6 +78,9 @@ internal fun ChatPill(
     ) {
         if (glyph != null) Mark(glyph, if (enabled) colors.accent else Muted, Modifier.padding(end = 6.dp).size(16.dp))
         Text(label, style = MaterialTheme.typography.labelLarge)
+        if (trailingGlyph != null) {
+            Mark(trailingGlyph, if (enabled) colors.accent else Muted, Modifier.padding(start = 4.dp).size(16.dp))
+        }
     }
 }
 

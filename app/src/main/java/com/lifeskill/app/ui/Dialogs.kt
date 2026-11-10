@@ -1,6 +1,6 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -8,20 +8,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -58,7 +57,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     var goal by remember(initial) { mutableStateOf(initial.goal) }
     var shortName by remember(initial) { mutableStateOf(initial.shortName) }
     var selected by remember(initial) { mutableStateOf(initial.prerequisites) }
-    var showPrerequisites by remember(initial) { mutableStateOf(initial.prerequisites.isNotEmpty()) }
+    var showPrerequisites by remember(initial) { mutableStateOf(false) }
     var showIcons by remember(initial) { mutableStateOf(false) }
     val nameTooLong = name.trim().length > LibraryRules.NAME_LIMIT
     val goalTooLong = goal.trim().length > LibraryRules.GOAL_LIMIT
@@ -66,18 +65,15 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     val activeIcon = editor.icon ?: EntryIcon.default(initial.kind, initial.id)
     val canSave = !editor.saving && !editor.suggesting && name.isNotBlank() && !nameTooLong && !invalidShortName &&
         (!skill || goal.isNotBlank() && !goalTooLong)
-    val shape = RoundedCornerShape(12.dp)
-
     Dialog(onDismissRequest = app::closeEditor) {
         val focus = LocalFocusManager.current
-        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Panel) {
+        Surface(Modifier.fillMaxWidth(), shape = DialogShape, color = Panel) {
             Column {
                 Text(
                     (if (initial.id == null) "新增" else "编辑") + initial.kind.label,
                     Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
-                HorizontalDivider(color = Line)
                 // 只滚动表单内容，键盘弹出和选择区展开时，底部操作仍可见。
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
@@ -114,10 +110,11 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                 val checked = entry.id in selected
                                 val canSelect = entry.id in initial.prerequisites || library.remainingBranches(entry.id) > 0
                                 Row(
-                                    Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
+                                        .background(if (checked) GoldGround else Ground)
                                         .toggleable(checked, enabled = canSelect && !editor.saving, role = Role.Checkbox) {
                                             selected = if (it) selected + entry.id else selected - entry.id
-                                        },
+                                        }.padding(horizontal = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Checkbox(checked, onCheckedChange = null, enabled = canSelect && !editor.saving)
@@ -143,21 +140,23 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                     )
                     if (showIcons) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(
+                            SelectionChip(
+                                label = "默认",
                                 selected = editor.icon == null, onClick = {
                                     app.chooseIcon(null)
                                     showIcons = false
                                 },
-                                enabled = !editor.saving && !editor.suggesting, label = { Text("默认") },
+                                enabled = !editor.saving && !editor.suggesting,
                             )
                             EntryIcon.entries.forEach { icon ->
-                                FilterChip(
+                                SelectionChip(
+                                    label = icon.label,
                                     selected = editor.icon == icon, onClick = {
                                         app.chooseIcon(icon)
                                         showIcons = false
                                     },
-                                    enabled = !editor.saving && !editor.suggesting, label = { Text(icon.label) },
-                                    leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted) },
+                                    enabled = !editor.saving && !editor.suggesting,
+                                    leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted, Modifier.size(16.dp)) },
                                 )
                             }
                         }
@@ -173,7 +172,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                     )
                     editor.iconError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
-                HorizontalDivider(color = Line)
+                HorizontalDivider(color = Line.copy(alpha = .55f))
                 editor.error?.let {
                     Text(
                         it, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
@@ -193,8 +192,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                 name = name, goal = goal, prerequisites = selected, icon = editor.icon, shortName = shortName,
                             ))
                         },
-                        modifier = Modifier.heightIn(min = 48.dp), enabled = canSave, shape = shape,
-                        colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Panel),
+                        modifier = Modifier.heightIn(min = 48.dp), enabled = canSave, shape = ControlShape,
                     ) { Text(if (editor.saving) "正在保存" else "保存") }
                 }
             }
@@ -213,8 +211,8 @@ private fun EditorField(
         placeholder = placeholder?.let { { Text(it) } },
         singleLine = maxLines == 1, minLines = minLines, maxLines = maxLines, enabled = enabled,
         isError = error != null, supportingText = error?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(imeAction = imeAction), shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Ground),
+        keyboardOptions = KeyboardOptions(imeAction = imeAction), shape = ControlShape,
+        colors = fieldColors(),
     )
 }
 
@@ -226,7 +224,7 @@ private fun EditorPickerRow(
     Surface(
         onClick = onClick, enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { role = Role.Button },
-        shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Line), color = Panel,
+        shape = ControlShape, color = Raised,
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -249,11 +247,16 @@ internal fun DeletionDialog(entry: Entry, library: Library, busy: Boolean, app: 
     }
     AlertDialog(
         onDismissRequest = app::cancelDelete,
+        shape = DialogShape, containerColor = Panel,
         title = { Text("删除${entry.kind.label}") },
         text = { Text("删除「${entry.name}」将一并移除$affected。此操作无法撤销。") },
         confirmButton = {
-            TextButton(onClick = app::deleteEntry, enabled = !busy) {
-                Text(if (busy) "正在删除" else "删除", color = MaterialTheme.colorScheme.error)
+            Button(
+                onClick = app::deleteEntry, enabled = !busy, shape = ControlShape,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError),
+            ) {
+                Text(if (busy) "正在删除" else "删除")
             }
         },
         dismissButton = { TextButton(onClick = app::cancelDelete, enabled = !busy) { Text("取消") } },
@@ -266,6 +269,7 @@ internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Uni
     val exceedsLimit = requirements.trim().length > ConversationRepository.INPUT_LIMIT
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = DialogShape, containerColor = Panel,
         title = { Text("重新学习") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -274,7 +278,7 @@ internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Uni
                     requirements, { requirements = it }, Modifier.fillMaxWidth().testTag("restart-requirements"),
                     label = { Text("本次学习要求（选填）") },
                     placeholder = { Text("例如：按零基础讲，用一个实例演示") },
-                    maxLines = 4, isError = exceedsLimit,
+                    maxLines = 4, isError = exceedsLimit, shape = ControlShape, colors = fieldColors(),
                     supportingText = if (exceedsLimit) {
                         { Text("最多 ${ConversationRepository.INPUT_LIMIT} 个字符") }
                     } else null,
@@ -282,7 +286,7 @@ internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Uni
             }
         },
         confirmButton = {
-            TextButton(onClick = { onStart(requirements) }, enabled = !exceedsLimit) { Text("开始新一轮") }
+            Button(onClick = { onStart(requirements) }, enabled = !exceedsLimit, shape = ControlShape) { Text("开始新一轮") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )

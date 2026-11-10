@@ -63,17 +63,13 @@ internal fun LifeSkillApp(
 
     LifeSkillTheme(dark) {
         val gradient = when (route.page) {
-            Page.HOME -> studyColors.home
             Page.TUTOR, Page.GENERATE -> aiColors.backdrop
-            else -> null
+            else -> studyColors.backdrop
         }
-        val background = gradient?.first() ?: Ground
-        val backdrop = if (gradient != null) Modifier.background(Brush.verticalGradient(gradient))
-        else Modifier.background(background)
-        SideEffect { onSystemBars(dark, background) }
+        SideEffect { onSystemBars(dark, gradient.first()) }
         Scaffold(
-            modifier = Modifier.fillMaxSize().then(backdrop).safeDrawingPadding(),
-            containerColor = Color.Transparent, contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(gradient)).safeDrawingPadding(),
+            containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {

@@ -1,10 +1,10 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +17,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -107,8 +108,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         } else {
                             "描述你想学的主题、已有基础和目标。"
                         },
-                        if (tutor) Glyph.TARGET else Glyph.SPARK,
-                    )
+                    ) { AiCrystal(54.dp, forAction = !tutor) }
                     if (tutor && !status.working) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             ChatPill("开始学习", {
@@ -136,20 +136,16 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         open = { app.open(Route.entry(it)) },
                     )
                     if (turn.preview != null) {
-                        OutlinedButton(
+                        ChatPill(
+                            "选择方向",
                             onClick = {
                                 keyboard?.hide()
                                 chat.clearDraftError()
                                 selectedDraftId = turn.id
                             },
-                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp), enabled = canSend,
-                            shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, aiColors.outline),
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                        ) {
-                            Text("选择方向", color = if (canSend) aiColors.accent else Muted,
-                                style = MaterialTheme.typography.labelMedium)
-                            Mark(Glyph.NEXT, if (canSend) aiColors.accent else Muted, Modifier.padding(start = 6.dp).size(14.dp))
-                        }
+                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp),
+                            enabled = canSend, trailingGlyph = Glyph.NEXT,
+                        )
                     }
                     if (turn.id == latestReply?.id) {
                         if (checkOffered) {
@@ -292,11 +288,15 @@ private fun ChatBubble(
                         choices.forEachIndexed { index, choice ->
                             val answer = choiceAnswer(index, choice)
                             if (active) {
-                                OutlinedButton(
+                                Button(
                                     onClick = { onAnswer(answer) }, modifier = Modifier.fillMaxWidth(),
                                     enabled = canAnswer,
-                                    shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, colors.outline),
-                                ) { Text(answer, Modifier.fillMaxWidth(), color = if (canAnswer) colors.accent else Muted) }
+                                    shape = ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = colors.chip, contentColor = colors.accent,
+                                        disabledContainerColor = Raised, disabledContentColor = Muted,
+                                    ),
+                                ) { Text(answer, Modifier.fillMaxWidth()) }
                             } else {
                                 Text(answer, Modifier.padding(vertical = 3.dp), color = Muted, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -316,27 +316,32 @@ private fun ChatBubble(
 
 @Composable
 private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: () -> Unit, discard: (Turn) -> Unit) {
-    Column(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
-        if (status.working) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Loading(Modifier.size(25.dp))
-                Text("正在等待 AI 回复", style = MaterialTheme.typography.labelMedium, color = Muted)
-            }
-        } else {
-            Text(
-                status.error ?: "这条消息还没有回复。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (status.error == null) Muted else MaterialTheme.colorScheme.error,
-            )
-            if (pending != null) {
-                Row {
-                    TextButton(onClick = retry) { Text("重试") }
-                    TextButton(onClick = { discard(pending) }) {
-                        Text(when (pending.kind) {
-                            TurnKind.CHECK -> "撤回检验"
-                            TurnKind.RESTART -> "取消请求"
-                            else -> "撤回编辑"
-                        })
+    Surface(
+        Modifier.fillMaxWidth().padding(start = ReplyInset).semantics { liveRegion = LiveRegionMode.Polite },
+        shape = ControlShape, color = aiColors.panel,
+    ) {
+        Column(Modifier.padding(start = 12.dp, end = 10.dp, top = 9.dp, bottom = 6.dp)) {
+            if (status.working) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Loading(Modifier.size(25.dp))
+                    Text("正在等待 AI 回复", style = MaterialTheme.typography.labelMedium, color = Muted)
+                }
+            } else {
+                Text(
+                    status.error ?: "这条消息还没有回复。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (status.error == null) Muted else MaterialTheme.colorScheme.error,
+                )
+                if (pending != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ChatPill("重试", retry)
+                        TextButton(onClick = { discard(pending) }) {
+                            Text(when (pending.kind) {
+                                TurnKind.CHECK -> "撤回检验"
+                                TurnKind.RESTART -> "取消请求"
+                                else -> "撤回编辑"
+                            }, color = aiColors.accent)
+                        }
                     }
                 }
             }

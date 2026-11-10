@@ -1,14 +1,15 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -23,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
@@ -55,14 +57,14 @@ internal fun AddDraftDialog(
     AlertDialog(
         onDismissRequest = { if (!working) onDismiss() },
         containerColor = Panel,
-        shape = RoundedCornerShape(20.dp),
+        shape = DialogShape,
         title = { Text("选择学习方向") },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.selectableGroup()) {
+                Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     existing.forEach { direction ->
                         DirectionChoice(direction.name, !createNew && selectedId == direction.id, working,
                             recommended = preview.suggestedDirectionId == direction.id,
@@ -89,7 +91,7 @@ internal fun AddDraftDialog(
         confirmButton = {
             Button(
                 onClick = { destination?.let(onConfirm) }, enabled = !working && destination != null,
-                shape = RoundedCornerShape(12.dp),
+                shape = ControlShape,
             ) { Text(if (working) "正在添加" else "确认添加") }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("取消") } },
@@ -101,8 +103,10 @@ private fun DirectionChoice(
     name: String, selected: Boolean, working: Boolean, recommended: Boolean, onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .selectable(selected, enabled = !working, role = Role.RadioButton, onClick = onClick),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
+            .background(if (selected) GoldGround else Ground)
+            .selectable(selected, enabled = !working, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected, onClick = null, enabled = !working)

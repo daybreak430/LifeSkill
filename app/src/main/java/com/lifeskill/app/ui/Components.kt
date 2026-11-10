@@ -1,9 +1,9 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,12 +18,15 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,13 +35,48 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+internal val PanelShape = RoundedCornerShape(22.dp)
+internal val ControlShape = RoundedCornerShape(16.dp)
+internal val DialogShape = RoundedCornerShape(26.dp)
+
+@Composable
+internal fun Modifier.panelShadow(): Modifier {
+    val shade = studyColors.cardShadow.copy(alpha = .62f)
+    return shadow(4.dp, PanelShape, clip = false, ambientColor = shade, spotColor = shade)
+}
+
+@Composable
+internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = Ground, unfocusedContainerColor = Ground,
+    unfocusedBorderColor = Line, disabledBorderColor = Line,
+)
+
+@Composable
+internal fun SelectionChip(
+    label: String, selected: Boolean, onClick: () -> Unit, enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
+) {
+    FilterChip(
+        selected, onClick, label = { Text(label) }, enabled = enabled, leadingIcon = leadingIcon,
+        shape = CircleShape, border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Raised, selectedContainerColor = GoldGround,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    )
+}
+
 @Composable
 internal fun GlyphButton(
     glyph: Glyph, label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
-    tint: Color = Muted, enabled: Boolean = true,
+    tint: Color = Ink, enabled: Boolean = true, background: Color = Panel,
 ) {
-    IconButton(onClick = onClick, modifier = modifier.semantics { contentDescription = label }, enabled = enabled) {
-        Mark(glyph, if (enabled) tint else Line)
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled) {
+        Surface(Modifier.size(38.dp), shape = CircleShape, color = background) {
+            Box(contentAlignment = Alignment.Center) {
+                Mark(glyph, if (enabled) tint else Muted, Modifier.size(19.dp))
+            }
+        }
     }
 }
 
@@ -48,11 +86,11 @@ internal fun PageHeader(
     subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
-        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 6.dp, end = 10.dp),
+        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GlyphButton(Glyph.BACK, "返回", onBack)
-        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
             if (subtitle != null) {
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -70,26 +108,21 @@ internal fun Action(
     val content: @Composable RowScope.() -> Unit = {
         val color = androidx.compose.material3.LocalContentColor.current
         Mark(glyph, color, Modifier.size(17.dp))
-        Text(label, Modifier.padding(start = 7.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, Modifier.padding(start = 7.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
-    if (primary) {
-        Button(
-            onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(), content = content,
-        )
-    } else {
-        OutlinedButton(
-            onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Line),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink), content = content,
-        )
-    }
+    Button(
+        onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = ControlShape,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        colors = if (primary) ButtonDefaults.buttonColors()
+        else ButtonDefaults.buttonColors(containerColor = Raised, contentColor = Ink),
+        content = content,
+    )
 }
 
 @Composable
 internal fun Emblem(glyph: Glyph, tint: Color = Gold, background: Color = GoldGround, diameter: Dp = 42.dp) {
     Surface(
-        modifier = Modifier.size(diameter), shape = CircleShape, color = background, border = BorderStroke(1.dp, Line),
+        modifier = Modifier.size(diameter), shape = CircleShape, color = background,
     ) {
         Box(contentAlignment = Alignment.Center) { Mark(glyph, tint, Modifier.size(diameter * .55f)) }
     }
@@ -97,16 +130,18 @@ internal fun Emblem(glyph: Glyph, tint: Color = Gold, background: Color = GoldGr
 
 @Composable
 internal fun EmptyState(
-    title: String, message: String, glyph: Glyph, modifier: Modifier = Modifier,
+    title: String, message: String = "", icon: @Composable () -> Unit,
 ) {
     Column(
-        modifier.fillMaxWidth().padding(28.dp),
+        Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Emblem(glyph, Steel, Raised)
+        icon()
         Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
+        if (message.isNotBlank()) {
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
+        }
     }
 }
 

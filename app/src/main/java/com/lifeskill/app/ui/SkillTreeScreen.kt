@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -71,17 +70,17 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
     var showReferences by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             GlyphButton(Glyph.BACK, "返回", app::back)
             Text(
-                library.byId[tree.parentId]?.name.orEmpty(), Modifier.weight(1f),
+                library.byId[tree.parentId]?.name.orEmpty(), Modifier.weight(1f).padding(start = 8.dp),
                 style = MaterialTheme.typography.labelLarge, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             EntryMenu(tree, app)
         }
         Text(
-            tree.name, Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.headlineMedium,
+            tree.name, Modifier.padding(horizontal = 20.dp), style = LibraryTitle,
             maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
         Row(
@@ -107,12 +106,12 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
             AiAction("AI 追加", { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
         }
         Surface(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-            color = studyColors.map.first(), shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            color = studyColors.map.first(), shape = PanelShape,
         ) {
             if (skills.isEmpty()) {
                 Box(contentAlignment = Alignment.Center) {
-                    EmptyState("技能地图还是空的", "新增第一个技能点，或让 AI 拆解学习路径。", Glyph.TREE)
+                    LibraryEmpty("技能地图还是空的", Glyph.TREE)
                 }
             } else {
                 SkillMap(skills, layout, library, latestStudySkillId) { app.open(Route.entry(it)) }
@@ -122,6 +121,7 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
     if (showReferences && layout.references.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { showReferences = false },
+            shape = DialogShape, containerColor = Panel,
             title = { Text("前置关联") },
             text = {
                 Column(
@@ -251,7 +251,7 @@ private fun MapNode(
 ) {
     val mapName = remember(skill.name, skill.shortName) { skill.mapName }
     Surface(
-        onClick = onOpen, shape = RoundedCornerShape(13.dp),
+        onClick = onOpen, shape = ControlShape,
         modifier = modifier.semantics {
             contentDescription = skill.name
             stateDescription = buildString {
@@ -270,7 +270,7 @@ private fun MapNode(
             Box {
                 SkillMedallion(skill.displayIcon, state, diameter, focused)
                 if (references.isNotEmpty()) {
-                    Surface(Modifier.align(Alignment.BottomEnd), shape = RoundedCornerShape(5.dp), color = Raised) {
+                    Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape, color = Raised) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""
                         Text(label, Modifier.padding(horizontal = 3.dp), style = MaterialTheme.typography.labelMedium, color = Ink)
                     }

@@ -1,22 +1,23 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -50,8 +50,6 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.Progress
 
-private val CardShape = RoundedCornerShape(14.dp)
-private val ActionShape = RoundedCornerShape(12.dp)
 internal val LibraryTitle = TextStyle(
     fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 35.sp,
 )
@@ -60,30 +58,39 @@ internal val LibraryTitle = TextStyle(
 internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, locked: Boolean, onContinue: () -> Unit) {
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    val heroShape = RoundedCornerShape(22.dp)
+    val heroShape = RoundedCornerShape(26.dp)
     Box(Modifier.fillMaxWidth().clipToBounds()) {
         Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = 11.dp, bottom = 16.dp)
             .rotate(-3f)
             .background(colors.heroLayer, heroShape))
-        Box(Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape).background(Brush.linearGradient(colors.hero))) {
-            if (fontScale < 1.3f) StudyMotif(Modifier.align(Alignment.TopEnd).size(116.dp, 82.dp))
-            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape).background(Brush.linearGradient(colors.hero)),
+        ) {
+            // 窄屏和大字号优先保留标题、进度与操作空间。
+            val artWidth = if (maxWidth >= 328.dp && fontScale < 1.3f) minOf(maxWidth * .41f, 200.dp) else 0.dp
+            if (artWidth > 0.dp) {
+                StudyMotif(skill.displayIcon.glyph, Modifier.align(Alignment.CenterEnd).width(artWidth).height(156.dp))
+            }
+            Column(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = maxOf(artWidth + 8.dp, 20.dp), top = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
                 Text(
                     tree.name, style = MaterialTheme.typography.bodyMedium, color = Muted,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
                 Text(skill.name, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SegmentedProgress(progress, Modifier.weight(1f), active = colors.route)
-                    Text(progress.label, style = MaterialTheme.typography.labelLarge, color = Ink)
+                    Text(progress.label, style = MaterialTheme.typography.labelMedium, color = Muted)
                 }
                 LibraryAction(
                     if (locked) "查看技能" else "继续学习", null, onContinue,
-                    Modifier.padding(top = 2.dp).widthIn(max = 164.dp * fontScale),
+                    Modifier.padding(top = 4.dp).widthIn(max = 158.dp * fontScale),
                     primary = true, trailing = true, primaryColor = Gold,
                 )
             }
@@ -106,14 +113,13 @@ internal fun LibraryAction(
     Surface(
         onClick = onClick,
         modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.Button },
-        shape = ActionShape,
+        shape = ControlShape,
         color = when {
             primary -> primaryColor
             trailing -> Raised
             else -> Panel
         },
         contentColor = content,
-        border = if (primary) null else BorderStroke(1.dp, Line),
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -134,44 +140,37 @@ internal fun LibraryAction(
 internal fun LibrarySection(
     title: String,
     modifier: Modifier = Modifier,
-    style: TextStyle = MaterialTheme.typography.titleMedium,
-    color: Color = Ink,
-    divider: Boolean = true,
     action: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
         modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = style, color = color)
-        if (divider) HorizontalDivider(Modifier.weight(1f), color = Line)
-        else Spacer(Modifier.weight(1f))
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
         action()
     }
 }
 
 @Composable
 internal fun DirectionCard(entry: Entry, progress: Progress, onClick: () -> Unit) {
-    val tint = directionTint(entry)
+    val tint = entryTint(entry)
     val colors = studyColors
-    val shape = RoundedCornerShape(18.dp)
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
-        shape = shape,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 128.dp)
-            .shadow(3.dp, shape, clip = false, ambientColor = colors.cardShadow, spotColor = colors.cardShadow)
+        shape = PanelShape,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 156.dp).panelShadow()
             .semantics {
                 role = Role.Button
                 stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
             },
     ) {
         Column(
-            Modifier.padding(horizontal = 10.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+            Modifier.padding(horizontal = 12.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(contentAlignment = Alignment.BottomCenter) {
-                Canvas(Modifier.size(106.dp, 52.dp)) {
+            Box(Modifier.fillMaxWidth(.82f), contentAlignment = Alignment.BottomCenter) {
+                Canvas(Modifier.widthIn(max = 146.dp).fillMaxWidth().aspectRatio(2f)) {
                     val stroke = 4.5.dp.toPx()
                     val diameter = minOf(size.width - stroke, (size.height - stroke) * 2).coerceAtLeast(0f)
                     val origin = Offset((size.width - diameter) / 2, stroke / 2)
@@ -184,18 +183,20 @@ internal fun DirectionCard(entry: Entry, progress: Progress, onClick: () -> Unit
                 }
                 Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 4.dp).size(21.dp))
             }
-            Text(entry.name, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                entry.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 "${progress.lit}/${progress.total}",
-                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = Muted,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
             )
         }
     }
 }
 
 @Composable
-private fun directionTint(entry: Entry): Color {
+internal fun entryTint(entry: Entry): Color {
     val colors = studyColors
     return when (entry.displayIcon) {
         EntryIcon.WORK, EntryIcon.CODE, EntryIcon.CHART, EntryIcon.BOOK -> colors.iconViolet
@@ -211,44 +212,32 @@ private fun directionTint(entry: Entry): Color {
 internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
-        border = BorderStroke(1.dp, if (latest) Gold.copy(alpha = .55f) else Line),
-        shape = CardShape, modifier = Modifier.fillMaxWidth(),
+        shape = PanelShape, modifier = Modifier.fillMaxWidth().panelShadow(),
     ) {
-        Box {
-            if (latest) {
-                val ribbon = Gold
-                Canvas(Modifier.matchParentSize()) {
-                    drawRect(ribbon, size = Size(3.dp.toPx(), size.height))
-                }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 86.dp).padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val tint = entryTint(tree)
+            Emblem(tree.displayIcon.glyph, tint = tint, background = tint.copy(alpha = .12f), diameter = 44.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (latest) StudyBookmark()
+                Text(tree.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (progress.total > 0) SegmentedProgress(progress)
+                Text(
+                    if (progress.total > 0) progress.label else "暂无技能点",
+                    style = MaterialTheme.typography.labelMedium, color = Muted,
+                )
             }
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 84.dp).padding(horizontal = 12.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Emblem(tree.displayIcon.glyph, background = Raised, diameter = 48.dp)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (latest) StudyBookmark()
-                    Text(tree.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (progress.total > 0) SegmentedProgress(progress)
-                    Text(
-                        if (progress.total > 0) progress.label else "暂无技能点",
-                        style = MaterialTheme.typography.labelMedium, color = Muted,
-                    )
-                }
-                Mark(Glyph.NEXT, Gold, Modifier.size(18.dp))
-            }
+            Mark(Glyph.NEXT, Gold, Modifier.size(18.dp))
         }
     }
 }
 
 @Composable
 internal fun LibraryEmpty(title: String, glyph: Glyph) {
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    EmptyState(title) {
         Emblem(glyph, background = Raised, diameter = 40.dp)
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
     }
 }
 
@@ -256,9 +245,9 @@ private val Progress.label get() = "$lit / $total 已点亮"
 
 @Composable
 private fun StudyBookmark() {
-    Surface(shape = RoundedCornerShape(4.dp), color = GoldGround) {
+    Surface(shape = CircleShape, color = GoldGround) {
         Text(
-            "上次学习", modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
+            "上次学习", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
@@ -286,19 +275,34 @@ private fun SegmentedProgress(progress: Progress, modifier: Modifier = Modifier,
 }
 
 @Composable
-private fun StudyMotif(modifier: Modifier) {
-    val branch = studyColors.route.copy(alpha = .17f)
-    Canvas(modifier) {
-        val width = size.width
-        val height = size.height
-        val motif = Path().apply {
-            moveTo(width * .16f, height * .63f)
-            cubicTo(width * .44f, height * .16f, width * .77f, height * .69f, width * .80f, 0f)
-            moveTo(width * .37f, height * .45f)
-            cubicTo(width * .54f, height * .34f, width * .60f, height * .27f, width * .59f, 0f)
-            moveTo(width * .46f, height * .41f)
-            cubicTo(width * .70f, height * .46f, width * .74f, height * .81f, width, height * .77f)
+private fun StudyMotif(glyph: Glyph, modifier: Modifier) {
+    val colors = studyColors
+    val panel = Panel
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.matchParentSize()) {
+            val radius = 35.dp.toPx()
+            val satellites = listOf(Offset(size.width * .22f, size.height * .27f),
+                Offset(size.width * .79f, size.height * .18f), Offset(size.width * .77f, size.height * .81f))
+            // 装饰只突出当前技能图标，外围圆点用于表现技能树意象。
+            drawCircle(Brush.radialGradient(listOf(colors.heroGlow, Color.Transparent), center, radius * 2.18f),
+                radius = radius * 2.18f)
+            drawCircle(panel.copy(alpha = .44f), radius * 1.30f, style = Stroke(1.2.dp.toPx()))
+            satellites.forEach { node ->
+                val path = Path().apply {
+                    moveTo(center.x, center.y)
+                    cubicTo(center.x, node.y, (center.x + node.x) / 2, node.y, node.x, node.y)
+                }
+                drawPath(path, colors.route.copy(alpha = .34f), style = Stroke(1.4.dp.toPx(), cap = StrokeCap.Round))
+                drawCircle(colors.route.copy(alpha = .13f), 10.dp.toPx(), node)
+                drawCircle(panel.copy(alpha = .89f), 6.dp.toPx(), node)
+                drawCircle(colors.route.copy(alpha = .72f), 2.3.dp.toPx(), node)
+            }
         }
-        drawPath(motif, branch, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
+        Box(
+            Modifier.size(66.dp).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Mark(glyph, Color.White, Modifier.size(31.dp))
+        }
     }
 }

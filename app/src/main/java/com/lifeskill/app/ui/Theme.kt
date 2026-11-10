@@ -33,10 +33,10 @@ internal val Gold: Color @Composable @ReadOnlyComposable get() = MaterialTheme.c
 internal val GoldGround: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primaryContainer
 
 private val DarkPalette = darkColorScheme(
-    primary = Color(0xFFF6C477),
-    onPrimary = Color(0xFF2C1C0A),
-    primaryContainer = Color(0xFF3A2C1D),
-    onPrimaryContainer = Color(0xFFF6C477),
+    primary = Color(0xFFA7DBC5),
+    onPrimary = Color(0xFF102B22),
+    primaryContainer = Color(0xFF23483D),
+    onPrimaryContainer = Color(0xFFBCE8D6),
     secondary = Color(0xFF96B1D0),
     onSecondary = Color(0xFF10141B),
     secondaryContainer = Color(0xFF222B39),
@@ -76,11 +76,13 @@ private val LightPalette = lightColorScheme(
 )
 
 internal data class StudyColors(
-    val home: List<Color>,
+    val backdrop: List<Color>,
     val cardShadow: Color,
     val progressTrack: Color,
     val hero: List<Color>,
     val heroLayer: Color,
+    val heroGlow: Color,
+    val heroEmblem: List<Color>,
     val map: List<Color>,
     val earned: List<Color>,
     val earnedInk: Color,
@@ -93,12 +95,14 @@ internal data class StudyColors(
 )
 
 private val LightStudyColors = StudyColors(
-    home = listOf(Color(0xFFF6F8FC), Color(0xFFF2F7FB), Color(0xFFEDF3FB)),
+    backdrop = listOf(Color(0xFFF7F9FC), Color(0xFFF3F7FB), Color(0xFFEDF3FB)),
     cardShadow = Color(0xFF869BAF),
     progressTrack = Color(0xFFE4E8F1),
-    hero = listOf(Color(0xFFE5F5DA), Color(0xFFD8EDF3), Color(0xFFDDE6FA)),
+    hero = listOf(Color(0xFFEAF7E9), Color(0xFFE6F3F4), Color(0xFFDDE8FA)),
     heroLayer = Color(0xFFE7E1F6),
-    map = listOf(Color(0xFFE6F4F2), LightPalette.background),
+    heroGlow = Color(0xBBA1C9EB),
+    heroEmblem = listOf(Color(0xFF639AAA), Color(0xFF36758A)),
+    map = listOf(Color(0xFFEAF4F5), Color(0xFFF8FBFD)),
     earned = listOf(Color(0xFF599E7C), Color(0xFF327756)),
     earnedInk = Color.White,
     route = Color(0xFF4C9675),
@@ -108,16 +112,18 @@ private val LightStudyColors = StudyColors(
 )
 
 private val DarkStudyColors = StudyColors(
-    home = listOf(DarkPalette.background, Color(0xFF161E2C)),
+    backdrop = listOf(DarkPalette.background, Color(0xFF161E2C)),
     cardShadow = Color.Black,
     progressTrack = DarkPalette.outlineVariant,
-    hero = listOf(DarkPalette.surfaceVariant, DarkPalette.surface),
-    heroLayer = DarkPalette.outlineVariant,
+    hero = listOf(Color(0xFF203A35), Color(0xFF22354D)),
+    heroLayer = Color(0xFF383B57),
+    heroGlow = Color(0xAA4C749A),
+    heroEmblem = listOf(Color(0xFF5E9BAE), Color(0xFF32677E)),
     map = listOf(DarkPalette.surface, DarkPalette.background),
-    earned = listOf(DarkPalette.primary, Color(0xFFE1A656)),
-    earnedInk = DarkPalette.onPrimary,
+    earned = listOf(Color(0xFF548F78), Color(0xFF2D6956)),
+    earnedInk = Color.White,
     route = DarkPalette.primary,
-    focusBand = Color(0xFF846942),
+    focusBand = Color(0xFF579783),
     iconViolet = Color(0xFFC3B1F6), iconBlue = Color(0xFF98C2F0),
     iconGreen = Color(0xFF8ED8B5), iconOrange = Color(0xFFF5B483),
 )

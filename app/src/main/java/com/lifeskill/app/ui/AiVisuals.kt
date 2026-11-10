@@ -1,7 +1,6 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,7 +37,6 @@ internal data class AiColors(
     val outline: Color,
     val action: List<Color>,
     val actionAccent: Color,
-    val actionRim: Color,
 )
 
 internal val lightAiColors = AiColors(
@@ -49,7 +46,6 @@ internal val lightAiColors = AiColors(
     outline = Color(0xFFCBDDE7),
     action = listOf(Color(0xFFF0E6FC), Color(0xFFE9EEFC), Color(0xFFCDE3FA)),
     actionAccent = Color(0xFF6252A8),
-    actionRim = Color(0xDFFFFFFF),
 )
 
 internal val darkAiColors = AiColors(
@@ -59,7 +55,6 @@ internal val darkAiColors = AiColors(
     outline = Color(0xFF3B5667),
     action = listOf(Color(0xFF333048), Color(0xFF2A3E57), Color(0xFF29465D)),
     actionAccent = Color(0xFFD0C1F2),
-    actionRim = Color(0xFF4B4F66),
 )
 
 internal val LocalAiColors = staticCompositionLocalOf { lightAiColors }
@@ -68,29 +63,37 @@ internal val aiColors: AiColors @Composable @ReadOnlyComposable get() = LocalAiC
 @Composable
 internal fun AiAction(
     label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
-    featured: Boolean = false, enabled: Boolean = true,
+    wide: Boolean = false, enabled: Boolean = true,
 ) {
     val colors = aiColors
     Surface(
-        onClick = onClick, enabled = enabled, shape = RoundedCornerShape(if (featured) 18.dp else 12.dp),
-        color = colors.panel, shadowElevation = if (featured) 2.dp else 1.dp,
-        border = if (featured) BorderStroke(1.dp, colors.actionRim) else null,
+        onClick = onClick, enabled = enabled, shape = ControlShape,
+        color = Panel,
         modifier = modifier.semantics { role = Role.Button },
     ) {
+        val background = if (wide || !enabled) Modifier else Modifier.background(Brush.linearGradient(colors.action))
         Row(
-            Modifier.background(Brush.linearGradient(colors.action))
-                .heightIn(min = if (featured) 64.dp else 48.dp)
-                .padding(horizontal = if (featured) 20.dp else 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (featured) 10.dp else 6.dp),
+            background.heightIn(min = if (wide) 52.dp else 48.dp)
+                .padding(horizontal = if (wide) 14.dp else 10.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (wide) 8.dp else 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AiCrystal(if (featured) 42.dp else 25.dp, forAction = true)
+            if (wide) {
+                Box(
+                    Modifier.size(40.dp).background(Brush.radialGradient(listOf(colors.action.first(), Color.Transparent))),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AiCrystal(32.dp, forAction = true)
+                }
+            } else {
+                AiCrystal(25.dp, forAction = true)
+            }
             Text(
-                label, Modifier.weight(1f, fill = featured),
+                label, Modifier.weight(1f, fill = wide),
                 color = if (enabled) Ink else Muted,
-                style = if (featured) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge,
             )
-            if (featured) Mark(Glyph.NEXT, colors.actionAccent, Modifier.size(20.dp))
+            if (wide) Mark(Glyph.NEXT, colors.actionAccent, Modifier.size(17.dp))
         }
     }
 }

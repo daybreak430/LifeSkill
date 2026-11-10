@@ -1,6 +1,5 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,7 +40,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
     }
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -53,36 +52,41 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
             GlyphButton(Glyph.CLOSE, "关闭技能详情", app::back)
         }
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(15.dp),
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.matchParentSize()) {
-                        val radius = 82.dp.toPx()
-                        drawCircle(Brush.radialGradient(listOf(halo.copy(alpha = .22f), Color.Transparent), center, radius), radius)
-                        drawCircle(halo.copy(alpha = .22f), radius * .83f, style = Stroke(1.dp.toPx()))
-                        drawCircle(halo.copy(alpha = .10f), radius * .97f, style = Stroke(1.dp.toPx()))
+            Surface(Modifier.fillMaxWidth(), shape = PanelShape, color = Panel) {
+                Column(
+                    Modifier.padding(start = 16.dp, end = 16.dp, top = 5.dp, bottom = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(Modifier.fillMaxWidth().height(134.dp), contentAlignment = Alignment.Center) {
+                        Canvas(Modifier.matchParentSize()) {
+                            val radius = 65.dp.toPx()
+                            drawCircle(Brush.radialGradient(listOf(halo.copy(alpha = .18f), Color.Transparent), center, radius), radius)
+                            drawCircle(halo.copy(alpha = .16f), radius * .83f, style = Stroke(1.dp.toPx()))
+                        }
+                        SkillMedallion(skill.displayIcon, state, 86.dp)
                     }
-                    SkillMedallion(skill.displayIcon, state, 106.dp)
+                    Text(skill.name, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+                    Surface(Modifier.padding(top = 8.dp), shape = CircleShape, color = halo.copy(alpha = .10f)) {
+                        Text(mastery, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = halo,
+                            style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                    }
                 }
-                Text(skill.name, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
-                Text(
-                    mastery, Modifier.padding(top = 7.dp), color = halo,
-                    style = MaterialTheme.typography.labelMedium,
-                )
             }
             Surface(
-                shape = RoundedCornerShape(16.dp), color = Panel, border = BorderStroke(1.dp, Line),
-                modifier = Modifier.fillMaxWidth(),
+                shape = PanelShape, color = Panel,
+                modifier = Modifier.fillMaxWidth().panelShadow(),
             ) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("技能说明", style = MaterialTheme.typography.titleMedium, color = Gold)
+                    Text("技能说明", style = MaterialTheme.typography.titleMedium)
                     LessonMarkdown(skill.goal)
                 }
             }
             if (prerequisites.isNotEmpty()) {
-                Text("前置技能", style = MaterialTheme.typography.titleMedium)
+                Text("前置技能", Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium)
                 prerequisites.forEach { entry ->
                     EntryTile(entry, library.skillState(entry.id), { app.open(Route.entry(entry)) })
                 }

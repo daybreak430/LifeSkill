@@ -158,7 +158,7 @@ private fun AnnotatedString.Builder.appendChildren(parent: Node, colors: ColorSc
 
 @Composable
 private fun CodeBlock(code: String) {
-    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = ControlShape, color = Ground) {
         Text(
             code.trimEnd(), Modifier.horizontalScroll(rememberScrollState()).padding(10.dp),
             fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, color = Steel,
@@ -168,7 +168,7 @@ private fun CodeBlock(code: String) {
 
 @Composable
 private fun LessonTable(table: TableBlock) {
-    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = ControlShape, color = Ground) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             table.children().forEach { section ->
                 val header = section is TableHead
@@ -183,7 +183,7 @@ private fun LessonTable(table: TableBlock) {
                             )
                         }
                     }
-                    HorizontalDivider(color = Line)
+                    HorizontalDivider(color = Line.copy(alpha = .62f))
                 }
             }
         }
@@ -205,7 +205,7 @@ private fun FlowBlock(flow: LessonFlow) {
             }
         }
     }
-    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = ControlShape, color = Ground) {
         Box(Modifier.horizontalScroll(rememberScrollState()).padding(8.dp)) {
             Box(Modifier.size(column * columns, row * (flow.tiers.size - 1) + stepHeight)) {
                 Canvas(Modifier.matchParentSize()) {

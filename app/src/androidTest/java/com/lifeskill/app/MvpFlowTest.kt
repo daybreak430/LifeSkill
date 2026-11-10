@@ -2,6 +2,7 @@ package com.lifeskill.app
 
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.click
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -74,6 +76,11 @@ class MvpFlowTest {
             ui.onNodeWithText("深色").performClick().assertIsSelected()
             assertEquals(AppearanceMode.DARK, settings.load())
             assertTrue(!lightStatusBar())
+            val titleLayout = mutableListOf<TextLayoutResult>()
+            ui.onNodeWithText("设置").performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
+                assertTrue(it(titleLayout))
+            }
+            assertTrue(titleLayout.single().layoutInput.style.color.luminance() > .7f)
             ui.activityRule.scenario.recreate()
             await("外观")
             ui.onNodeWithText("深色").assertIsSelected()
