@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -125,35 +126,39 @@ private fun LessonBlock(node: Node) {
 
 private fun Node.children(): Sequence<Node> = generateSequence(firstChild) { it.next }
 
-private fun Node.richText(): AnnotatedString = buildAnnotatedString { appendChildren(this@richText) }
+@Composable
+private fun Node.richText(): AnnotatedString {
+    val colors = MaterialTheme.colorScheme
+    return buildAnnotatedString { appendChildren(this@richText, colors) }
+}
 
-private fun AnnotatedString.Builder.appendChildren(parent: Node) {
+private fun AnnotatedString.Builder.appendChildren(parent: Node, colors: ColorScheme) {
     for (node in parent.children()) {
         when (node) {
             is PlainText -> append(node.literal)
             is SoftLineBreak, is HardLineBreak -> append("\n")
-            is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Raised, color = Gold)) {
+            is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceVariant, color = colors.primary)) {
                 append(node.literal)
             }
-            is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendChildren(node) }
-            is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendChildren(node) }
+            is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendChildren(node, colors) }
+            is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendChildren(node, colors) }
             is Link -> {
                 val url = runCatching { URI(node.destination) }.getOrNull()
                 if (url != null && url.scheme in listOf("https", "http") && !url.host.isNullOrBlank()) {
                     withLink(LinkAnnotation.Url(node.destination, TextLinkStyles(
-                        SpanStyle(color = Steel, textDecoration = TextDecoration.Underline),
-                    ))) { appendChildren(node) }
-                } else appendChildren(node)
+                        SpanStyle(color = colors.secondary, textDecoration = TextDecoration.Underline),
+                    ))) { appendChildren(node, colors) }
+                } else appendChildren(node, colors)
             }
             is HtmlInline -> Unit
-            else -> appendChildren(node)
+            else -> appendChildren(node, colors)
         }
     }
 }
 
 @Composable
 private fun CodeBlock(code: String) {
-    Surface(shape = RoundedCornerShape(9.dp), color = Night, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
         Text(
             code.trimEnd(), Modifier.horizontalScroll(rememberScrollState()).padding(10.dp),
             fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, color = Steel,
@@ -163,12 +168,12 @@ private fun CodeBlock(code: String) {
 
 @Composable
 private fun LessonTable(table: TableBlock) {
-    Surface(shape = RoundedCornerShape(9.dp), color = Night, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             table.children().forEach { section ->
                 val header = section is TableHead
                 section.children().filterIsInstance<TableRow>().forEach { row ->
-                    Row(Modifier.background(if (header) Raised else Night)) {
+                    Row(Modifier.background(if (header) Raised else Ground)) {
                         row.children().filterIsInstance<TableCell>().forEach { cell ->
                             Text(
                                 cell.richText(), Modifier.width(118.dp).padding(horizontal = 9.dp, vertical = 8.dp),
@@ -187,6 +192,7 @@ private fun LessonTable(table: TableBlock) {
 
 @Composable
 private fun FlowBlock(flow: LessonFlow) {
+    val arrowColor = Steel
     val stepWidth = 104.dp
     val stepHeight = 56.dp
     val column = 120.dp
@@ -199,7 +205,7 @@ private fun FlowBlock(flow: LessonFlow) {
             }
         }
     }
-    Surface(shape = RoundedCornerShape(9.dp), color = Night, border = BorderStroke(1.dp, Line)) {
+    Surface(shape = RoundedCornerShape(9.dp), color = Ground, border = BorderStroke(1.dp, Line)) {
         Box(Modifier.horizontalScroll(rememberScrollState()).padding(8.dp)) {
             Box(Modifier.size(column * columns, row * (flow.tiers.size - 1) + stepHeight)) {
                 Canvas(Modifier.matchParentSize()) {
@@ -215,10 +221,10 @@ private fun FlowBlock(flow: LessonFlow) {
                         drawPath(Path().apply {
                             moveTo(from.x, from.y)
                             cubicTo(from.x, middle, to.x, middle, to.x, to.y)
-                        }, Steel, style = Stroke(1.2.dp.toPx()))
+                        }, arrowColor, style = Stroke(1.2.dp.toPx()))
                         val tip = 4.dp.toPx()
-                        drawLine(Steel, to - Offset(tip, tip), to, 1.2.dp.toPx())
-                        drawLine(Steel, to + Offset(tip, -tip), to, 1.2.dp.toPx())
+                        drawLine(arrowColor, to - Offset(tip, tip), to, 1.2.dp.toPx())
+                        drawLine(arrowColor, to + Offset(tip, -tip), to, 1.2.dp.toPx())
                     }
                 }
                 flow.arrows.forEach { edge ->
@@ -229,7 +235,7 @@ private fun FlowBlock(flow: LessonFlow) {
                             label, Modifier.offset(
                                 x = column * ((fromX + toX + 1) / 2) + 4.dp,
                                 y = row * ((fromY + toY) / 2f) + stepHeight / 2 - 9.dp,
-                            ).background(Night).padding(horizontal = 2.dp),
+                            ).background(Ground).padding(horizontal = 2.dp),
                             style = MaterialTheme.typography.labelMedium, color = Gold,
                         )
                     }

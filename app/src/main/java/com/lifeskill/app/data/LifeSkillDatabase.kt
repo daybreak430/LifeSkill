@@ -142,7 +142,11 @@ internal abstract class SkillDao {
     @Query("SELECT * FROM turns WHERE chatId = :chatId AND exerciseId = :exerciseId AND kind = 'EXERCISE' LIMIT 1")
     abstract suspend fun exercise(chatId: String, exerciseId: String): TurnRow?
 
-    @Query("SELECT * FROM turns WHERE chatId = :chatId AND contentVersion = :version AND speaker = 'ASSISTANT' AND kind != 'OFF_TOPIC' ORDER BY sequence DESC LIMIT 1")
+    @Query("""
+        SELECT * FROM turns WHERE chatId = :chatId AND contentVersion = :version
+        AND (kind = 'RESTART' OR (speaker = 'ASSISTANT' AND kind != 'OFF_TOPIC'))
+        ORDER BY sequence DESC LIMIT 1
+    """)
     abstract suspend fun latestTutorTurn(chatId: String, version: Long): TurnRow?
 
     @Query("SELECT * FROM turns WHERE id = :id AND chatId = :chatId")

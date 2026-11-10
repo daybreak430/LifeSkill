@@ -18,6 +18,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -26,12 +30,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Mastery
 
 @Composable
-internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
+internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, tutor: ChatViewModel) {
+    val chatStatus by tutor.status.collectAsStateWithLifecycle()
+    val halo = if (skill.lit) Gold else Steel
+    var showRestart by rememberSaveable { mutableStateOf(false) }
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
     val mastery = when (skill.mastery) {
         Mastery.UNLIT -> "待学习"
@@ -58,11 +66,10 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
                     Canvas(Modifier.matchParentSize()) {
-                        val tint = if (skill.lit) Gold else Steel
                         val radius = 82.dp.toPx()
-                        drawCircle(Brush.radialGradient(listOf(tint.copy(alpha = .22f), Color.Transparent), center, radius), radius)
-                        drawCircle(tint.copy(alpha = .22f), radius * .83f, style = Stroke(1.dp.toPx()))
-                        drawCircle(tint.copy(alpha = .10f), radius * .97f, style = Stroke(1.dp.toPx()))
+                        drawCircle(Brush.radialGradient(listOf(halo.copy(alpha = .22f), Color.Transparent), center, radius), radius)
+                        drawCircle(halo.copy(alpha = .22f), radius * .83f, style = Stroke(1.dp.toPx()))
+                        drawCircle(halo.copy(alpha = .10f), radius * .97f, style = Stroke(1.dp.toPx()))
                     }
                     SkillMedallion(skill.displayIcon, skill.lit, 106.dp)
                 }
@@ -96,9 +103,24 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
                 "学习技能", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
                 Modifier.fillMaxWidth(), primary = true,
             )
-            TextButton(onClick = { app.setLit(skill, !skill.lit) }) {
-                Text(if (skill.lit) "取消点亮" else "手动点亮", color = Muted)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = { app.setLit(skill, !skill.lit) }) {
+                    Text(if (skill.lit) "取消点亮" else "手动点亮", color = Muted)
+                }
+                TextButton(onClick = { showRestart = true }, enabled = !chatStatus.working) {
+                    Text("重新学习")
+                }
             }
         }
+    }
+    if (showRestart) {
+        RestartLessonDialog(
+            onDismiss = { showRestart = false },
+            onStart = { requirements ->
+                showRestart = false
+                tutor.restartLesson(requirements)
+                app.open(Route(Page.TUTOR, skill.id))
+            },
+        )
     }
 }

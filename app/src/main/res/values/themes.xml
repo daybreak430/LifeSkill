@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.LifeSkill" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F7F5F0</item>
+        <item name="android:colorAccent">#82520E</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

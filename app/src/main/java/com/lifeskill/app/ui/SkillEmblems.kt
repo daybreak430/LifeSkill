@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import com.lifeskill.app.model.EntryIcon
@@ -17,12 +17,14 @@ internal val EntryIcon.glyph get() = Glyph.valueOf(name)
 @Composable
 internal fun SkillMedallion(icon: EntryIcon, lit: Boolean, diameter: Dp) {
     val tint = if (lit) Gold else Steel
+    val centerColor = if (lit) GoldGround else Raised
+    val edgeColor = if (lit) lerp(GoldGround, Ground, .44f) else Panel
     Box(Modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val radius = size.minDimension / 2
             drawCircle(
                 Brush.radialGradient(
-                    listOf(if (lit) GoldGround else Raised, if (lit) Color(0xFF221910) else Panel),
+                    listOf(centerColor, edgeColor),
                     center = center, radius = radius,
                 ),
                 radius = radius,

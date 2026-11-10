@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -18,35 +20,57 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val Night = Color(0xFF10141B)
-internal val Panel = Color(0xFF191F29)
-internal val Raised = Color(0xFF222B39)
-internal val Line = Color(0xFF344154)
-internal val Ink = Color(0xFFF1F3F5)
-internal val Muted = Color(0xFFAEBAC9)
-internal val Steel = Color(0xFF96B1D0)
-internal val Gold = Color(0xFFF6C477)
-internal val GoldGround = Color(0xFF3A2C1D)
+internal val Ground: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
+internal val Panel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surface
+internal val Raised: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
+internal val Line: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant
+internal val Ink: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+internal val Muted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+internal val Steel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.secondary
+internal val Gold: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+internal val GoldGround: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primaryContainer
 
-private val Palette = darkColorScheme(
-    primary = Gold,
+private val DarkPalette = darkColorScheme(
+    primary = Color(0xFFF6C477),
     onPrimary = Color(0xFF2C1C0A),
-    primaryContainer = GoldGround,
-    onPrimaryContainer = Gold,
-    secondary = Steel,
-    onSecondary = Night,
-    secondaryContainer = Raised,
-    onSecondaryContainer = Ink,
-    background = Night,
-    onBackground = Ink,
-    surface = Panel,
-    onSurface = Ink,
-    surfaceVariant = Raised,
-    onSurfaceVariant = Muted,
-    outline = Line,
-    outlineVariant = Line,
-    surfaceContainer = Panel,
-    surfaceContainerHigh = Raised,
+    primaryContainer = Color(0xFF3A2C1D),
+    onPrimaryContainer = Color(0xFFF6C477),
+    secondary = Color(0xFF96B1D0),
+    onSecondary = Color(0xFF10141B),
+    secondaryContainer = Color(0xFF222B39),
+    onSecondaryContainer = Color(0xFFF1F3F5),
+    background = Color(0xFF10141B),
+    onBackground = Color(0xFFF1F3F5),
+    surface = Color(0xFF191F29),
+    onSurface = Color(0xFFF1F3F5),
+    surfaceVariant = Color(0xFF222B39),
+    onSurfaceVariant = Color(0xFFAEBAC9),
+    outline = Color(0xFF8292A6),
+    outlineVariant = Color(0xFF344154),
+    surfaceContainer = Color(0xFF191F29),
+    surfaceContainerHigh = Color(0xFF222B39),
+)
+
+private val LightPalette = lightColorScheme(
+    primary = Color(0xFF82520E),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFE9C7),
+    onPrimaryContainer = Color(0xFF5D3702),
+    secondary = Color(0xFF365B80),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFDCE7F2),
+    onSecondaryContainer = Color(0xFF243A50),
+    background = Color(0xFFF7F5F0),
+    onBackground = Color(0xFF222731),
+    surface = Color(0xFFFFFCF8),
+    onSurface = Color(0xFF222731),
+    surfaceVariant = Color(0xFFE8EDF3),
+    onSurfaceVariant = Color(0xFF49576A),
+    outline = Color(0xFF71675D),
+    outlineVariant = Color(0xFFCDC6BB),
+    surfaceContainer = Color(0xFFF7F1E8),
+    surfaceContainerHigh = Color(0xFFF0EAE1),
+    surfaceContainerHighest = Color(0xFFE9E1D6),
 )
 
 private val Type = Typography(
@@ -61,13 +85,13 @@ private val Type = Typography(
 )
 
 @Composable
-internal fun LifeSkillTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = Palette, typography = Type, content = content)
+internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = if (dark) DarkPalette else LightPalette, typography = Type, content = content)
 }
 
 internal enum class Glyph {
     TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, FIT, PLUS, MINUS,
-    WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS,
+    WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS, RESTART,
 }
 
 @Composable
@@ -137,6 +161,13 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
             Glyph.CLOSE -> {
                 line(6, 6, 18, 18)
                 line(18, 6, 6, 18)
+            }
+            Glyph.RESTART -> {
+                drawArc(
+                    color, -138f, 306f, false, at(4, 4), Size(16 * unit, 16 * unit),
+                    style = Stroke(1.65f * unit, cap = StrokeCap.Round),
+                )
+                path(3, 5, 3, 11, 9, 11)
             }
             Glyph.BOOK -> {
                 path(12, 7, 8, 4, 3, 4, 3, 18, 8, 18, 12, 21, 16, 18, 21, 18, 21, 4, 16, 4, close = true)

@@ -14,7 +14,7 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 }
 
 enum class Speaker { USER, ASSISTANT }
-enum class TurnKind { MESSAGE, CHECK, EXERCISE, PASSED, RETRY, OFF_TOPIC, CREATED }
+enum class TurnKind { MESSAGE, CHECK, EXERCISE, PASSED, RETRY, OFF_TOPIC, CREATED, RESTART }
 
 data class Turn(
     val id: String,
@@ -35,6 +35,9 @@ data class Exercise(val id: String, val question: String, val choices: List<Stri
 fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
+    fun currentLesson(history: List<Turn>): List<Turn> =
+        history.drop(history.indexOfLast { it.kind == TurnKind.RESTART }.coerceAtLeast(0))
+
     fun pendingExercise(history: List<Turn>): Exercise? {
         val last = history.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
         if (last?.kind != TurnKind.EXERCISE && last?.kind != TurnKind.RETRY) return null

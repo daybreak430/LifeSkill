@@ -9,6 +9,8 @@ import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.EntryEdit
+import com.lifeskill.app.data.AppearanceMode
+import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
@@ -59,7 +61,13 @@ internal data class Editor(
     val iconError: String? = null,
 )
 
-internal class AppViewModel(private val container: AppContainer, private val state: SavedStateHandle) : ViewModel() {
+internal class AppViewModel(
+    private val container: AppContainer,
+    private val state: SavedStateHandle,
+    private val appearanceSettings: AppearanceSettings,
+) : ViewModel() {
+    private val _appearance = MutableStateFlow(appearanceSettings.load())
+    val appearance = _appearance.asStateFlow()
     private val routes = state.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
     val route = routes.map { Route.decode(it.last()) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, Route.decode(routes.value.last()))
@@ -77,6 +85,12 @@ internal class AppViewModel(private val container: AppContainer, private val sta
     val loadError = _loadError.asStateFlow()
 
     init { load() }
+
+    fun setAppearance(mode: AppearanceMode) {
+        if (_appearance.value == mode) return
+        appearanceSettings.save(mode)
+        _appearance.value = mode
+    }
 
     fun load() {
         _loadError.value = null
@@ -218,6 +232,7 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun send(text: String, check: Boolean = false) = run { repository.send(scope, text, check) }
+    fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
     fun retry() = run { repository.retry(scope) }
     fun discard(turn: Turn) = run { repository.discardPending(scope, turn.id) }
 

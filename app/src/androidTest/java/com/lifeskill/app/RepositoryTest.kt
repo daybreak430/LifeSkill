@@ -314,6 +314,70 @@ class RepositoryTest {
         }
     }
 
+    @Test fun restartingUsesCurrentRequirementsAndIsolatesOldHistoryAndQuiz() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "重学测试树")
+        val skill = add(tree, EntryKind.SKILL, "重学测试节点")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        container.library.setLit(skill.id, true)
+        ai.reply("""{"kind":"teach","reply":"旧版讲法"}""")
+        container.conversations.send(scope, "旧版要求")
+        ai.reply("""{"kind":"exercise","reply":"旧版练习"}""")
+        container.conversations.send(scope, "", check = true)
+        val oldQuiz = container.conversations.watch(scope).first().last()
+
+        ai.enqueue { throw RuleViolation("临时断网") }
+        expectRule { container.conversations.restartLesson(scope, "用账单举例") }
+        val restart = container.conversations.watch(scope).first().last()
+        assertEquals(TurnKind.RESTART, restart.kind)
+
+        ai.enqueue { messages ->
+            assertEquals(2, messages.size)
+            assertTrue(messages.first().text.contains(skill.goal))
+            assertTrue(messages.first().text.contains("当前待答练习：null"))
+            assertTrue(messages.last().text.contains("用账单举例"))
+            """{"kind":"off_topic","reply":"先回到这个技能。"}"""
+        }
+        container.conversations.retry(scope)
+
+        ai.enqueue { messages ->
+            assertTrue(messages.none { "旧版" in it.text || oldQuiz.id in it.text })
+            assertTrue(messages.first().text.contains("当前待答练习：null"))
+            """{"kind":"teach","reply":"用账单重新讲解"}"""
+        }
+        container.conversations.send(scope, "请继续用账单解释")
+        val history = container.conversations.watch(scope).first()
+        assertEquals(listOf(restart.id), history.filter { it.kind == TurnKind.RESTART }.map { it.id })
+        assertTrue(history.any { it.id == oldQuiz.id })
+        assertEquals("用账单重新讲解", history.last().text)
+        assertEquals(Mastery.MANUAL, container.library.entry(skill.id)?.mastery)
+    }
+
+    @Test fun lateReplyFromBeforeRestartCannotEnterTheNewLesson() = runBlocking {
+        withTimeout(10_000) {
+            val direction = container.library.snapshot().childrenOf(null).first()
+            val tree = add(direction, EntryKind.TREE, "并发重学")
+            val skill = add(tree, EntryKind.SKILL, "开始新一轮")
+            val scope = ChatScope(ChatMode.TUTOR, skill.id)
+            val waiting = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            ai.enqueue {
+                waiting.complete(Unit)
+                release.await()
+                """{"kind":"teach","reply":"迟到的旧讲解"}"""
+            }
+            val old = async { container.conversations.send(scope, "旧请求") }
+            waiting.await()
+            ai.reply("""{"kind":"teach","reply":"新一轮讲解"}""")
+            container.conversations.restartLesson(scope, "")
+            release.complete(Unit)
+            old.await()
+            val history = container.conversations.watch(scope).first()
+            assertEquals(listOf(TurnKind.MESSAGE, TurnKind.RESTART, TurnKind.MESSAGE), history.map { it.kind })
+            assertEquals("新一轮讲解", history.last().text)
+        }
+    }
+
     private suspend fun <T> withDiskDatabase(file: String, action: suspend (LifeSkillDatabase) -> T): T {
         val disk = Room.databaseBuilder(context, LifeSkillDatabase::class.java, file).build()
         return try {

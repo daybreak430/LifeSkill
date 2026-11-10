@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,11 +56,13 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
     val pending = history.lastOrNull()?.takeIf { it.speaker == Speaker.USER }
-    val exercise = remember(history, owner?.contentVersion) {
-        TutorRules.pendingExercise(history.filter { it.contentVersion == owner?.contentVersion })
+    val currentLesson = remember(history, owner?.contentVersion) {
+        if (tutor) TutorRules.currentLesson(history.filter { it.contentVersion == owner?.contentVersion }) else emptyList()
     }
-    val lastQuizTurn = history.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
+    val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
+    val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     var draft by remember(scope) { mutableStateOf("") }
+    var showRestart by rememberSaveable { mutableStateOf(false) }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -74,7 +77,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(if (tutor) "AI 老师" else "AI 生成", app::back, subtitle = owner?.name) {
-            GlyphButton(Glyph.SETTINGS, "模型设置", { app.open(Route(Page.SETTINGS)) })
+            if (tutor) GlyphButton(Glyph.RESTART, "重新学习", { showRestart = true }, enabled = !status.working)
+            GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
         }
         HorizontalDivider(color = Line.copy(alpha = .6f))
         LazyColumn(
@@ -163,6 +167,17 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             }
         }
     }
+    if (showRestart) {
+        RestartLessonDialog(
+            onDismiss = { showRestart = false },
+            onStart = { requirements ->
+                showRestart = false
+                keyboard?.hide()
+                chat.restartLesson(requirements)
+                draft = ""
+            },
+        )
+    }
 }
 
 @Composable
@@ -175,6 +190,20 @@ private fun ChatBubble(
     onAnswer: (String) -> Unit,
     open: (Entry) -> Unit,
 ) {
+    if (turn.kind == TurnKind.RESTART) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            HorizontalDivider(color = Line)
+            Text("新一轮学习", style = MaterialTheme.typography.labelLarge, color = Gold)
+            if (turn.text.isNotEmpty()) {
+                Text(turn.text, style = MaterialTheme.typography.bodyMedium, color = Muted)
+            }
+        }
+        return
+    }
     val user = turn.speaker == Speaker.USER
     val prominent = turn.kind == TurnKind.CREATED || turn.kind == TurnKind.PASSED
     Column(
@@ -254,7 +283,11 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: () -> Unit, di
                 Row {
                     TextButton(onClick = retry) { Text("重试") }
                     TextButton(onClick = { discard(pending) }) {
-                        Text(if (pending.kind == TurnKind.CHECK) "撤回检验" else "撤回编辑")
+                        Text(when (pending.kind) {
+                            TurnKind.CHECK -> "撤回检验"
+                            TurnKind.RESTART -> "撤回重学"
+                            else -> "撤回编辑"
+                        })
                     }
                 }
             }

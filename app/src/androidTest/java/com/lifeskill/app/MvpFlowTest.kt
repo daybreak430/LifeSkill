@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
@@ -26,11 +27,15 @@ import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.click
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.data.EntryEdit
+import com.lifeskill.app.data.AppearanceMode
+import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.RuleViolation
@@ -48,6 +53,29 @@ class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
 
+    @Test fun appearanceSelectionUpdatesSystemBarsAndSavesLocally() {
+        val settings = AppearanceSettings(ui.activity.applicationContext)
+        val original = settings.load()
+        try {
+            await("本职工作")
+            ui.onNodeWithContentDescription("设置").performClick()
+            await("外观")
+            ui.onNodeWithText("浅色").performClick().assertIsSelected()
+            assertEquals(AppearanceMode.LIGHT, settings.load())
+            assertTrue(lightStatusBar())
+            ui.onNodeWithText("深色").performClick().assertIsSelected()
+            assertEquals(AppearanceMode.DARK, settings.load())
+            assertTrue(!lightStatusBar())
+            ui.activityRule.scenario.recreate()
+            await("外观")
+            ui.onNodeWithText("深色").assertIsSelected()
+            ui.onNodeWithText("自动").performClick().assertIsSelected()
+            assertEquals(AppearanceMode.AUTO, settings.load())
+        } finally {
+            settings.save(original)
+        }
+    }
+
     @Test fun chatKeepsComposerVisibleWithKeyboardAndBackClosesItFirst() {
         await("AI 生成技能树")
         ui.onNodeWithText("AI 生成技能树").performClick()
@@ -60,9 +88,35 @@ class MvpFlowTest {
         ui.onNodeWithText("AI 生成").assertIsDisplayed()
     }
 
+    @Test fun conflictingDependenciesRemainVisibleInTheReferenceList() {
+        await("本职工作")
+        runBlocking {
+            val library = fixture.container.library
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "连线分支"))
+            val left = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "左起点", "基础"))
+            val right = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "右起点", "基础"))
+            val parents = setOf(left.id, right.id)
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "左下游", "综合应用", parents))
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "右下游", "综合应用", parents))
+        }
+        ui.onNodeWithText("本职工作").performClick()
+        await("连线分支")
+        ui.onNodeWithText("连线分支").performClick()
+        await("关联 1")
+        ui.onNodeWithText("关联 1").performClick()
+        await("前置关联")
+        await("右起点 → 左下游", substring = true)
+        ui.onNodeWithText("关闭").performClick()
+        ui.onNodeWithContentDescription("左下游").performTouchInput { click() }
+        await("建议先学")
+        await("右起点")
+        await("左起点")
+    }
+
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
         await("本职工作")
-        ui.onNodeWithContentDescription("模型设置").performClick()
+        ui.onNodeWithContentDescription("设置").performClick()
         await("deepseek-flash")
         ui.onNodeWithText("MiniMax").performClick()
         await("MiniMax-M3.1-Flash")
@@ -209,6 +263,23 @@ class MvpFlowTest {
         await("已点亮技能点", substring = true)
         pressBack()
         await("已点亮 · AI 检验通过")
+        fixture.ai.enqueue { messages ->
+            assertEquals(2, messages.size)
+            assertTrue(messages.last().text.contains("改用账单举例"))
+            """{"kind":"teach","reply":"从核对账单开始讲。"}"""
+        }
+        ui.onNodeWithText("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("开始新一轮")
+        ui.onNodeWithTag("restart-requirements").performTextInput("改用账单举例")
+        ui.onNodeWithText("开始新一轮").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("新一轮学习")
+        await("从核对账单开始讲。")
+        ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("开始新一轮")
+        ui.onNodeWithText("取消").performClick()
+        await("从核对账单开始讲。")
+        pressBack()
+        await("已点亮 · AI 检验通过")
         pressBack()
         await("1 / 2 已点亮")
     }
@@ -241,5 +312,9 @@ class MvpFlowTest {
 
     private fun imeVisible(): Boolean = ui.runOnUiThread {
         ViewCompat.getRootWindowInsets(ui.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    }
+
+    private fun lightStatusBar(): Boolean = ui.runOnUiThread {
+        WindowCompat.getInsetsController(ui.activity.window, ui.activity.window.decorView).isAppearanceLightStatusBars
     }
 }

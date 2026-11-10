@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -30,19 +31,33 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.data.AppearanceMode
 
 @Composable
 internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
     val state by model.status.collectAsStateWithLifecycle()
+    val appearance by app.appearance.collectAsStateWithLifecycle()
     val config = state.config
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(model) { model.load() }
     Column(Modifier.fillMaxSize()) {
-        PageHeader("模型设置", app::back)
+        PageHeader("设置", app::back)
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            Text("外观", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppearanceMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = appearance == mode,
+                        onClick = { app.setAppearance(mode) },
+                        label = { Text(mode.label) },
+                    )
+                }
+            }
+            HorizontalDivider(color = Line)
+            Text("模型设置", style = MaterialTheme.typography.titleMedium)
             if (config == null) {
                 if (state.working) Loading(Modifier.fillMaxWidth().padding(20.dp))
                 else if (state.error) TextButton(onClick = { model.load() }) { Text("重新加载模型设置") }

@@ -6,6 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
+import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.ui.LifeSkillApp
 
 class MainActivity : ComponentActivity() {
@@ -16,6 +19,14 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         val container = (application as LifeSkillApplication).container
-        setContent { LifeSkillApp(container) }
+        val appearance = AppearanceSettings(applicationContext)
+        setContent {
+            LifeSkillApp(container, appearance) { dark, background ->
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+                window.decorView.setBackgroundColor(background.toArgb())
+            }
+        }
     }
 }

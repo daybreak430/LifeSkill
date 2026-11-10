@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
@@ -32,6 +33,7 @@ import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
+import com.lifeskill.app.data.ConversationRepository
 
 @Composable
 internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
@@ -174,5 +176,33 @@ internal fun DeletionDialog(entry: Entry, library: Library, busy: Boolean, app: 
             }
         },
         dismissButton = { TextButton(onClick = app::cancelDelete, enabled = !busy) { Text("取消") } },
+    )
+}
+
+@Composable
+internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Unit) {
+    var requirements by remember { mutableStateOf("") }
+    val exceedsLimit = requirements.trim().length > ConversationRepository.INPUT_LIMIT
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("重新学习") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("开启新一轮讲解，保留学习记录和点亮进度。")
+                OutlinedTextField(
+                    requirements, { requirements = it }, Modifier.fillMaxWidth().testTag("restart-requirements"),
+                    label = { Text("本次学习要求（选填）") },
+                    placeholder = { Text("例如：按零基础讲，用一个实例演示") },
+                    maxLines = 4, isError = exceedsLimit,
+                    supportingText = if (exceedsLimit) {
+                        { Text("最多 ${ConversationRepository.INPUT_LIMIT} 个字符") }
+                    } else null,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onStart(requirements) }, enabled = !exceedsLimit) { Text("开始新一轮") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }

@@ -1,6 +1,8 @@
 package com.lifeskill.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,26 +13,35 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lifeskill.app.AppContainer
+import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 
 @Composable
-internal fun LifeSkillApp(container: AppContainer) {
-    val factory = remember(container) {
-        viewModelFactory { initializer { AppViewModel(container, createSavedStateHandle()) } }
+internal fun LifeSkillApp(
+    container: AppContainer,
+    appearanceSettings: AppearanceSettings,
+    onSystemBars: (Boolean, Color) -> Unit,
+) {
+    val factory = remember(container, appearanceSettings) {
+        viewModelFactory { initializer { AppViewModel(container, createSavedStateHandle(), appearanceSettings) } }
     }
     val app: AppViewModel = viewModel(factory = factory)
+    val appearance by app.appearance.collectAsStateWithLifecycle()
+    val dark = appearance.isDark(isSystemInDarkTheme())
     val library by app.library.collectAsStateWithLifecycle()
     val route by app.route.collectAsStateWithLifecycle()
     val editor by app.editor.collectAsStateWithLifecycle()
@@ -48,10 +59,12 @@ internal fun LifeSkillApp(container: AppContainer) {
         app.consumeNotice(text)
     }
 
-    LifeSkillTheme {
+    LifeSkillTheme(dark) {
+        val background = Ground
+        SideEffect { onSystemBars(dark, background) }
         Scaffold(
-            modifier = Modifier.fillMaxSize().safeDrawingPadding(),
-            containerColor = Night, contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.fillMaxSize().background(background).safeDrawingPadding(),
+            containerColor = background, contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
@@ -67,7 +80,10 @@ internal fun LifeSkillApp(container: AppContainer) {
                             Page.HOME -> HomeScreen(current, app)
                             Page.DIRECTION -> entry?.let { DirectionScreen(it, current, app) }
                             Page.TREE -> entry?.let { SkillTreeScreen(it, current, app) }
-                            Page.SKILL -> entry?.let { SkillScreen(it, current, app) }
+                            Page.SKILL -> entry?.let {
+                                val tutor = conversationModel(container, ChatScope(ChatMode.TUTOR, it.id))
+                                SkillScreen(it, current, app, tutor)
+                            }
                             Page.SETTINGS -> {
                                 val model: SettingsViewModel = viewModel(
                                     factory = remember(container) {
@@ -79,13 +95,7 @@ internal fun LifeSkillApp(container: AppContainer) {
                             Page.GENERATE, Page.TUTOR -> {
                                 val mode = if (route.page == Page.GENERATE) ChatMode.GENERATE else ChatMode.TUTOR
                                 val scope = ChatScope(mode, route.id)
-                                val chat: ChatViewModel = viewModel(
-                                    key = scope.id,
-                                    factory = remember(container, scope) {
-                                        viewModelFactory { initializer { ChatViewModel(container, scope) } }
-                                    },
-                                )
-                                ChatScreen(scope, current, app, chat)
+                                ChatScreen(scope, current, app, conversationModel(container, scope))
                             }
                         }
                     }
@@ -96,3 +106,9 @@ internal fun LifeSkillApp(container: AppContainer) {
         }
     }
 }
+
+@Composable
+private fun conversationModel(container: AppContainer, scope: ChatScope): ChatViewModel = viewModel(
+    key = scope.id,
+    factory = remember(container, scope) { viewModelFactory { initializer { ChatViewModel(container, scope) } } },
+)

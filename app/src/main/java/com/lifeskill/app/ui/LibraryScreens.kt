@@ -53,7 +53,7 @@ internal fun HomeScreen(library: Library, app: AppViewModel) {
             ) {
                 Emblem(Glyph.TREE)
                 Text("LifeSkill", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                GlyphButton(Glyph.SETTINGS, "模型设置", { app.open(Route(Page.SETTINGS)) })
+                GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
             }
         }
         item { ProgressCard(library.progress(), library.entries.count { it.kind == EntryKind.TREE }) }
@@ -130,6 +130,9 @@ internal fun EntryMenu(entry: Entry, app: AppViewModel) {
 
 @Composable
 private fun ProgressCard(progress: Progress, treeCount: Int) {
+    val line = Line
+    val steel = Steel
+    val gold = Gold
     Surface(shape = RoundedCornerShape(18.dp), color = Panel, border = BorderStroke(1.dp, Line)) {
         Box(Modifier.fillMaxWidth()) {
             Canvas(Modifier.matchParentSize()) {
@@ -138,12 +141,12 @@ private fun ProgressCard(progress: Progress, treeCount: Int) {
                 val upper = center - Offset(gap * .9f, gap)
                 val lower = center + Offset(gap * .75f, gap)
                 val edge = center + Offset(gap * 1.75f, -gap * .85f)
-                drawLine(Line, upper, center, strokeWidth = 1.dp.toPx())
-                drawLine(Line, center, lower, strokeWidth = 1.dp.toPx())
-                drawLine(Line, center, edge, strokeWidth = 1.dp.toPx())
-                listOf(upper, lower, edge).forEach { drawCircle(Steel.copy(alpha = .32f), 3.dp.toPx(), it) }
-                drawCircle(Gold.copy(alpha = .26f), 13.dp.toPx(), center)
-                drawCircle(Gold, 4.dp.toPx(), center)
+                drawLine(line, upper, center, strokeWidth = 1.dp.toPx())
+                drawLine(line, center, lower, strokeWidth = 1.dp.toPx())
+                drawLine(line, center, edge, strokeWidth = 1.dp.toPx())
+                listOf(upper, lower, edge).forEach { drawCircle(steel.copy(alpha = .32f), 3.dp.toPx(), it) }
+                drawCircle(gold.copy(alpha = .26f), 13.dp.toPx(), center)
+                drawCircle(gold, 4.dp.toPx(), center)
             }
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("学习进度", color = Muted, style = MaterialTheme.typography.labelLarge)

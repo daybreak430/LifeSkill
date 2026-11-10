@@ -38,14 +38,23 @@ internal class ConversationRepository(
         val input = text.trim()
         if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内检验掌握。")
         if (!check && input.length !in 1..INPUT_LIMIT) throw RuleViolation("请输入 1–${INPUT_LIMIT} 个字符。")
+        val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
+        queueAndRespond(scope, kind, if (check) "检验掌握" else input)
+    }
+
+    suspend fun restartLesson(scope: ChatScope, requirements: String) {
+        if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内重新学习。")
+        val input = requirements.trim()
+        if (input.length > INPUT_LIMIT) throw RuleViolation("本次学习要求最多 ${INPUT_LIMIT} 个字符。")
+        queueAndRespond(scope, TurnKind.RESTART, input)
+    }
+
+    private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
-            if (lastPending(scope) != null) throw RuleViolation("请先处理上一条待回复消息。")
+            if (kind != TurnKind.RESTART && lastPending(scope) != null) throw RuleViolation("请先处理上一条待回复消息。")
             if (dao.chat(scope.id) == null) dao.insertChat(ChatRow(scope.id, scope.ownerId))
-            val turn = Turn(
-                newId(), Speaker.USER, if (check) TurnKind.CHECK else TurnKind.MESSAGE,
-                if (check) "检验掌握" else input, owner?.contentVersion ?: 0,
-            )
+            val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0)
             dao.insertTurn(turn.row(scope))
             turn.id
         }
@@ -70,9 +79,11 @@ internal class ConversationRepository(
             if (owner != null && owner.contentVersion != input.contentVersion) {
                 throw RuleViolation("学习内容已编辑，请重新发送这条消息。")
             }
-            val recent = dao.recentTurns(scope.id, CONTEXT_TURNS).asReversed()
-                .filter { it.contentVersion == input.contentVersion }
-                .map { it.toTurn() }
+            val recent = TutorRules.currentLesson(
+                dao.recentTurns(scope.id, CONTEXT_TURNS).asReversed()
+                    .filter { it.contentVersion == input.contentVersion }
+                    .map { it.toTurn() },
+            )
             val pending = if (scope.mode == ChatMode.TUTOR) {
                 val last = dao.latestTutorTurn(scope.id, input.contentVersion)?.toTurn()
                 val original = last?.exerciseId?.let { dao.exercise(scope.id, it)?.toTurn() }
@@ -174,7 +185,12 @@ internal class ConversationRepository(
             remaining >= 0
         }.asReversed().dropWhile { it.speaker != Speaker.USER }.map {
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
-            val text = if (it.kind == TurnKind.CHECK) "【App 发起检验掌握】请出一道当前技能练习。" else it.modelText
+            val text = when (it.kind) {
+                TurnKind.CHECK -> "【App 发起检验掌握】请出一道当前技能练习。"
+                TurnKind.RESTART -> "【App 发起重新学习】请按当前技能说明重新组织这节课。" +
+                    if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
+                else -> it.modelText
+            }
             ModelMessage(role, text)
         }
     }
