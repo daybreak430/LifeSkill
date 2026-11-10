@@ -1,11 +1,15 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,7 +25,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +48,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -48,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
+import com.lifeskill.app.model.HomeStudy
+import com.lifeskill.app.model.HomeStudyState
 import com.lifeskill.app.model.Progress
 
 internal val LibraryTitle = TextStyle(
@@ -55,12 +70,30 @@ internal val LibraryTitle = TextStyle(
 )
 
 @Composable
-internal fun ContinueStudyCard(
-    skill: Entry, tree: Entry, progress: Progress, locked: Boolean, modifier: Modifier = Modifier, onContinue: () -> Unit,
+internal fun HomeStudyCard(
+    study: HomeStudy?, modifier: Modifier = Modifier, onAction: () -> Unit,
 ) {
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val heroShape = RoundedCornerShape(26.dp)
+    val title = when (study?.state) {
+        null -> "想学什么？"
+        HomeStudyState.COMPLETED -> study.tree.name
+        else -> study.skill.name
+    }
+    val context = when (study?.state) {
+        null -> null
+        HomeStudyState.NEXT -> "下一步 · ${study.tree.name}"
+        HomeStudyState.COMPLETED -> "已完成"
+        else -> study.tree.name
+    }
+    val action = when (study?.state) {
+        null -> "AI 生成技能树"
+        HomeStudyState.NEXT -> "开始学习"
+        HomeStudyState.LOCKED -> "查看技能"
+        HomeStudyState.COMPLETED -> "查看技能地图"
+        HomeStudyState.RESUME -> "继续学习"
+    }
     Box(modifier.fillMaxWidth().clipToBounds()) {
         Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = 11.dp, bottom = 16.dp)
             .rotate(-3f)
@@ -71,28 +104,39 @@ internal fun ContinueStudyCard(
             // 窄屏和大字号优先保留标题、进度与操作空间。
             val artWidth = if (maxWidth >= 328.dp && fontScale < 1.3f) minOf(maxWidth * .41f, 200.dp) else 0.dp
             if (artWidth > 0.dp) {
-                StudyMotif(skill.displayIcon.glyph, Modifier.align(Alignment.CenterEnd).width(artWidth).height(156.dp))
+                val glyph = when (study?.state) {
+                    null -> Glyph.TREE
+                    HomeStudyState.COMPLETED -> Glyph.CHECK
+                    else -> study.skill.displayIcon.glyph
+                }
+                StudyMotif(glyph, Modifier.align(Alignment.CenterEnd).width(artWidth).height(156.dp))
             }
             Column(
-                Modifier.fillMaxWidth().padding(start = 20.dp, end = maxOf(artWidth + 8.dp, 20.dp), top = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                Modifier.fillMaxWidth().heightIn(min = 166.dp)
+                    .padding(start = 20.dp, end = maxOf(artWidth + 8.dp, 20.dp), top = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterVertically),
             ) {
-                Text(
-                    tree.name, style = MaterialTheme.typography.bodyMedium, color = Muted,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                )
-                Text(skill.name, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SegmentedProgress(progress, Modifier.weight(1f), active = colors.route)
-                    Text(progress.label, style = MaterialTheme.typography.labelMedium, color = Muted)
+                if (context != null && study != null) {
+                    val highlighted = study.state == HomeStudyState.NEXT || study.state == HomeStudyState.COMPLETED
+                    Text(
+                        context, style = MaterialTheme.typography.bodyMedium, color = if (highlighted) Gold else Muted,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(title, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (study != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SegmentedProgress(study.progress, Modifier.weight(1f), active = colors.route)
+                        Text(study.progress.label, style = MaterialTheme.typography.labelMedium, color = Muted)
+                    }
                 }
                 LibraryAction(
-                    if (locked) "查看技能" else "继续学习", null, onContinue,
-                    Modifier.padding(top = 4.dp).widthIn(max = 158.dp * fontScale),
+                    action, null, onAction,
+                    Modifier.padding(top = 4.dp).widthIn(max = 178.dp * fontScale),
                     primary = true, trailing = true, primaryColor = Gold,
                 )
             }
@@ -157,6 +201,13 @@ internal fun LibrarySection(
 internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val tint = entryTint(entry)
     val colors = studyColors
+    // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
+    var seenFraction by rememberSaveable { mutableFloatStateOf(progress.fraction) }
+    val sweep = remember { Animatable(seenFraction) }
+    LaunchedEffect(progress.fraction) {
+        if (sweep.value != progress.fraction) sweep.animateTo(progress.fraction, tween(260))
+        seenFraction = progress.fraction
+    }
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
         shape = PanelShape,
@@ -179,8 +230,8 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
                     val bounds = Size(diameter, diameter)
                     val arc = Stroke(stroke, cap = StrokeCap.Round)
                     drawArc(colors.progressTrack, 180f, 180f, false, origin, bounds, style = arc)
-                    if (progress.lit > 0) {
-                        drawArc(tint, 180f, progress.fraction * 180f, false, origin, bounds, style = arc)
+                    if (sweep.value > 0f) {
+                        drawArc(tint, 180f, sweep.value * 180f, false, origin, bounds, style = arc)
                     }
                 }
                 Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 4.dp).size(21.dp))
@@ -193,6 +244,44 @@ internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier 
                 "${progress.lit}/${progress.total}",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"), color = Muted,
             )
+        }
+    }
+}
+
+@Composable
+internal fun CompactDirectionCard(
+    entry: Entry, modifier: Modifier = Modifier, onClick: () -> Unit, createTree: (() -> Unit)?,
+) {
+    val tint = entryTint(entry)
+    Surface(modifier.fillMaxWidth().panelShadow(), color = Panel, contentColor = Ink, shape = PanelShape) {
+        val open = Modifier.clickable(role = Role.Button, onClick = onClick)
+        Column(
+            (if (createTree == null) open else Modifier).heightIn(min = 104.dp).padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Row(
+                (if (createTree == null) Modifier else open).fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Emblem(entry.displayIcon.glyph, tint, tint.copy(alpha = .12f), diameter = 30.dp)
+                Text(
+                    entry.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (createTree == null) {
+                Text("暂无技能点", Modifier.padding(start = 41.dp, bottom = 9.dp),
+                    color = Muted, style = MaterialTheme.typography.labelMedium)
+            } else {
+                TextButton(onClick = createTree, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                    Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
+                    Text(
+                        "创建技能树",
+                        Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}创建技能树" },
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
         }
     }
 }
@@ -280,11 +369,22 @@ private fun SegmentedProgress(progress: Progress, modifier: Modifier = Modifier,
 private fun StudyMotif(glyph: Glyph, modifier: Modifier) {
     val colors = studyColors
     val panel = Panel
+    val grid = Steel.copy(alpha = .18f)
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val radius = 35.dp.toPx()
             val satellites = listOf(Offset(size.width * .22f, size.height * .27f),
                 Offset(size.width * .79f, size.height * .18f), Offset(size.width * .77f, size.height * .81f))
+            val step = 15.dp.toPx()
+            for (row in 1..(size.height / step).toInt()) {
+                for (column in 1..(size.width / step).toInt()) {
+                    drawCircle(grid, .55.dp.toPx(), Offset(column * step, row * step))
+                }
+            }
+            repeat(2) { index ->
+                drawCircle(colors.route.copy(alpha = .17f), radius * (1.5f + index * .62f),
+                    Offset(size.width, size.height * .84f), style = Stroke(.75.dp.toPx()))
+            }
             // 装饰只突出当前技能图标，外围圆点用于表现技能树意象。
             drawCircle(Brush.radialGradient(listOf(colors.heroGlow, Color.Transparent), center, radius * 2.18f),
                 radius = radius * 2.18f)

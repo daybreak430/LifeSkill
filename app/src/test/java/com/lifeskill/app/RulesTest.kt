@@ -6,6 +6,7 @@ import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Exercise
+import com.lifeskill.app.model.HomeStudyState
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Mastery
@@ -17,6 +18,7 @@ import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
+import com.lifeskill.app.model.homeStudy
 import com.lifeskill.app.model.unlocksSince
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -79,6 +81,30 @@ class RulesTest {
         assertEquals(first.id, cue.skillId)
         assertEquals(setOf(ready.id), cue.availableChildren)
         assertEquals(emptyList<Any>(), after.unlocksSince(after))
+    }
+
+    @Test fun homePrefersTheAvailableBranchAndStopsAtACompletedTree() {
+        val tree = Entry("tree", "direction", EntryKind.TREE, "技能树")
+        val root = Entry("root", tree.id, EntryKind.SKILL, "起点")
+        val other = root.copy(id = "other")
+        val locked = root.copy(id = "locked")
+        val next = root.copy(id = "next")
+        val edges = listOf(Edge(locked.id, root.id), Edge(locked.id, other.id), Edge(next.id, root.id))
+        val original = Library(listOf(tree, root, other, locked, next), edges)
+        assertEquals(HomeStudyState.RESUME, original.homeStudy(root)?.state)
+        assertEquals(HomeStudyState.LOCKED, original.homeStudy(locked)?.state)
+        assertNull(original.homeStudy(null))
+
+        val passed = root.copy(mastery = Mastery.AI)
+        val after = original.copy(entries = listOf(tree, passed, other, locked, next))
+        assertEquals(HomeStudyState.NEXT, after.homeStudy(root)?.state)
+        assertEquals(next.id, after.homeStudy(root)?.skill?.id)
+        val afterNext = after.copy(entries = listOf(tree, passed, other, locked, next.copy(mastery = Mastery.AI)))
+        assertEquals(other.id, afterNext.homeStudy(next)?.skill?.id)
+        val completed = original.copy(entries = listOf(tree, root, other, locked, next).map {
+            if (it.kind == EntryKind.SKILL) it.copy(mastery = Mastery.AI) else it
+        })
+        assertEquals(HomeStudyState.COMPLETED, completed.homeStudy(root)?.state)
     }
 
     @Test fun verdictRequiresTheActiveExerciseAndAnAnswer() {

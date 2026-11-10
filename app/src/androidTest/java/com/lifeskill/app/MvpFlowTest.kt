@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
@@ -179,6 +180,69 @@ class MvpFlowTest {
                 fillers.forEach { library.delete(it.id) }
             }
         }
+    }
+
+    @Test fun homeCreatesTreeAndLeadsToNextSkillThenCompletedMap() {
+        await("本职工作")
+        val library = fixture.container.library
+        val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "首页练习方向")) }
+        val grid = ui.onNodeWithTag("learning-directions")
+        val createTree = "为${direction.name}创建技能树"
+        try {
+            await(direction.name)
+            grid.performScrollToNode(hasContentDescription(createTree))
+            ui.onNodeWithContentDescription(createTree).performTouchInput { click() }
+            await("新增技能树")
+            ui.onNodeWithText("取消").performClick()
+            grid.assertIsDisplayed()
+            ui.onNodeWithContentDescription(createTree).performClick()
+            fill("名称", "首页续学路径")
+            ui.onNodeWithText("保存").performClick()
+            await("首页续学路径")
+            ui.onNodeWithTag("skill-tree-list").assertIsDisplayed()
+            val (first, next) = runBlocking {
+                val tree = library.snapshot().childrenOf(direction.id).single()
+                val first = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "理解基础", "掌握基本概念"))
+                val next = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "综合练习", "运用基本概念", setOf(first.id)))
+                passFixtureSkill(first.id)
+                first to next
+            }
+            pressBack()
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("learning-directions").fetchSemanticsNodes().isNotEmpty() }
+            grid.performScrollToIndex(0)
+            await("下一步 · 首页续学路径")
+            ui.onNodeWithText("综合练习").assertIsDisplayed()
+            ui.onNodeWithText("开始学习").performTouchInput { click() }
+            await("AI 老师")
+            await(next.name)
+            pressBack()
+            await("技能地图")
+            pressBack()
+            await("下一步 · 首页续学路径")
+            runBlocking { passFixtureSkill(next.id) }
+            await("已完成")
+            val completedDirection = hasText(direction.name) and hasText("2/2")
+            grid.performScrollToNode(completedDirection)
+            ui.onNode(completedDirection).assertIsDisplayed()
+            grid.performScrollToIndex(0)
+            ui.onNodeWithText("查看技能地图").performTouchInput { click() }
+            await("2 / 2 已点亮")
+            ui.onNodeWithContentDescription(first.name).assertIsDisplayed()
+        } finally {
+            runBlocking { library.delete(direction.id) }
+        }
+    }
+
+    private suspend fun passFixtureSkill(skillId: String) {
+        val scope = ChatScope(ChatMode.TUTOR, skillId)
+        val conversations = fixture.container.conversations
+        fixture.ai.reply("""{"kind":"offer_check","reply":"可以检验掌握。"}""")
+        conversations.send(scope, "开始学习")
+        fixture.ai.reply("""{"kind":"exercise","reply":"该怎么做？","choices":["先核对","直接跳过"]}""")
+        conversations.send(scope, "", check = true)
+        val exerciseId = conversations.watch(scope).first().last().id
+        fixture.ai.reply(RepositoryTest.verdict("passed", "已经掌握。", exerciseId))
+        conversations.send(scope, "A. 先核对")
     }
 
     @Test fun conflictingDependenciesRemainVisibleInTheReferenceList() {

@@ -192,7 +192,12 @@ internal class AppViewModel(
         viewModelScope.launch {
             try {
                 val saved = container.library.save(edit)
-                if (edit.id == null) _addedEntryId.value = saved.id
+                if (edit.id == null) {
+                    _addedEntryId.value = saved.id
+                    if (saved.kind == EntryKind.TREE && Route.decode(routes.value.last()).page == Page.HOME) {
+                        open(Route(Page.DIRECTION, saved.parentId))
+                    }
+                }
                 _editor.value = null
             } catch (error: Exception) {
                 _editor.value = editor.copy(error = readable(error, "保存失败，请重试。"))

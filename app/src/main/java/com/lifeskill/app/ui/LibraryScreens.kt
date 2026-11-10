@@ -39,18 +39,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.HomeStudyState
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.homeStudy
 import kotlinx.coroutines.flow.first
 
 @Composable
 internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel, addedEntryId: String?) {
     val directions = library.childrenOf(null)
-    val latestTree = library.byId[latestSkill?.parentId]
+    val study = remember(library, latestSkill) { library.homeStudy(latestSkill) }
     val columnWidth = 148.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
     val state = rememberLazyGridState()
     val addition = directions.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }
-        ?.plus(if (latestTree == null) 3 else 4)
+        ?.plus(if (study == null) 3 else 4)
     RevealAddition(
         addedEntryId, addition, { state.layoutInfo.totalItemsCount },
         visible = { index ->
@@ -81,21 +83,24 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
                 GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
             }
         }
-        if (latestSkill != null && latestTree != null) {
-            item(key = "continue-study", span = { GridItemSpan(maxLineSpan) }) {
-                val locked = library.skillState(latestSkill.id) == SkillState.LOCKED
-                ContinueStudyCard(latestSkill, latestTree, library.progress(latestTree.id), locked, Modifier.animateItem()) {
-                    app.continueStudy(latestSkill)
+        item(key = "home-study", span = { GridItemSpan(maxLineSpan) }) {
+            HomeStudyCard(study, Modifier.animateItem()) {
+                when (study?.state) {
+                    null -> app.open(Route(Page.GENERATE))
+                    HomeStudyState.COMPLETED -> app.open(Route.entry(study.tree))
+                    else -> app.continueStudy(study.skill)
                 }
             }
         }
-        item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
-            AiAction(
-                label = "AI 生成技能树",
-                onClick = { app.open(Route(Page.GENERATE)) },
-                modifier = Modifier.fillMaxWidth().animateItem(),
-                wide = true,
-            )
+        if (study != null) {
+            item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
+                AiAction(
+                    label = "AI 生成技能树",
+                    onClick = { app.open(Route(Page.GENERATE)) },
+                    modifier = Modifier.fillMaxWidth().animateItem(),
+                    wide = true,
+                )
+            }
         }
         item(key = "directions-heading", span = { GridItemSpan(maxLineSpan) }) {
             LibrarySection("学习方向", Modifier.animateItem().padding(top = 6.dp)) {
@@ -106,8 +111,17 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             }
         }
         items(directions, key = Entry::id) { direction ->
-            DirectionCard(direction, library.progress(direction.id), Modifier.animateItem()) {
-                app.open(Route.entry(direction))
+            val progress = library.progress(direction.id)
+            val open = { app.open(Route.entry(direction)) }
+            if (progress.total > 0) {
+                DirectionCard(direction, progress, Modifier.animateItem(), open)
+            } else {
+                CompactDirectionCard(
+                    direction, Modifier.animateItem(), open,
+                    createTree = if (library.childrenOf(direction.id).isEmpty()) {
+                        { app.add(EntryKind.TREE, direction.id) }
+                    } else null,
+                )
             }
         }
         if (directions.isEmpty()) {
