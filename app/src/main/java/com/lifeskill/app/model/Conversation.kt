@@ -14,7 +14,18 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 }
 
 enum class Speaker { USER, ASSISTANT }
-enum class TurnKind { MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, CREATED, RESTART }
+enum class TurnKind { MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART }
+
+data class GenerationPreview(
+    val treeNames: List<String>,
+    val suggestedDirectionId: String?,
+    val suggestedDirectionName: String?,
+)
+
+internal sealed interface GenerationDestination {
+    data class Existing(val id: String) : GenerationDestination
+    data class New(val name: String) : GenerationDestination
+}
 
 data class Turn(
     val id: String,
@@ -25,6 +36,7 @@ data class Turn(
     val exerciseId: String? = null,
     val resultId: String? = null,
     val choices: List<String> = emptyList(),
+    val preview: GenerationPreview? = null,
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")

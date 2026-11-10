@@ -10,6 +10,8 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.GenerationDestination
+import com.lifeskill.app.model.GenerationPreview
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
@@ -86,6 +88,23 @@ internal class ConversationRepository(
         if (lastPending(scope)?.id == id) dao.deleteTurn(scope.id, id)
     }
 
+    suspend fun confirmDraft(scope: ChatScope, id: String, destination: GenerationDestination) = database.withTransaction {
+        if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中确认添加。")
+        val row = dao.turn(scope.id, id) ?: throw RuleViolation("这份草稿已不存在。")
+        if (row.kind == TurnKind.CREATED.name) return@withTransaction
+        if (row.kind != TurnKind.DRAFT.name) throw RuleViolation("这条消息没有可添加的草稿。")
+        requireOwner(scope)
+        val draft = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn")).draft)
+        val selected = when (destination) {
+            is GenerationDestination.Existing -> draft.copy(directionId = destination.id, directionName = null)
+            is GenerationDestination.New -> draft.copy(directionId = null, directionName = destination.name)
+        }
+        // 以用户选中的方向为准，写入内容和更新草稿状态一次提交。
+        val result = library.applyDraft(null, selected)
+        val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, row.contentVersion, resultId = result.entry.id)
+        dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
+    }
+
     private suspend fun respond(scope: ChatScope, requestId: String) {
         val replyId = "reply:$requestId"
         val context = database.withTransaction {
@@ -153,12 +172,17 @@ internal class ConversationRepository(
 
     private suspend fun generationTurn(raw: String, owner: Entry?, id: String, version: Long): Turn {
         val reply = AiProtocol.generation(raw)
-        val result = reply.draft?.let { library.applyDraft(owner, it) }
-        return if (result == null) {
-            Turn(id, Speaker.ASSISTANT, TurnKind.MESSAGE, reply.reply, version)
-        } else {
-            Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, version, resultId = result.entry.id)
+        val draft = reply.draft ?: return Turn(id, Speaker.ASSISTANT, TurnKind.MESSAGE, reply.reply, version)
+        if (owner?.kind == EntryKind.TREE) {
+            val result = library.applyDraft(owner, draft)
+            return Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, version, resultId = result.entry.id)
         }
+        if (draft.skills.isNotEmpty() || (owner != null && (draft.directionId != null || draft.directionName != null)) ||
+            (draft.trees.isEmpty() && (owner != null || draft.directionName == null || draft.directionId != null))
+        ) {
+            throw RuleViolation("AI 返回的草稿与当前入口不匹配，请重试。")
+        }
+        return Turn(id, Speaker.ASSISTANT, TurnKind.DRAFT, raw, version, resultId = owner?.id)
     }
 
     private suspend fun tutorTurn(raw: String, context: Request, id: String): Turn {
@@ -233,13 +257,20 @@ internal class ConversationRepository(
         choices = choices.takeIf(List<String>::isNotEmpty)?.let { secret.seal(JSONArray(it).toString(), "$id:choices") },
     )
 
-    private fun TurnRow.toTurn() = Turn(
-        id, Speaker.valueOf(speaker), TurnKind.valueOf(kind), secret.open(text, "$id:turn"),
-        contentVersion, exerciseId, resultId, choices?.let {
+    private fun TurnRow.toTurn(): Turn {
+        val body = secret.open(text, "$id:turn")
+        val turnKind = TurnKind.valueOf(kind)
+        if (turnKind == TurnKind.DRAFT) {
+            val draft = checkNotNull(AiProtocol.generation(body).draft)
+            val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
+            val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成 ${draft.trees.size} 棵技能树"
+            return Turn(id, Speaker.ASSISTANT, turnKind, summary, contentVersion, preview = preview)
+        }
+        return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))
             List(values.length()) { index -> values.getString(index) }
-        }.orEmpty(),
-    )
+        }.orEmpty())
+    }
 
     private data class Request(
         val owner: Entry?,

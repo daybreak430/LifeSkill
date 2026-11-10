@@ -164,6 +164,9 @@ internal abstract class SkillDao {
     @Insert
     abstract suspend fun insertTurn(turn: TurnRow)
 
+    @Update
+    abstract suspend fun updateTurn(turn: TurnRow)
+
     @Query("DELETE FROM turns WHERE id = :id AND chatId = :chatId")
     abstract suspend fun deleteTurn(chatId: String, id: String)
 

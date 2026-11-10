@@ -54,13 +54,13 @@ internal object AiProtocol {
         // 仅展示当前入口接受的结构，避免模型把首页字段带到方向或技能树的回复。
         val format = when (owner?.kind) {
             null -> """
-                items 列出已有方向。用户指定已有方向时，按名称找到它，从 items 原样复制 directionId，只用 directionId 和 trees。不要把已有名称放进 directionName。
+                items 列出已有方向。方向字段仅作推荐，App 会让用户自行选择。仅在方向与本次主题相关时，从 items 原样复制 directionId。没有合适方向时用 directionName 建议新名称。
                 在已有方向新增树示例：{"kind":"create","reply":"已规划。","directionId":"<复制已有方向的 id>","trees":[$exampleTree]}
                 新建方向用 directionName，不带 directionId。用户明确只建方向时可省略 trees；要建树时附上 trees。
                 仅建新方向示例：{"kind":"create","reply":"已规划。","directionName":"家庭理财"}
             """.trimIndent()
             EntryKind.DIRECTION -> """
-                当前方向由 App 固定，items 列出已有技能树。只能在当前方向新增树，输出只含 kind、reply、trees。
+                当前入口的方向作为推荐，items 列出其中已有技能树。App 会让用户确认归属。输出只含 kind、reply、trees。
                 新增树示例：{"kind":"create","reply":"已规划。","trees":[$exampleTree]}
             """.trimIndent()
             EntryKind.TREE -> """
@@ -72,7 +72,8 @@ internal object AiProtocol {
         }
         return """
             你是 LifeSkill 的技能树规划助手。你的权限只有新增。理解用户的主题、现有水平和可执行的学习目标。
-            目标或边界不明确时，先用一句话追问。用户明确要求建立内容时直接生成。用户只问建议、要求先预览或等待确认时，返回 message，不写入。
+            目标或边界不明确时，先用一句话追问。用户明确要求建立内容时返回 create。用户只问建议时返回 message。
+            ${if (owner?.kind == EntryKind.TREE) "用户要求先预览或等待确认时返回 message。" else "create 用于生成可供确认的草稿。用户要求预览时也可返回 create，由 App 在用户确认后添加。不要声称草稿已添加。"}
             用户要求重名或修改、删除已有项目时，说明限制并给出下一步，不要擅自更名或新增其他内容。
             输出单个 json 对象，reply 是给用户看的简短中文。使用用户指定的语言编写技能内容。kind 为 message 时只输出 kind 和 reply。
             追问或建议示例：{"kind":"message","reply":"你想先学习哪一类工作流？"}

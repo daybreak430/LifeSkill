@@ -16,6 +16,7 @@ import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
@@ -223,7 +224,7 @@ internal class AppViewModel(
     }
 }
 
-internal data class ChatStatus(val working: Boolean = false, val error: String? = null)
+internal data class ChatStatus(val working: Boolean = false, val error: String? = null, val draftError: String? = null)
 
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
@@ -240,8 +241,15 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
     fun retry() = run { repository.retry(scope) }
     fun discard(turn: Turn) = run { repository.discardPending(scope, turn.id) }
+    fun confirmDraft(id: String, destination: GenerationDestination) = run(addingDraft = true) {
+        repository.confirmDraft(scope, id, destination)
+    }
 
-    private fun run(action: suspend () -> Unit) {
+    fun clearDraftError() {
+        _status.value = _status.value.copy(draftError = null)
+    }
+
+    private fun run(addingDraft: Boolean = false, action: suspend () -> Unit) {
         if (_status.value.working) return
         _status.value = ChatStatus(working = true)
         viewModelScope.launch {
@@ -249,7 +257,8 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
                 action()
                 _status.value = ChatStatus()
             } catch (error: Exception) {
-                _status.value = ChatStatus(error = readable(error, "本次请求失败，请重试。"))
+                _status.value = if (addingDraft) ChatStatus(draftError = readable(error, "添加失败，请重试。"))
+                else ChatStatus(error = readable(error, "本次请求失败，请重试。"))
             }
         }
     }

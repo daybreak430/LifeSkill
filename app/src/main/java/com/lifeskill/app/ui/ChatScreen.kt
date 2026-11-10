@@ -68,6 +68,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val checkOffered = !locked && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
+    var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
+    val draftTurn = history.firstOrNull { it.id == selectedDraftId && it.preview != null }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -128,6 +130,13 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         },
                         open = { app.open(Route.entry(it)) },
                     )
+                    if (turn.preview != null) {
+                        Action("选择方向", Glyph.NEXT, {
+                            keyboard?.hide()
+                            chat.clearDraftError()
+                            selectedDraftId = turn.id
+                        }, enabled = canSend)
+                    }
                     if (turn.id == latestReply?.id) {
                         if (checkOffered) {
                             Text(
@@ -204,6 +213,13 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 chat.restartLesson(requirements)
                 draft = ""
             },
+        )
+    }
+    draftTurn?.let { turn ->
+        AddDraftDialog(
+            checkNotNull(turn.preview), library.childrenOf(null), status.working, status.draftError,
+            onDismiss = { selectedDraftId = null },
+            onConfirm = { chat.confirmDraft(turn.id, it) },
         )
     }
 }

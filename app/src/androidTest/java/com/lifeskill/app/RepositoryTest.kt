@@ -18,6 +18,7 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
@@ -183,19 +184,24 @@ class RepositoryTest {
         assertEquals(1, container.conversations.watch(scope).first().size)
     }
 
-    @Test fun generationRollsBackWholeBatchAndRetriesSameRequest() = runBlocking {
+    @Test fun confirmingInvalidDraftRollsBackWholeBatch() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
         ai.reply(
             """{"kind":"create","reply":"方案","directionName":"设计","trees":[{"name":"树 A","skills":[]},{"name":"树 B","skills":[{"ref":"x","name":"节点","goal":"能解释用途","requires":["x"]}]}]}"""
         )
-        expectRule { container.conversations.send(scope, "帮我生成设计技能树") }
+        container.conversations.send(scope, "帮我生成设计技能树")
+        val preview = container.conversations.watch(scope).first().last()
+        assertEquals(TurnKind.DRAFT, preview.kind)
+        expectRule { container.conversations.confirmDraft(scope, preview.id, GenerationDestination.New("设计")) }
         assertFalse(container.library.snapshot().entries.any { it.name in setOf("设计", "树 A", "树 B") })
-        val pending = container.conversations.watch(scope).first().single()
+        assertEquals(preview, container.conversations.watch(scope).first().last())
 
         ai.reply(CREATED)
-        container.conversations.retry(scope)
+        container.conversations.send(scope, "重新生成数据技能树")
+        val secondDraft = container.conversations.watch(scope).first().last()
+        container.conversations.confirmDraft(scope, secondDraft.id, GenerationDestination.New("数据能力"))
         val history = container.conversations.watch(scope).first()
-        assertEquals(pending.id, history.first().id)
+        assertEquals(secondDraft.id, history.last().id)
         assertEquals(TurnKind.CREATED, history.last().kind)
         val treeId = history.last().resultId
         assertNotNull(treeId)
@@ -203,7 +209,7 @@ class RepositoryTest {
         assertEquals(1, container.library.snapshot().edges.size)
     }
 
-    @Test fun overlappingGenerationRepliesCommitOnce() = runBlocking {
+    @Test fun overlappingGenerationAndConfirmationUseOnlyTheSelectedDirection() = runBlocking {
         withTimeout(10_000) {
             val scope = ChatScope(ChatMode.GENERATE)
             val firstWaiting = CompletableDeferred<Unit>()
@@ -219,9 +225,32 @@ class RepositoryTest {
             container.conversations.retry(scope)
             releaseFirst.complete(Unit)
             first.await()
-            assertEquals(1, container.library.snapshot().entries.count { it.name == "数据能力" })
-            assertEquals(2, container.conversations.watch(scope).first().size)
+            val history = container.conversations.watch(scope).first()
+            assertEquals(2, history.size)
+            assertFalse(container.library.snapshot().entries.any { it.name in setOf("数据能力", "数据质量") })
+            val chosen = container.library.snapshot().childrenOf(null).first()
+            val draft = history.last()
+            val destination = GenerationDestination.Existing(chosen.id)
+            val firstConfirm = async { container.conversations.confirmDraft(scope, draft.id, destination) }
+            container.conversations.confirmDraft(scope, draft.id, destination)
+            firstConfirm.await()
+            assertEquals(listOf("数据质量"), container.library.snapshot().childrenOf(chosen.id).map(Entry::name))
+            assertFalse(container.library.snapshot().entries.any { it.name == "数据能力" })
+            assertEquals(TurnKind.CREATED, container.conversations.watch(scope).first().last().kind)
         }
+    }
+
+    @Test fun directionScopedDraftCanBeConfirmedInADifferentDirection() = runBlocking {
+        val (source, destination) = container.library.snapshot().childrenOf(null)
+        val scope = ChatScope(ChatMode.GENERATE, source.id)
+        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","skills":[]}]}""")
+        container.conversations.send(scope, "生成信息化技能树")
+        val draft = container.conversations.watch(scope).first().last()
+        assertEquals(source.id, draft.preview?.suggestedDirectionId)
+        assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
+        container.conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(destination.id))
+        assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
+        assertEquals("信息化基础", container.library.snapshot().childrenOf(destination.id).single().name)
     }
 
     @Test fun scopedGenerationCanAttachOnlyToNodesInItsTargetTree() = runBlocking {
