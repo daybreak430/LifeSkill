@@ -49,7 +49,7 @@ fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 object TutorRules {
     const val CONTINUE_REPLY = "好的，继续"
     const val EXAM_REPLY = "感觉已经会了，来考试吧"
-    internal const val EXAM_TEACHING_ROUNDS = 3
+    internal const val EXAM_TEACHING_ROUNDS = 5
     internal val teachingReplyKinds = setOf(TurnKind.MESSAGE, TurnKind.CHECK_OFFER)
 
     fun currentLesson(history: List<Turn>): List<Turn> =

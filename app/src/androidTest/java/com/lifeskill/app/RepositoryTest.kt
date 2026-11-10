@@ -407,9 +407,9 @@ class RepositoryTest {
         teach("开始学习")
         ai.reply("""{"kind":"off_topic","reply":"请回到学习目标。"}""")
         conversations.send(scope, "换个话题")
-        teach(TutorRules.CONTINUE_REPLY)
+        repeat(3) { teach(TutorRules.CONTINUE_REPLY) }
         expectRule { conversations.send(scope, TutorRules.EXAM_REPLY, check = true) }
-        assertEquals(6, conversations.watch(scope).first().size)
+        assertEquals(10, conversations.watch(scope).first().size)
         teach(TutorRules.CONTINUE_REPLY)
         ai.reply("""{"kind":"exercise","reply":"应该核对什么？","choices":["核对金额","忽略金额"]}""")
         conversations.send(scope, TutorRules.EXAM_REPLY, check = true)

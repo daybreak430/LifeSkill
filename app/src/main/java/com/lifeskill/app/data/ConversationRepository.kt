@@ -73,7 +73,7 @@ internal class ConversationRepository(
                         val rounds = dao.teachingReplies(scope.id, owner.contentVersion,
                             TutorRules.teachingReplyKinds.map { it.name }, TutorRules.EXAM_TEACHING_ROUNDS)
                         if (!TutorRules.canStartExam(lastReply, rounds)) {
-                            throw RuleViolation("请先完成 3 轮讲解，或答完当前练习后再发起考试。")
+                            throw RuleViolation("请先完成 ${TutorRules.EXAM_TEACHING_ROUNDS} 轮讲解，或答完当前练习后再发起考试。")
                         }
                     } else if (lastReply != TurnKind.CHECK_OFFER) {
                         throw RuleViolation("等 AI 老师提示后再检验掌握。")

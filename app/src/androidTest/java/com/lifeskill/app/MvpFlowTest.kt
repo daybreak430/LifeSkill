@@ -439,6 +439,12 @@ class MvpFlowTest {
         await("可以试试「检验掌握」")
         masteryCheck.assertIsEnabled()
         examReply.assertDoesNotExist()
+        listOf("先核对记录来源。", "再确认字段类型。").forEach { reply ->
+            fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", reply).toString())
+            continueReply.performTouchInput { click() }
+            await(reply)
+            examReply.assertDoesNotExist()
+        }
         fixture.ai.reply("""{"kind":"teach","reply":"核对必填字段是最后一步。"}""")
         continueReply.performTouchInput { click() }
         await(TutorRules.EXAM_REPLY)
