@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -149,27 +151,44 @@ internal fun LibrarySection(
 }
 
 @Composable
-internal fun DirectionCard(entry: Entry, progress: Progress, treeCount: Int, onClick: () -> Unit) {
+internal fun DirectionCard(entry: Entry, progress: Progress, onClick: () -> Unit) {
+    val tint = directionTint(entry)
+    val colors = studyColors
+    val shape = RoundedCornerShape(18.dp)
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
-        border = BorderStroke(1.dp, Line), shape = CardShape,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+        shape = shape,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 128.dp)
+            .shadow(3.dp, shape, clip = false, ambientColor = colors.cardShadow, spotColor = colors.cardShadow)
+            .semantics {
+                role = Role.Button
+                stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
+            },
     ) {
         Column(
-            Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+            Modifier.padding(horizontal = 10.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Mark(entry.displayIcon.glyph, directionTint(entry), Modifier.size(20.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    entry.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                )
-                Mark(Glyph.NEXT, Muted, Modifier.size(14.dp))
+            Box(contentAlignment = Alignment.BottomCenter) {
+                Canvas(Modifier.size(106.dp, 52.dp)) {
+                    val stroke = 4.5.dp.toPx()
+                    val diameter = minOf(size.width - stroke, (size.height - stroke) * 2).coerceAtLeast(0f)
+                    val origin = Offset((size.width - diameter) / 2, stroke / 2)
+                    val bounds = Size(diameter, diameter)
+                    val arc = Stroke(stroke, cap = StrokeCap.Round)
+                    drawArc(colors.progressTrack, 180f, 180f, false, origin, bounds, style = arc)
+                    if (progress.lit > 0) {
+                        drawArc(tint, 180f, progress.fraction * 180f, false, origin, bounds, style = arc)
+                    }
+                }
+                Mark(entry.displayIcon.glyph, tint, Modifier.padding(bottom = 4.dp).size(21.dp))
             }
+            Text(entry.name, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                if (progress.total > 0) progress.label else "$treeCount 棵技能树",
-                style = MaterialTheme.typography.bodySmall, color = Muted,
+                "${progress.lit}/${progress.total}",
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = Muted,
             )
         }
     }

@@ -90,7 +90,8 @@ class MvpFlowTest {
         await("AI 生成")
         ui.onNodeWithTag("chat-input").performTouchInput { click() }
         ui.waitUntil(8_000) { imeVisible() }
-        ui.onNodeWithContentDescription("发送").assertIsDisplayed()
+        ui.onNodeWithTag("chat-input").performTextInput("第一行\n第二行")
+        ui.onNodeWithContentDescription("发送").assertIsDisplayed().assertIsEnabled()
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
         ui.onNodeWithText("AI 生成").assertIsDisplayed()
@@ -115,6 +116,9 @@ class MvpFlowTest {
                 skill
             }
             await("继续学习")
+            ui.onNode(hasText("研习方向") and hasClickAction())
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "已学会 0 个技能点，共 1 个"))
+            ui.onNodeWithText("0/1").assertIsDisplayed()
             ui.onNodeWithText("继续学习").performTouchInput { click() }
             await("先梳理已学的要点。")
             ui.activityRule.scenario.recreate()
@@ -441,7 +445,7 @@ class MvpFlowTest {
         await("已点亮 · AI 检验通过")
         ui.onNodeWithText("重新学习").assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").assertDoesNotExist()
-        ui.onNodeWithText("学习技能").performClick()
+        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("已点亮技能点", substring = true)
         fixture.ai.enqueue { messages ->
             assertEquals(2, messages.size)

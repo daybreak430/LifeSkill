@@ -76,6 +76,9 @@ private val LightPalette = lightColorScheme(
 )
 
 internal data class StudyColors(
+    val home: List<Color>,
+    val cardShadow: Color,
+    val progressTrack: Color,
     val hero: List<Color>,
     val heroLayer: Color,
     val map: List<Color>,
@@ -90,6 +93,9 @@ internal data class StudyColors(
 )
 
 private val LightStudyColors = StudyColors(
+    home = listOf(Color(0xFFF6F8FC), Color(0xFFF2F7FB), Color(0xFFEDF3FB)),
+    cardShadow = Color(0xFF869BAF),
+    progressTrack = Color(0xFFE4E8F1),
     hero = listOf(Color(0xFFE5F5DA), Color(0xFFD8EDF3), Color(0xFFDDE6FA)),
     heroLayer = Color(0xFFE7E1F6),
     map = listOf(Color(0xFFE6F4F2), LightPalette.background),
@@ -97,11 +103,14 @@ private val LightStudyColors = StudyColors(
     earnedInk = Color.White,
     route = Color(0xFF4C9675),
     focusBand = Color(0xFFB9E2D0),
-    iconViolet = Color(0xFF6653AA), iconBlue = Color(0xFF275DA1),
-    iconGreen = Color(0xFF1F7656), iconOrange = Color(0xFFAD5728),
+    iconViolet = Color(0xFF8C7DB2), iconBlue = Color(0xFF6C91A8),
+    iconGreen = Color(0xFF6E9583), iconOrange = Color(0xFFBB886A),
 )
 
 private val DarkStudyColors = StudyColors(
+    home = listOf(DarkPalette.background, Color(0xFF161E2C)),
+    cardShadow = Color.Black,
+    progressTrack = DarkPalette.outlineVariant,
     hero = listOf(DarkPalette.surfaceVariant, DarkPalette.surface),
     heroLayer = DarkPalette.outlineVariant,
     map = listOf(DarkPalette.surface, DarkPalette.background),
@@ -129,7 +138,10 @@ private val Type = Typography(
 
 @Composable
 internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalStudyColors provides if (dark) DarkStudyColors else LightStudyColors) {
+    CompositionLocalProvider(
+        LocalStudyColors provides if (dark) DarkStudyColors else LightStudyColors,
+        LocalAiColors provides if (dark) darkAiColors else lightAiColors,
+    ) {
         MaterialTheme(colorScheme = if (dark) DarkPalette else LightPalette, typography = Type, content = content)
     }
 }

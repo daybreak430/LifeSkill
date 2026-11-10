@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
@@ -61,11 +62,18 @@ internal fun LifeSkillApp(
     }
 
     LifeSkillTheme(dark) {
-        val background = Ground
+        val gradient = when (route.page) {
+            Page.HOME -> studyColors.home
+            Page.TUTOR, Page.GENERATE -> aiColors.backdrop
+            else -> null
+        }
+        val background = gradient?.first() ?: Ground
+        val backdrop = if (gradient != null) Modifier.background(Brush.verticalGradient(gradient))
+        else Modifier.background(background)
         SideEffect { onSystemBars(dark, background) }
         Scaffold(
-            modifier = Modifier.fillMaxSize().background(background).safeDrawingPadding(),
-            containerColor = background, contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.fillMaxSize().then(backdrop).safeDrawingPadding(),
+            containerColor = Color.Transparent, contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {

@@ -1,6 +1,7 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,12 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +31,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -51,6 +52,8 @@ import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.choiceAnswer
+
+private val ReplyInset = 42.dp
 
 @Composable
 internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel) {
@@ -85,14 +88,15 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     }
 
     Column(Modifier.fillMaxSize()) {
-        PageHeader(if (tutor) "AI 老师" else "AI 生成", app::back, subtitle = owner?.name) {
-            if (tutor) GlyphButton(Glyph.RESTART, "重新学习", { showRestart = true }, enabled = !status.working)
-            GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
-        }
-        HorizontalDivider(color = Line.copy(alpha = .6f))
+        AiChatHeader(
+            if (tutor) "AI 老师" else "AI 生成", owner?.name, app::back,
+            onRestart = if (tutor) ({ showRestart = true }) else null,
+            restartEnabled = !status.working, onSettings = { app.open(Route(Page.SETTINGS)) },
+        )
         LazyColumn(
             state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("chat-messages"),
-            contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (history.isEmpty()) {
                 item {
@@ -107,10 +111,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     )
                     if (tutor && !status.working) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Action("开始学习", Glyph.SPARK, {
+                            ChatPill("开始学习", {
                                 keyboard?.hide()
                                 chat.send("请引导我开始学习这个技能点。")
-                            })
+                            }, glyph = Glyph.SPARK)
                         }
                     }
                 }
@@ -138,26 +142,28 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                                 chat.clearDraftError()
                                 selectedDraftId = turn.id
                             },
-                            modifier = Modifier.padding(top = 6.dp), enabled = canSend,
-                            shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Line),
+                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp), enabled = canSend,
+                            shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, aiColors.outline),
                             contentPadding = PaddingValues(horizontal = 12.dp),
                         ) {
-                            Text("选择方向", style = MaterialTheme.typography.labelMedium)
-                            Mark(Glyph.NEXT, if (canSend) Gold else Muted, Modifier.padding(start = 6.dp).size(14.dp))
+                            Text("选择方向", color = if (canSend) aiColors.accent else Muted,
+                                style = MaterialTheme.typography.labelMedium)
+                            Mark(Glyph.NEXT, if (canSend) aiColors.accent else Muted, Modifier.padding(start = 6.dp).size(14.dp))
                         }
                     }
                     if (turn.id == latestReply?.id) {
                         if (checkOffered) {
                             Text(
-                                "可以试试「检验掌握」", Modifier.padding(top = 8.dp),
+                                "可以试试「检验掌握」", Modifier.padding(start = ReplyInset, top = 8.dp),
                                 style = MaterialTheme.typography.bodySmall, color = Muted,
                             )
                         }
                         if (choices.isEmpty()) {
-                            OutlinedButton(
+                            ChatPill(
+                                TutorRules.CONTINUE_REPLY,
                                 onClick = { keyboard?.hide(); chat.send(TutorRules.CONTINUE_REPLY) },
-                                enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
-                            ) { Text(TutorRules.CONTINUE_REPLY) }
+                                modifier = Modifier.padding(start = ReplyInset, top = 4.dp), enabled = canSend,
+                            )
                         }
                     }
                 }
@@ -171,9 +177,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 }
             }
         }
-        HorizontalDivider(color = Line.copy(alpha = .6f))
         Column(
-            Modifier.fillMaxWidth().padding(start = 15.dp, end = 12.dp, bottom = 9.dp, top = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp, top = 4.dp),
         ) {
             if (locked) {
                 Text(
@@ -181,36 +186,22 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     style = MaterialTheme.typography.labelMedium, color = Muted,
                 )
             } else if (checkOffered) {
-                OutlinedButton(
+                ChatPill(
+                    "检验掌握",
                     onClick = { keyboard?.hide(); chat.send("", check = true) },
-                    enabled = canSend, shape = CircleShape, border = BorderStroke(1.dp, Line),
-                ) {
-                    Mark(Glyph.TARGET, if (canSend) Gold else Line, Modifier.size(16.dp))
-                    Text("检验掌握", Modifier.padding(start = 6.dp))
-                }
-            }
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f).testTag("chat-input"),
-                    label = { Text(if (tutor) "输入学习问题" else "描述你想学什么") },
-                    minLines = 1, maxLines = 4, shape = RoundedCornerShape(13.dp),
-                    enabled = canSend,
-                    isError = exceedsLimit,
-                    supportingText = if (exceedsLimit) {
-                        { Text("每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符") }
-                    } else null,
-                )
-                GlyphButton(
-                    Glyph.SEND, "发送", {
-                        keyboard?.hide()
-                        chat.send(draft)
-                        draft = ""
-                    },
-                    tint = Gold, enabled = draft.isNotBlank() && !exceedsLimit && canSend,
+                    enabled = canSend, glyph = Glyph.TARGET,
                 )
             }
+            AiComposer(
+                draft, { draft = it }, if (tutor) "输入学习问题" else "描述你想学什么", enabled = canSend,
+                errorText = if (exceedsLimit) "每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符" else null,
+                sendEnabled = draft.isNotBlank() && !exceedsLimit && canSend,
+                onSend = {
+                    keyboard?.hide()
+                    chat.send(draft)
+                    draft = ""
+                },
+            )
         }
     }
     if (showRestart) {
@@ -254,8 +245,8 @@ private fun ChatBubble(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            HorizontalDivider(color = Line)
-            Text("新一轮学习", style = MaterialTheme.typography.labelLarge, color = Gold)
+            HorizontalDivider(color = aiColors.outline)
+            Text("新一轮学习", style = MaterialTheme.typography.labelLarge, color = aiColors.accent)
             if (turn.text.isNotEmpty()) {
                 Text(turn.text, style = MaterialTheme.typography.bodyMedium, color = Muted)
             }
@@ -264,34 +255,34 @@ private fun ChatBubble(
     }
     val user = turn.speaker == Speaker.USER
     val prominent = turn.kind == TurnKind.CREATED || turn.kind == TurnKind.PASSED
-    Column(
+    val colors = aiColors
+    val shape = RoundedCornerShape(20.dp, 20.dp, if (user) 12.dp else 20.dp, if (user) 20.dp else 12.dp)
+    Row(
         modifier = Modifier.fillMaxWidth().padding(
-            start = if (user) 38.dp else 0.dp, end = if (user) 0.dp else 24.dp,
+            start = if (user) 44.dp else 0.dp, end = if (user) 0.dp else 14.dp,
         ),
-        horizontalAlignment = if (user) Alignment.End else Alignment.Start,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, if (user) Alignment.End else Alignment.Start),
     ) {
-        val background = when {
-            prominent -> GoldGround
-            user -> Raised
-            else -> Panel
-        }
+        if (!user) AiCrystal(36.dp)
         Surface(
-            color = background,
-            border = BorderStroke(1.dp, if (prominent) Gold.copy(alpha = .55f) else Line),
-            shape = RoundedCornerShape(14.dp),
+            color = if (user) Color.Transparent else colors.panel,
+            shape = shape, shadowElevation = if (user) 0.dp else 2.dp,
         ) {
-            Column(Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) {
+            val backdrop = if (user) Modifier.background(Brush.linearGradient(colors.outgoing)) else Modifier
+            Column(backdrop.padding(horizontal = 15.dp, vertical = 12.dp)) {
                 val badge = when (turn.kind) {
                     TurnKind.EXERCISE -> "掌握检查"
                     TurnKind.RETRY -> "再试一次"
                     else -> null
                 }
                 if (badge != null) {
-                    Text(badge, color = Gold, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 5.dp))
+                    Text(badge, color = colors.accent, style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 5.dp))
                 }
                 SelectionContainer {
                     if (user || turn.kind == TurnKind.CREATED) {
-                        Text(turn.text, style = MaterialTheme.typography.bodyLarge, color = if (prominent) Gold else Ink)
+                        Text(turn.text, style = MaterialTheme.typography.bodyLarge,
+                            color = if (user) Color.White else if (prominent) colors.accent else Ink)
                     } else {
                         LessonMarkdown(turn.text)
                     }
@@ -304,8 +295,8 @@ private fun ChatBubble(
                                 OutlinedButton(
                                     onClick = { onAnswer(answer) }, modifier = Modifier.fillMaxWidth(),
                                     enabled = canAnswer,
-                                    shape = RoundedCornerShape(9.dp), border = BorderStroke(1.dp, Line),
-                                ) { Text(answer, Modifier.fillMaxWidth()) }
+                                    shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, colors.outline),
+                                ) { Text(answer, Modifier.fillMaxWidth(), color = if (canAnswer) colors.accent else Muted) }
                             } else {
                                 Text(answer, Modifier.padding(vertical = 3.dp), color = Muted, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -314,8 +305,8 @@ private fun ChatBubble(
                 }
                 if (result != null) {
                     TextButton(onClick = { open(result) }) {
-                        Text("打开${result.kind.label} · ${result.name}", Modifier.weight(1f, fill = false))
-                        Mark(Glyph.NEXT, Gold, Modifier.padding(start = 4.dp).size(15.dp))
+                        Text("打开${result.kind.label} · ${result.name}", Modifier.weight(1f, fill = false), color = colors.accent)
+                        Mark(Glyph.NEXT, colors.accent, Modifier.padding(start = 4.dp).size(15.dp))
                     }
                 }
             }

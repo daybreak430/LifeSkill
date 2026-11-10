@@ -43,7 +43,6 @@ import com.lifeskill.app.model.SkillState
 internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel) {
     val directions = library.childrenOf(null)
     val latestTree = library.byId[latestSkill?.parentId]
-    val canContinue = latestSkill != null && latestTree != null
     val columnWidth = 148.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
 
     LazyVerticalGrid(
@@ -72,13 +71,11 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            LibraryAction(
+            AiAction(
                 label = "AI 生成技能树",
-                glyph = Glyph.SPARK,
                 onClick = { app.open(Route(Page.GENERATE)) },
                 modifier = Modifier.fillMaxWidth(),
-                primary = !canContinue,
-                trailing = true,
+                featured = true,
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -90,7 +87,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             }
         }
         items(directions, key = Entry::id) { direction ->
-            DirectionCard(direction, library.progress(direction.id), library.childrenOf(direction.id).size) {
+            DirectionCard(direction, library.progress(direction.id)) {
                 app.open(Route.entry(direction))
             }
         }
@@ -134,9 +131,8 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     LibraryAction("新增技能树", Glyph.ADD, { app.add(EntryKind.TREE, direction.id) }, Modifier.weight(1f))
-                    LibraryAction(
-                        "AI 生成", Glyph.SPARK, { app.open(Route(Page.GENERATE, direction.id)) },
-                        Modifier.weight(1f), primary = true,
+                    AiAction(
+                        "AI 生成", { app.open(Route(Page.GENERATE, direction.id)) }, Modifier.weight(1f),
                     )
                 }
             }

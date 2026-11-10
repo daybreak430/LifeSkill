@@ -104,7 +104,7 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             LibraryAction("新增技能点", Glyph.ADD, { app.add(EntryKind.SKILL, tree.id) }, Modifier.weight(1f))
-            LibraryAction("AI 追加", Glyph.SPARK, { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
+            AiAction("AI 追加", { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
         }
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),

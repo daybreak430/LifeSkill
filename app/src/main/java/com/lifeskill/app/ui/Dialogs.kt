@@ -162,14 +162,15 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                             }
                         }
                     }
-                    TextButton(
+                    AiAction(
+                        label = if (editor.suggesting) "正在推荐…" else "AI 推荐图标",
                         onClick = {
                             focus.clearFocus()
                             app.suggestIcon(name, goal)
                         },
                         modifier = Modifier.align(Alignment.End),
                         enabled = name.isNotBlank() && !nameTooLong && !editor.saving && !editor.suggesting,
-                    ) { Text(if (editor.suggesting) "正在推荐…" else "AI 推荐图标") }
+                    )
                     editor.iconError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
                 HorizontalDivider(color = Line)
