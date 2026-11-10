@@ -1,5 +1,7 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -119,7 +121,7 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
 
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Surface(Modifier.fillMaxWidth().panelShadow(), shape = PanelShape, color = Panel) {
+    Surface(Modifier.fillMaxWidth().animateContentSize(tween(180)).panelShadow(), shape = PanelShape, color = Panel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()

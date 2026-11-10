@@ -55,11 +55,13 @@ internal val LibraryTitle = TextStyle(
 )
 
 @Composable
-internal fun ContinueStudyCard(skill: Entry, tree: Entry, progress: Progress, locked: Boolean, onContinue: () -> Unit) {
+internal fun ContinueStudyCard(
+    skill: Entry, tree: Entry, progress: Progress, locked: Boolean, modifier: Modifier = Modifier, onContinue: () -> Unit,
+) {
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val heroShape = RoundedCornerShape(26.dp)
-    Box(Modifier.fillMaxWidth().clipToBounds()) {
+    Box(modifier.fillMaxWidth().clipToBounds()) {
         Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = 11.dp, bottom = 16.dp)
             .rotate(-3f)
             .background(colors.heroLayer, heroShape))
@@ -152,13 +154,13 @@ internal fun LibrarySection(
 }
 
 @Composable
-internal fun DirectionCard(entry: Entry, progress: Progress, onClick: () -> Unit) {
+internal fun DirectionCard(entry: Entry, progress: Progress, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val tint = entryTint(entry)
     val colors = studyColors
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
         shape = PanelShape,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 156.dp).panelShadow()
+        modifier = modifier.fillMaxWidth().heightIn(min = 156.dp).panelShadow()
             .semantics {
                 role = Role.Button
                 stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
@@ -209,10 +211,10 @@ internal fun entryTint(entry: Entry): Color {
 }
 
 @Composable
-internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, onClick: () -> Unit) {
+internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
-        shape = PanelShape, modifier = Modifier.fillMaxWidth().panelShadow(),
+        shape = PanelShape, modifier = modifier.fillMaxWidth().panelShadow(),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 86.dp).padding(horizontal = 16.dp, vertical = 14.dp),

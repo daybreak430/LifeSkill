@@ -1,5 +1,7 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -53,11 +56,12 @@ import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.choiceAnswer
+import kotlinx.coroutines.flow.first
 
 private val ReplyInset = 42.dp
 
 @Composable
-internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel) {
+internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean) {
     val history by chat.history.collectAsStateWithLifecycle()
     val status by chat.status.collectAsStateWithLifecycle()
     val owner = library.byId[scope.ownerId]
@@ -79,14 +83,22 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
+    var lastSeenMessage by rememberSaveable { mutableStateOf<String?>(null) }
     val footerVisible = status.working || pending != null || status.error != null
     val canSend = !status.working && pending == null
 
-    LaunchedEffect(history.lastOrNull()?.id, footerVisible) {
-        if (history.isNotEmpty()) {
-            // 等下一次测量定位末尾，避免重建页面或键盘改变视口时触发嵌套测量。
-            listState.requestScrollToItem(history.lastIndex + if (footerVisible) 1 else 0)
-        }
+    LaunchedEffect(pageActive, history.lastOrNull()?.id) {
+        val last = history.lastOrNull() ?: return@LaunchedEffect
+        if (!pageActive || lastSeenMessage == last.id) return@LaunchedEffect
+        val initial = lastSeenMessage == null
+        val layout = listState.layoutInfo
+        val nearEnd = (layout.visibleItemsInfo.lastOrNull()?.index ?: 0) >= layout.totalItemsCount - 2
+        lastSeenMessage = last.id
+        // 阅读历史时保留锚点，仅发送消息或原本在末尾时跟随新回复。
+        if (!initial && !nearEnd && last.speaker != Speaker.USER) return@LaunchedEffect
+        val destination = history.lastIndex + if (footerVisible && last.speaker == Speaker.USER) 1 else 0
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > destination }
+        if (initial) listState.scrollToItem(destination) else listState.animateScrollToItem(destination)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -123,7 +135,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             items(history, key = Turn::id) { turn ->
                 val active = exercise != null && turn.id == lastQuizTurn?.id && turn.exerciseId == exercise.id
                 val choices = if (active) exercise.choices else turn.choices
-                Column {
+                Column(
+                    Modifier.animateItem(fadeInSpec = tween(170), fadeOutSpec = tween(120), placementSpec = null)
+                        .animateContentSize(tween(170)),
+                ) {
                     ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
@@ -179,7 +194,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             }
             if (footerVisible) {
                 item(key = "chat-status") {
-                    ChatFooter(status, pending, chat::retry) { turn ->
+                    ChatFooter(status, pending, chat::retry, Modifier.animateItem(placementSpec = null)) { turn ->
                         if (turn.kind == TurnKind.MESSAGE) draft = turn.text
                         chat.discard(turn)
                     }
@@ -213,7 +228,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             )
         }
     }
-    if (showRestart) {
+    if (pageActive && showRestart) {
         RestartLessonDialog(
             onDismiss = { showRestart = false },
             onStart = { requirements ->
@@ -224,7 +239,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             },
         )
     }
-    draftTurn?.let { turn ->
+    draftTurn?.takeIf { pageActive }?.let { turn ->
         AddDraftDialog(
             checkNotNull(turn.preview), library.childrenOf(null), status.working, status.draftError,
             onDismiss = { selectedDraftId = null },
@@ -328,9 +343,10 @@ private fun ChatBubble(
 }
 
 @Composable
-private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: () -> Unit, discard: (Turn) -> Unit) {
+private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: () -> Unit, modifier: Modifier, discard: (Turn) -> Unit) {
     Surface(
-        Modifier.fillMaxWidth().padding(start = ReplyInset).semantics { liveRegion = LiveRegionMode.Polite },
+        modifier.fillMaxWidth().padding(start = ReplyInset).animateContentSize(tween(170))
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = ControlShape, color = aiColors.panel,
     ) {
         Column(Modifier.padding(start = 12.dp, end = 10.dp, top = 9.dp, bottom = 6.dp)) {

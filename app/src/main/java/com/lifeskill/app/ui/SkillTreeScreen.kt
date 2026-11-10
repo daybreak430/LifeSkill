@@ -1,5 +1,8 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -25,17 +29,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -59,10 +66,17 @@ import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.MapPoint
 import com.lifeskill.app.model.SkillMapLayout
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.SkillUnlock
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @Composable
-internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel) {
+internal fun SkillTreeScreen(
+    tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel,
+    unlock: SkillUnlock?, active: Boolean,
+) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
     val edges = remember(skills, library.edges) {
@@ -117,11 +131,13 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
                     LibraryEmpty("技能地图还是空的", Glyph.TREE)
                 }
             } else {
-                SkillMap(skills, layout, library, latestStudySkillId) { app.open(Route.entry(it)) }
+                SkillMap(skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock) {
+                    app.open(Route.entry(it))
+                }
             }
         }
     }
-    if (showReferences && layout.references.isNotEmpty()) {
+    if (active && showReferences && layout.references.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { showReferences = false },
             shape = DialogShape, containerColor = Panel,
@@ -141,17 +157,33 @@ internal fun SkillTreeScreen(tree: Entry, library: Library, latestStudySkillId: 
     }
 }
 
-private data class MapSegment(val edge: Edge, val start: MapPoint, val end: MapPoint, val onTrack: Boolean)
+private data class MapSegment(val edge: Edge, val start: MapPoint, val end: MapPoint, val index: Int, val count: Int)
 
 @Composable
 private fun SkillMap(
-    skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?, onOpen: (Entry) -> Unit,
+    skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?,
+    unlock: SkillUnlock?, active: Boolean, onUnlockFinished: (String) -> Unit, onOpen: (Entry) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val clock = remember(unlock?.key) { Animatable(if (unlock == null) 1f else 0f) }
+    LaunchedEffect(unlock?.key, active) {
+        if (!active || unlock == null) return@LaunchedEffect
+        clock.snapTo(0f)
+        launch {
+            val source = layout.nodes[unlock.skillId]?.row ?: return@launch
+            val visible = snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }.first { it.isNotEmpty() }
+            val next = unlock.availableChildren.mapNotNull { layout.nodes[it]?.row }.minOrNull()
+            if (source !in visible || next != null && next !in visible) listState.animateScrollToItem(source)
+        }
+        delay(MAP_UNLOCK_DELAY_MS)
+        clock.animateTo(1f, tween(MAP_UNLOCK_DURATION_MS, easing = LinearEasing))
+        onUnlockFinished(unlock.key)
+    }
     val nodesByRow = remember(skills, layout) { skills.groupBy { layout.nodes.getValue(it.id).row } }
     val segmentsByRow = remember(layout) {
         layout.connections.flatMap { connection ->
             connection.points.zipWithNext().mapIndexed { index, (start, end) ->
-                MapSegment(connection.edge, start, end, onTrack = index > 0)
+                MapSegment(connection.edge, start, end, index, connection.points.size - 1)
             }
         }.groupBy { it.start.row }
     }
@@ -175,6 +207,7 @@ private fun SkillMap(
         val left = (maxWidth - cardWidth * layout.width) / 2
         LazyColumn(
             Modifier.fillMaxWidth().testTag("skill-map"),
+            state = listState,
             contentPadding = PaddingValues(vertical = 20.dp),
         ) {
             items(layout.rowCount) { row ->
@@ -190,18 +223,32 @@ private fun SkillMap(
                             val toX = originX + segment.end.column * unitWidth
                             val middleY = (cardBottom + size.height) / 2
                             val path = Path().apply {
-                                moveTo(fromX, if (segment.onTrack) 0f else cardBottom)
-                                if (segment.onTrack) lineTo(fromX, cardBottom)
+                                moveTo(fromX, if (segment.index > 0) 0f else cardBottom)
+                                if (segment.index > 0) lineTo(fromX, cardBottom)
                                 cubicTo(fromX, middleY, toX, middleY, toX, size.height)
                             }
                             val from = library.skillState(segment.edge.prerequisiteId)
                             val to = library.skillState(segment.edge.skillId)
                             val (tint, stroke) = when {
                                 from == SkillState.LIT && segment.edge.skillId == focusId -> focusLine to 2.8.dp
-                                from == SkillState.LIT && to == SkillState.LIT -> colors.route to 2.4.dp
+                                from == SkillState.LIT && to != SkillState.LOCKED -> colors.route to 2.4.dp
                                 else -> mutedLine to 1.8.dp
                             }
-                            drawPath(path, tint, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
+                            val revealing = unlock != null && segment.edge.prerequisiteId == unlock.skillId &&
+                                segment.edge.skillId in unlock.availableChildren && to == SkillState.AVAILABLE
+                            if (revealing) {
+                                drawPath(path, mutedLine, style = Stroke(1.8.dp.toPx(), cap = StrokeCap.Round))
+                                // 跨行路径按顺序填充，到达末段后再打开下游的锁。
+                                val portion = (motionPhase(clock.value, .25f, .76f) * segment.count - segment.index).coerceIn(0f, 1f)
+                                if (portion > 0f) {
+                                    val measure = PathMeasure().apply { setPath(path, forceClosed = false) }
+                                    val filled = Path()
+                                    measure.getSegment(0f, measure.length * portion, filled, startWithMoveTo = true)
+                                    drawPath(filled, tint, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
+                                }
+                            } else {
+                                drawPath(path, tint, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
+                            }
                         }
                     }
                     nodesByRow[row].orEmpty().forEach { skill ->
@@ -212,6 +259,9 @@ private fun SkillMap(
                             { onOpen(skill) },
                             Modifier.absoluteOffset(x = left + cardWidth * (point.column - .5f))
                                 .width(cardWidth).padding(bottom = gap),
+                            unlockSource = skill.id == unlock?.skillId,
+                            unlockTarget = unlock != null && skill.id in unlock.availableChildren,
+                            clock = { clock.value },
                         )
                     }
                 }
@@ -250,6 +300,9 @@ private fun MapNode(
     references: List<Int>,
     onOpen: () -> Unit,
     modifier: Modifier,
+    unlockSource: Boolean,
+    unlockTarget: Boolean,
+    clock: () -> Float,
 ) {
     val mapName = remember(skill.name, skill.shortName) { skill.mapName }
     Surface(
@@ -270,7 +323,13 @@ private fun MapNode(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Box {
-                SkillMedallion(skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f)
+                when {
+                    unlockSource && state == SkillState.LIT ->
+                        UnlockingMedallion(skill.displayIcon, diameter, focused, source = true, progress = clock)
+                    unlockTarget && state == SkillState.AVAILABLE ->
+                        UnlockingMedallion(skill.displayIcon, diameter, focused, source = false, progress = clock)
+                    else -> SkillMedallion(skill.displayIcon, state, diameter, focused, glyphSize = diameter * .49f)
+                }
                 if (references.isNotEmpty()) {
                     Surface(Modifier.align(Alignment.BottomEnd), shape = CircleShape, color = Raised) {
                         val label = references.take(2).joinToString("·") + if (references.size > 2) "+" else ""

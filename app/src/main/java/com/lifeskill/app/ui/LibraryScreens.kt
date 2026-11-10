@@ -50,7 +50,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 20.dp),
     ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
+        item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -61,23 +61,23 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             }
         }
         if (latestSkill != null && latestTree != null) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item(key = "continue-study", span = { GridItemSpan(maxLineSpan) }) {
                 val locked = library.skillState(latestSkill.id) == SkillState.LOCKED
-                ContinueStudyCard(latestSkill, latestTree, library.progress(latestTree.id), locked) {
+                ContinueStudyCard(latestSkill, latestTree, library.progress(latestTree.id), locked, Modifier.animateItem()) {
                     app.continueStudy(latestSkill)
                 }
             }
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
+        item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
             AiAction(
                 label = "AI 生成技能树",
                 onClick = { app.open(Route(Page.GENERATE)) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().animateItem(),
                 wide = true,
             )
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            LibrarySection("学习方向", Modifier.padding(top = 6.dp)) {
+        item(key = "directions-heading", span = { GridItemSpan(maxLineSpan) }) {
+            LibrarySection("学习方向", Modifier.animateItem().padding(top = 6.dp)) {
                 TextButton(onClick = { app.add(EntryKind.DIRECTION) }) {
                     Mark(Glyph.ADD, Gold, Modifier.size(16.dp))
                     Text("新增方向", Modifier.padding(start = 4.dp))
@@ -85,7 +85,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
             }
         }
         items(directions, key = Entry::id) { direction ->
-            DirectionCard(direction, library.progress(direction.id)) {
+            DirectionCard(direction, library.progress(direction.id), Modifier.animateItem()) {
                 app.open(Route.entry(direction))
             }
         }
@@ -138,7 +138,7 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
             item { LibrarySection("技能树", Modifier.padding(top = 12.dp, bottom = 2.dp)) }
             if (trees.isEmpty()) item { LibraryEmpty("还没有技能树", Glyph.TREE) }
             items(trees, key = Entry::id) { tree ->
-                SkillTreeCard(tree, library.progress(tree.id), latest = tree.id == latestTreeId) {
+                SkillTreeCard(tree, library.progress(tree.id), tree.id == latestTreeId, Modifier.animateItem()) {
                     app.open(Route.entry(tree))
                 }
             }

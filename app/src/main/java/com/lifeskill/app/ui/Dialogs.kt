@@ -1,5 +1,8 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -77,6 +80,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                 // 只滚动表单内容，键盘弹出和选择区展开时，底部操作仍可见。
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
+                        .animateContentSize(tween(180))
                         .testTag("entry-form").padding(horizontal = 20.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -221,6 +225,7 @@ private fun EditorPickerRow(
     title: String, value: String, expanded: Boolean, enabled: Boolean, onClick: () -> Unit,
     leading: (@Composable () -> Unit)? = null,
 ) {
+    val angle by animateFloatAsState(if (expanded) 90f else 0f, tween(180), label = "表单展开")
     Surface(
         onClick = onClick, enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { role = Role.Button },
@@ -233,7 +238,7 @@ private fun EditorPickerRow(
             leading?.invoke()
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
             Text(value, color = Muted, style = MaterialTheme.typography.labelMedium)
-            Mark(Glyph.NEXT, if (enabled) Gold else Line, Modifier.rotate(if (expanded) 90f else 0f))
+            Mark(Glyph.NEXT, if (enabled) Gold else Line, Modifier.rotate(angle))
         }
     }
 }

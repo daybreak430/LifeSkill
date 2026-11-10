@@ -17,6 +17,7 @@ import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
+import com.lifeskill.app.model.unlocksSince
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -64,6 +65,20 @@ class RulesTest {
 
     @Test fun duplicatesAreDetectedAfterWhitespaceCaseAndWidthNormalization() {
         assertThrows(RuleViolation::class.java) { LibraryRules.checkUnique("  ＡＩ ", listOf("ai")) }
+    }
+
+    @Test fun aNewPassOnlyRevealsChildrenThatActuallyUnlock() {
+        val first = Entry("first", "tree", EntryKind.SKILL, "第一前置")
+        val other = first.copy(id = "other", name = "第二前置")
+        val ready = first.copy(id = "ready", name = "可以学习")
+        val blocked = first.copy(id = "blocked", name = "仍缺前置")
+        val before = Library(listOf(first, other, ready, blocked),
+            listOf(Edge(ready.id, first.id), Edge(blocked.id, first.id), Edge(blocked.id, other.id)))
+        val after = before.copy(entries = listOf(first.copy(mastery = Mastery.AI, masteryVersion = 1), other, ready, blocked))
+        val cue = after.unlocksSince(before).single()
+        assertEquals(first.id, cue.skillId)
+        assertEquals(setOf(ready.id), cue.availableChildren)
+        assertEquals(emptyList<Any>(), after.unlocksSince(after))
     }
 
     @Test fun verdictRequiresTheActiveExerciseAndAnAnswer() {

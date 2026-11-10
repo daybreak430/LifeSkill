@@ -21,7 +21,9 @@ import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.SkillUnlock
 import com.lifeskill.app.model.Turn
+import com.lifeskill.app.model.unlocksSince
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +56,10 @@ internal data class Route(val page: Page, val id: String? = null) {
     }
 }
 
+internal data class NavigationFrame(val route: Route, val depth: Int)
+
+internal data class UnlockFeedback(val unlock: SkillUnlock, val celebrate: Boolean = true)
+
 internal data class Editor(
     val initial: EntryEdit,
     val saving: Boolean = false,
@@ -71,8 +77,8 @@ internal class AppViewModel(
     private val _appearance = MutableStateFlow(appearanceSettings.load())
     val appearance = _appearance.asStateFlow()
     private val routes = state.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
-    val route = routes.map { Route.decode(it.last()) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Route.decode(routes.value.last()))
+    val navigation = routes.map { NavigationFrame(Route.decode(it.last()), it.size) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NavigationFrame(Route.decode(routes.value.last()), routes.value.size))
     private val _library = MutableStateFlow<Library?>(null)
     val library = _library.asStateFlow()
     val latestStudySkillId = container.conversations.watchLatestStudySkillId()
@@ -88,6 +94,8 @@ internal class AppViewModel(
     val notice = _notice.asStateFlow()
     private val _loadError = MutableStateFlow<String?>(null)
     val loadError = _loadError.asStateFlow()
+    private val _unlocks = MutableStateFlow<List<UnlockFeedback>>(emptyList())
+    val unlocks = _unlocks.asStateFlow()
 
     init { load() }
 
@@ -102,9 +110,14 @@ internal class AppViewModel(
         viewModelScope.launch {
             try {
                 container.library.initialize()
-                container.library.library.collect {
-                    _library.value = it
-                    discardMissingRoutes(it)
+                container.library.library.collect { current ->
+                    val previous = _library.value
+                    _library.value = current
+                    if (previous != null) {
+                        _unlocks.value = _unlocks.value.filter { it.unlock.skillId in current.byId } +
+                            current.unlocksSince(previous).map { UnlockFeedback(it) }
+                    }
+                    discardMissingRoutes(current)
                 }
             } catch (error: Exception) {
                 _loadError.value = readable(error, "无法读取本机技能库。")
@@ -119,6 +132,14 @@ internal class AppViewModel(
 
     fun back() {
         if (routes.value.size > 1) state["routes"] = ArrayList(routes.value.dropLast(1))
+    }
+
+    fun acknowledgeCelebration(key: String) {
+        _unlocks.value = _unlocks.value.map { if (it.unlock.key == key) it.copy(celebrate = false) else it }
+    }
+
+    fun finishUnlock(key: String) {
+        _unlocks.value = _unlocks.value.filterNot { it.unlock.key == key }
     }
 
     fun continueStudy(skill: Entry) {
