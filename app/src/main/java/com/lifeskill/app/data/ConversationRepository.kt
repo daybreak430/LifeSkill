@@ -182,9 +182,10 @@ internal class ConversationRepository(
                 dao.recentTeaching(scope.id, input.contentVersion, listOf(TurnKind.EXERCISE.name), it.number)
                     .asReversed().map { row -> row.toTurn().text }
             }.orEmpty()
+            val reissue = TutorRules.reissuesExercise(input, pending)
             val prompt = if (scope.mode == ChatMode.TUTOR) {
                 checkNotNull(owner)
-                AiProtocol.tutorPrompt(owner, pending, askedQuestions)
+                AiProtocol.tutorPrompt(owner, pending, askedQuestions, reissue)
             } else {
                 val current = library.snapshot()
                 val candidates = current.childrenOf(owner?.id)
@@ -199,7 +200,7 @@ internal class ConversationRepository(
             val history = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
                 newTreeHistory(recent, input)
             } else recent
-            Request(owner, input, pending, askedQuestions,
+            Request(owner, input, pending, askedQuestions, reissue,
                 listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
         } ?: return
 
@@ -239,6 +240,11 @@ internal class ConversationRepository(
             val turn = when (scope.mode) {
                 ChatMode.GENERATE -> generationTurn(raw, current, replyId, context.input)
                 ChatMode.TUTOR -> tutorTurn(raw, context, replyId)
+            }
+            if (context.reissue) {
+                // 旧题保留在对话里，但只有替换后的题参与本轮题序和判分。
+                val original = checkNotNull(dao.exercise(scope.id, checkNotNull(context.pending).id))
+                dao.updateTurn(original.copy(kind = TurnKind.MESSAGE.name, exerciseId = null, exerciseNumber = null))
             }
             dao.insertTurn(turn.row(scope))
         }
@@ -300,13 +306,17 @@ internal class ConversationRepository(
 
     private suspend fun tutorTurn(raw: String, context: Request, id: String): Turn {
         val reply = AiProtocol.tutor(raw)
-        TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
-        val correction = TutorRules.assessmentCorrection(reply.kind, context.pending)
-            ?: if (reply.kind == TurnKind.NEXT_EXERCISE &&
-                context.askedQuestions.any { it.filterNot(Char::isWhitespace).equals(
-                    reply.reply.filterNot(Char::isWhitespace), ignoreCase = true,
-                ) }
-            ) "下一题的题干重复了，请用不同知识点或情境出题。" else null
+        if (!context.reissue) TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
+        val earlierQuestions = if (context.reissue) context.askedQuestions.dropLast(1) else context.askedQuestions
+        val question = reply.reply.filterNot(Char::isWhitespace)
+        val correction = when {
+            context.reissue && reply.kind != TurnKind.EXERCISE -> "重新出本题时只返回 exercise 和完整 question。"
+            (reply.kind == TurnKind.NEXT_EXERCISE || context.reissue) &&
+                earlierQuestions.any { it.filterNot(Char::isWhitespace).equals(question, ignoreCase = true) } ->
+                "下一题的题干重复了，请用不同知识点或情境出题。"
+            context.reissue -> null
+            else -> TutorRules.assessmentCorrection(reply.kind, context.pending)
+        }
         if (correction != null) {
             throw RecoverableReply("AI 的练习题序或内容有误，请重试。", correction)
         }
@@ -333,7 +343,7 @@ internal class ConversationRepository(
             else -> null
         }
         val exerciseNumber = when (reply.kind) {
-            TurnKind.EXERCISE -> 1
+            TurnKind.EXERCISE -> if (context.reissue) checkNotNull(context.pending).number else 1
             TurnKind.NEXT_EXERCISE -> checkNotNull(context.pending).number + 1
             else -> null
         }
@@ -427,6 +437,7 @@ internal class ConversationRepository(
         val input: Turn,
         val pending: Exercise?,
         val askedQuestions: List<String>,
+        val reissue: Boolean,
         val messages: List<ModelMessage>,
     )
 

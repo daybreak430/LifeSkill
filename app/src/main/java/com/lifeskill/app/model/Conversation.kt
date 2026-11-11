@@ -82,6 +82,7 @@ fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
     const val CONTINUE_REPLY = "好的，继续"
+    const val REISSUE_REPLY = "重新出本题"
     const val EXAM_REPLY = "做课后练习"
     // 保留旧版快捷回复的识别，历史记录仍按原文显示。
     private const val LEGACY_EXAM_REPLY = "感觉已经会了，来考试吧"
@@ -113,11 +114,16 @@ object TutorRules {
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
         if (reply != TurnKind.PASSED && reply != TurnKind.RETRY && reply != TurnKind.NEXT_EXERCISE) return
         if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
-            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == EXAM_REPLY || input.text == LEGACY_EXAM_REPLY
+            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == REISSUE_REPLY ||
+            input.text == EXAM_REPLY || input.text == LEGACY_EXAM_REPLY
         ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")
         }
     }
+
+    internal fun reissuesExercise(input: Turn, pending: Exercise?): Boolean =
+        pending != null && input.kind == TurnKind.MESSAGE &&
+            (input.text == REISSUE_REPLY || input.text == CONTINUE_REPLY)
 
     internal fun assessmentCorrection(reply: TurnKind, pending: Exercise?): String? = when {
         pending == null -> null

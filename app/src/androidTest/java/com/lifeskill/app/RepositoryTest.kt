@@ -149,7 +149,7 @@ class RepositoryTest {
 
             markLegacyLit(second.id)
             offerCheck(scope)
-            ai.reply("""{"kind":"exercise","reply":"请说出操作步骤。"}""")
+            ai.reply("""{"kind":"exercise","question":"请说出操作步骤。"}""")
             conversations.send(scope, "", check = true)
             val exercise = advanceToSecondQuestion(scope, "先核对输入")
             val waiting = CompletableDeferred<Unit>()
@@ -693,7 +693,7 @@ class RepositoryTest {
             assertTrue(messages.first().text.contains(skill.name))
             assertTrue(messages.first().text.contains(skill.goal))
             assertFalse(messages.first().text.contains(other.name))
-            """{"kind":"exercise","reply":"如何处理缺少主键的记录？"}"""
+            """{"kind":"exercise","question":"如何处理缺少主键的记录？"}"""
         }
         container.conversations.send(scope, "", check = true)
         val exercise = container.conversations.watch(scope).first().last()
@@ -719,6 +719,53 @@ class RepositoryTest {
         assertNotEquals("记录来源、时间和核查结果。", database.skills().recentTurns(scope.id, 2).last().text)
     }
 
+    @Test fun feedbackOnlyDoesNotBecomeAQuestionAndLegacyContinueCanRecoverTheCurrentNumber() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "补题测试")
+        val skill = add(tree, EntryKind.SKILL, "追踪证据")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        val conversations = container.conversations
+        offerCheck(scope)
+        ai.reply("""{"kind":"exercise","question":"如何判断风险降低？"}""")
+        conversations.send(scope, "", check = true)
+        val first = conversations.watch(scope).first().last()
+        val feedback = "答得对！要有可归因的证据链。接下来看第二题，检验推广路径的把握。"
+        ai.reply(JSONObject().put("kind", "next_exercise").put("reply", feedback)
+            .put("exerciseId", first.id).toString())
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("缺少 question"))
+            verdict("next_exercise", "请说明推广前应验证的指标。", first.id)
+        }
+        conversations.send(scope, "核对过程、结果和价值指标")
+        val second = conversations.watch(scope).first().last()
+        assertEquals(2, second.exerciseNumber)
+        assertFalse(conversations.watch(scope).first().any { it.text == feedback })
+
+        // 模拟旧版把点评误存为第 2 题，并留下截图中的待重试快捷回复。
+        val dao = database.skills()
+        val row = checkNotNull(dao.turn(scope.id, second.id))
+        dao.updateTurn(row.copy(text = SecretBox("lifeskill-tests").seal(feedback, "${row.id}:turn")))
+        ai.enqueue { throw RuleViolation("AI 的评估没有对应当前练习，请重试。") }
+        expectRule { conversations.send(scope, TutorRules.CONTINUE_REPLY) }
+        ai.reply(verdict("passed", "错误地把继续当作作答。", second.id))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("重新出当前第 2 题"))
+            assertTrue(messages.first().text.contains("重新出本题时只返回 exercise"))
+            """{"kind":"exercise","question":"推广前怎样建立对照？"}"""
+        }
+        conversations.retry(scope)
+        val repaired = conversations.watch(scope).first()
+        val replacement = repaired.last()
+        assertEquals("推广前怎样建立对照？", replacement.text)
+        assertEquals(listOf(first.id, replacement.id), repaired.filter { it.kind == TurnKind.EXERCISE }.map { it.id })
+        assertEquals(TurnKind.MESSAGE, repaired.single { it.id == second.id }.kind)
+        assertEquals(2, replacement.exerciseNumber)
+        assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+        ai.reply(verdict("passed", "已说明对照方法。", replacement.id))
+        conversations.send(scope, "选取相似工况，按相同口径对照试点前后记录")
+        assertEquals(Mastery.AI, container.library.entry(skill.id)?.mastery)
+    }
+
     @Test fun tutorCanChooseAThirdQuestionButRejectsRepeatedQuestionsAndAFourth() = runBlocking {
         val direction = container.library.snapshot().childrenOf(null).first()
         val tree = add(direction, EntryKind.TREE, "三题练习")
@@ -726,7 +773,7 @@ class RepositoryTest {
         val scope = ChatScope(ChatMode.TUTOR, skill.id)
         val conversations = container.conversations
         offerCheck(scope)
-        ai.reply("""{"kind":"exercise","reply":"怎样核对记录？"}""")
+        ai.reply("""{"kind":"exercise","question":"怎样核对记录？"}""")
         conversations.send(scope, "", check = true)
         val first = conversations.watch(scope).first().last()
         val dao = database.skills()
@@ -804,7 +851,7 @@ class RepositoryTest {
         expectRule { conversations.send(scope, TutorRules.EXAM_REPLY, check = true) }
         assertEquals(10, conversations.watch(scope).first().size)
         teach(TutorRules.CONTINUE_REPLY)
-        ai.reply("""{"kind":"exercise","reply":"应该核对什么？","choices":["核对金额","忽略金额"]}""")
+        ai.reply("""{"kind":"exercise","question":"应该核对什么？","choices":["核对金额","忽略金额"]}""")
         conversations.send(scope, TutorRules.EXAM_REPLY, check = true)
         val history = conversations.watch(scope).first()
         assertEquals(TurnKind.CHECK, history[history.lastIndex - 1].kind)
@@ -971,7 +1018,7 @@ class RepositoryTest {
             val skill = add(tree, EntryKind.SKILL, "点亮状态")
             val scope = ChatScope(ChatMode.TUTOR, skill.id)
             offerCheck(scope)
-            ai.reply("""{"kind":"exercise","reply":"你如何核对结果？"}""")
+            ai.reply("""{"kind":"exercise","question":"你如何核对结果？"}""")
             container.conversations.send(scope, "", check = true)
             val exercise = advanceToSecondQuestion(scope, "先核对来源。")
             val waiting = CompletableDeferred<Unit>()
@@ -1002,7 +1049,7 @@ class RepositoryTest {
         container.conversations.send(otherScope, "开始学习")
         markLegacyLit(skill.id)
         offerCheck(scope)
-        ai.reply("""{"kind":"exercise","reply":"旧版练习"}""")
+        ai.reply("""{"kind":"exercise","question":"旧版练习"}""")
         container.conversations.send(scope, "", check = true)
         val oldQuiz = container.conversations.watch(scope).first().last()
 
@@ -1105,6 +1152,7 @@ class RepositoryTest {
         const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","icon":"TARGET","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[],"icon":"CHART"},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"],"icon":"UNKNOWN"}]}]}"""
 
         fun verdict(kind: String, text: String, id: String): String =
-            JSONObject().put("kind", kind).put("reply", text).put("exerciseId", id).toString()
+            JSONObject().put("kind", kind).put(if (kind == "next_exercise") "question" else "reply", text)
+                .put("exerciseId", id).toString()
     }
 }

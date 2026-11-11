@@ -234,14 +234,15 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         )
                     }
                     if (turn.id == latestReply?.id) {
-                        if (choices.isEmpty()) {
+                        if (choices.isEmpty() && (exercise == null || exercise.choices.isEmpty())) {
+                            val quickReply = if (exercise == null) TutorRules.CONTINUE_REPLY else TutorRules.REISSUE_REPLY
                             FlowRow(
                                 Modifier.padding(start = ReplyInset, top = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 ChatPill(
-                                    TutorRules.CONTINUE_REPLY,
-                                    onClick = { submit(TutorRules.CONTINUE_REPLY) },
+                                    quickReply,
+                                    onClick = { submit(quickReply) },
                                     enabled = canSend,
                                 )
                                 if (examAvailable && !checkOffered) {

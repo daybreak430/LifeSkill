@@ -261,7 +261,7 @@ class MvpFlowTest {
             val releaseReply = CompletableDeferred<Unit>()
             fixture.ai.enqueue {
                 releaseReply.await()
-                JSONObject().put("kind", "exercise").put("reply", question)
+                JSONObject().put("kind", "exercise").put("question", question)
                     .put("choices", org.json.JSONArray(listOf("甲", "乙", "丙", "最后一个选项"))).toString()
             }
             ui.onNode(hasText("做课后练习") and hasClickAction()).performTouchInput { click() }
@@ -279,6 +279,49 @@ class MvpFlowTest {
             lastOption.assertIsNotDisplayed()
             messages.performScrollToNode(option)
             lastOption.assertIsDisplayed()
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
+    }
+
+    @Test fun openExerciseCanBeReissuedFromTheChatWithoutAdvancing() {
+        await("本职工作")
+        val library = fixture.container.library
+        val conversations = fixture.container.conversations
+        val tree = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first()
+            library.save(EntryEdit(null, direction.id, EntryKind.TREE, "开放题练习"))
+        }
+        try {
+            val scope = runBlocking {
+                val skill = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对结果", "能保留处理依据"))
+                val lesson = ChatScope(ChatMode.TUTOR, skill.id)
+                fixture.ai.reply("""{"kind":"offer_check","reply":"练习核对记录。"}""")
+                conversations.send(lesson, "开始学习")
+                fixture.ai.reply("""{"kind":"exercise","question":"先核对什么？"}""")
+                conversations.send(lesson, "", check = true)
+                val first = conversations.watch(lesson).first().last()
+                fixture.ai.reply(RepositoryTest.verdict("next_exercise", "核对之后做什么？", first.id))
+                conversations.send(lesson, "核对来源")
+                lesson
+            }
+            await("继续学习")
+            ui.onNodeWithText("继续学习").performTouchInput { click() }
+            await("AI 老师")
+            showChatReply(TutorRules.REISSUE_REPLY)
+            ui.onNode(hasText(TutorRules.CONTINUE_REPLY) and hasClickAction()).assertDoesNotExist()
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.first().text.contains("重新出当前第 2 题"))
+                """{"kind":"exercise","question":"核对结果应如何处理？","choices":["记录结果","删除数据"]}"""
+            }
+            ui.onNodeWithText(TutorRules.REISSUE_REPLY).performTouchInput { click() }
+            showChatReply("A. 记录结果")
+            ui.onNodeWithText("课后练习 · 第 2 题").assertIsDisplayed()
+            ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
+            val exercises = runBlocking {
+                conversations.watch(scope).first().filter { it.kind == TurnKind.EXERCISE }
+            }
+            assertEquals(listOf(1, 2), exercises.map { it.exerciseNumber })
         } finally {
             runBlocking { library.delete(tree.id) }
         }
@@ -470,7 +513,7 @@ class MvpFlowTest {
         val conversations = fixture.container.conversations
         fixture.ai.reply("""{"kind":"offer_check","reply":"可以检验掌握。"}""")
         conversations.send(scope, "开始学习")
-        fixture.ai.reply("""{"kind":"exercise","reply":"该怎么做？","choices":["先核对","直接跳过"]}""")
+        fixture.ai.reply("""{"kind":"exercise","question":"该怎么做？","choices":["先核对","直接跳过"]}""")
         conversations.send(scope, "", check = true)
         val exerciseId = conversations.watch(scope).first().last().id
         fixture.ai.reply(RepositoryTest.verdict("next_exercise", "核对之后做什么？", exerciseId))
@@ -1316,7 +1359,7 @@ class MvpFlowTest {
         fixture.ai.reply("""{"kind":"offer_check","reply":"基础知识已讲完。"}""")
         ui.onNodeWithText("开始学习").performClick()
         await("做课后练习")
-        fixture.ai.reply("""{"kind":"exercise","reply":"先做哪一步？","choices":["核对数据","提交结果"]}""")
+        fixture.ai.reply("""{"kind":"exercise","question":"先做哪一步？","choices":["核对数据","提交结果"]}""")
         masteryCheck.performTouchInput { click() }
         await("先做哪一步？")
         fixture.ai.enqueue { messages ->
@@ -1388,7 +1431,7 @@ class MvpFlowTest {
         fixture.ai.enqueue { throw RuleViolation("考试请求暂时失败，请重试。") }
         fixture.ai.enqueue { messages ->
             assertTrue(messages.last().text.contains("App 发起课后练习"))
-            """{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}"""
+            """{"kind":"exercise","question":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}"""
         }
         examReply.assertIsEnabled().performTouchInput { click() }
         await("考试请求暂时失败，请重试。")
