@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.lifeskill.app.AppContainer
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.AiProtocol
+import com.lifeskill.app.ai.DeepSeekBalance
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.EntryEdit
@@ -386,6 +387,10 @@ internal data class SettingsStatus(
     val working: Boolean = false,
     val message: String? = null,
     val error: Boolean = false,
+    val balance: DeepSeekBalance? = null,
+    val balanceWorking: Boolean = false,
+    val balanceMessage: String? = null,
+    val balanceError: Boolean = false,
 )
 
 internal class SettingsViewModel(private val container: AppContainer) : ViewModel() {
@@ -402,7 +407,14 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
     }
 
     fun edit(config: ModelSettings) {
-        _status.value = _status.value.copy(config = config, message = null, error = false)
+        _status.value = _status.value.copy(
+            config = config,
+            message = null,
+            error = false,
+            balance = null,
+            balanceMessage = null,
+            balanceError = false,
+        )
     }
 
     fun save() {
@@ -419,6 +431,24 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
             val input = listOf(ModelMessage("user", "请简短回复「连接成功」。"))
             container.gateway.complete(config.validated(), input, structured = false)
             SettingsStatus(config, message = "连接成功")
+        }
+    }
+
+    fun refreshBalance() {
+        val config = _status.value.config ?: return
+        if (config.provider != Provider.DEEPSEEK || _status.value.balanceWorking) return
+        _status.value = _status.value.copy(balanceWorking = true, balanceMessage = null, balanceError = false)
+        viewModelScope.launch {
+            try {
+                val balance = withContext(Dispatchers.IO) { container.gateway.balance(config.validated()) }
+                _status.value = _status.value.copy(balance = balance, balanceWorking = false)
+            } catch (error: Exception) {
+                _status.value = _status.value.copy(
+                    balanceWorking = false,
+                    balanceMessage = readable(error, "余额查询失败，请重试。"),
+                    balanceError = true,
+                )
+            }
         }
     }
 

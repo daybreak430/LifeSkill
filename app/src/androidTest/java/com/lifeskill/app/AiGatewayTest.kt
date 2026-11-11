@@ -49,6 +49,23 @@ class AiGatewayTest {
         assertTrue(connection.disconnected)
     }
 
+    @Test fun readsDeepSeekBalanceFromTheDedicatedEndpoint() = runBlocking {
+        val connection = Response(
+            body = """{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"110.00","granted_balance":"10.00","topped_up_balance":"100.00"}]}""",
+        )
+        val gateway = OpenAiGateway { endpoint ->
+            assertEquals("https://api.deepseek.com/user/balance", endpoint.toString())
+            connection
+        }
+        val balance = gateway.balance(ModelSettings(Provider.DEEPSEEK, apiKey = "test-key"))
+        assertTrue(balance.isAvailable)
+        assertEquals("CNY", balance.balances.single().currency)
+        assertEquals("110.00", balance.balances.single().totalBalance)
+        assertEquals("GET", connection.requestMethod)
+        assertEquals("Bearer test-key", connection.getRequestProperty("Authorization"))
+        assertTrue(connection.disconnected)
+    }
+
     @Test fun mapsHttpAndNetworkErrors() = runBlocking {
         val http = mapOf(
             302 to "跳转", 401 to "API Key", 403 to "权限", 402 to "余额", 404 to "Base URL",

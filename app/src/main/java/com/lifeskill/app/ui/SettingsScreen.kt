@@ -87,6 +87,9 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                             }
                         }
                     }
+                    if (config.provider == Provider.DEEPSEEK) {
+                        DeepSeekBalanceRow(state, model)
+                    }
                     OutlinedTextField(
                         config.apiKey, { model.edit(config.copy(apiKey = it)) }, Modifier.fillMaxWidth(),
                         label = { Text("API Key") }, singleLine = true,
@@ -117,6 +120,50 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
             }
         }
     }
+}
+
+@Composable
+private fun DeepSeekBalanceRow(state: SettingsStatus, model: SettingsViewModel) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("余额", style = MaterialTheme.typography.titleMedium)
+            when {
+                state.balanceWorking -> Text("查询中…", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                state.balance != null -> {
+                    state.balance.balances.forEach { balance ->
+                        Text(
+                            "${currencySymbol(balance.currency)}${balance.totalBalance}",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    if (!state.balance.isAvailable) {
+                        Text("当前余额不足以调用 API", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                state.balanceMessage != null -> Text(
+                    state.balanceMessage,
+                    color = if (state.balanceError) MaterialTheme.colorScheme.error else Muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                state.configHasApiKey() -> Text("尚未查询", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                else -> Text("填写 API Key 后查询", color = Muted, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        TextButton(
+            onClick = model::refreshBalance,
+            enabled = !state.working && !state.balanceWorking && state.configHasApiKey(),
+        ) {
+            Text(if (state.balanceWorking) "查询中…" else "刷新")
+        }
+    }
+}
+
+private fun SettingsStatus.configHasApiKey(): Boolean = !config?.apiKey.isNullOrBlank()
+
+private fun currencySymbol(currency: String): String = when (currency.uppercase()) {
+    "CNY" -> "¥"
+    "USD" -> "$"
+    else -> "$currency "
 }
 
 @Composable
