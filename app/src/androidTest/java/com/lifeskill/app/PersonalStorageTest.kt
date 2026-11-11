@@ -9,9 +9,11 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.PersonalProfileRow
 import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.data.readAvatarPhoto
 import com.lifeskill.app.model.CertificateStyle
+import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
@@ -19,6 +21,7 @@ import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.LearningStatistics
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.PersonalProfile
+import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.Progress
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -80,7 +83,7 @@ class PersonalStorageTest {
                 assertNull(app.certificates.watchCertificate(waiting.id).first())
                 val stats = LearningStatistics.from(app.library.snapshot(), app.assessments.summaries.first())
                 assertEquals(Progress(1, 2), stats.skills)
-                assertEquals(Progress(1, 2), stats.directions.single().progress)
+                assertEquals(Progress(1, 2), app.library.snapshot().progress(direction.id))
                 assertEquals(3, stats.passedTrees)
                 app.certificates.issue(waiting.id, "old-waiting")
                 assertEquals("现在的昵称", app.certificates.certificates.first().first().recipient)
@@ -127,6 +130,10 @@ class PersonalStorageTest {
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
                 assertEquals(PersonalProfile("本机学员", avatar), app.profiles.current())
+                val legacyPreset = JSONObject().put("preset", "CODING").toString()
+                database.personal().saveProfile(PersonalProfileRow(content =
+                    SecretBox("lifeskill-tests").seal(legacyPreset, "personal-profile")))
+                assertEquals(ProfileAvatar.Preset(AvatarPreset.LAVENDER), app.profiles.current().avatar)
             }
         } finally {
             photo.delete()

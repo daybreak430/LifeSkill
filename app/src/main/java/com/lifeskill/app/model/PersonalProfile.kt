@@ -2,9 +2,23 @@ package com.lifeskill.app.model
 
 internal const val NICKNAME_LIMIT = 24
 
-internal enum class AvatarPreset(val icon: EntryIcon) {
-    DEFAULT(EntryIcon.TREE), READING(EntryIcon.BOOK), CRYSTAL(EntryIcon.DIAMOND),
-    CODING(EntryIcon.CODE), PHOTOGRAPHY(EntryIcon.CAMERA), MUSIC(EntryIcon.MUSIC),
+internal enum class AvatarPreset(val label: String) {
+    BOB("短发女生"), GLASSES("眼镜男生"), LAVENDER("紫发青年"), SILVER("银发女士"),
+    CURLS("卷发男生"), SCARF("橙色头巾"), CAT("橘猫"), DOG("垂耳小狗"),
+    FOX("赤狐"), RABBIT("奶油兔"), ALIEN("绿星人"), ROBOT("蓝色机器人");
+
+    companion object {
+        val default = BOB
+
+        fun fromId(id: String): AvatarPreset = entries.firstOrNull { it.name == id } ?: when (id) {
+            "READING" -> GLASSES
+            "CRYSTAL" -> ALIEN
+            "CODING" -> LAVENDER
+            "PHOTOGRAPHY" -> SCARF
+            "MUSIC" -> ROBOT
+            else -> default
+        }
+    }
 }
 
 internal sealed interface ProfileAvatar {
@@ -14,7 +28,7 @@ internal sealed interface ProfileAvatar {
 
 internal data class PersonalProfile(
     val nickname: String? = null,
-    val avatar: ProfileAvatar = ProfileAvatar.Preset(AvatarPreset.DEFAULT),
+    val avatar: ProfileAvatar = ProfileAvatar.Preset(AvatarPreset.default),
 ) {
     val displayName get() = nickname ?: "学习者"
 }
@@ -33,15 +47,10 @@ internal data class CollectedCertificate(
     val treeId: String, val treeName: String, val style: CertificateStyle, val recipient: String?,
 )
 
-internal data class DirectionProgress(val id: String, val name: String, val progress: Progress)
-
-internal data class LearningStatistics(
-    val skills: Progress, val directions: List<DirectionProgress>, val passedTrees: Int,
-) {
+internal data class LearningStatistics(val skills: Progress, val passedTrees: Int) {
     companion object {
         fun from(library: Library, assessments: Map<String, TreeAssessmentSummary>) = LearningStatistics(
             library.progress(),
-            library.childrenOf(null).map { DirectionProgress(it.id, it.name, library.progress(it.id)) },
             assessments.count { (id, summary) -> summary.passed && library.byId[id]?.kind == EntryKind.TREE },
         )
     }

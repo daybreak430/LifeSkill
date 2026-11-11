@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -28,6 +29,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -37,10 +40,13 @@ import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CertificateTheme
+import com.lifeskill.app.model.CollectedCertificate
 
 private val Parchment = Color(0xFFFCF7ED)
 private val CertificateType = TextStyle(fontFamily = FontFamily.Serif, localeList = LocaleList(Locale("zh-CN")))
@@ -101,10 +107,32 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle, recipien
 }
 
 @Composable
-internal fun CertificateThumbnail(style: CertificateStyle) {
+internal fun CertificateThumbnail(certificate: CollectedCertificate, modifier: Modifier = Modifier) {
+    val style = certificate.style
     val palette = style.theme.palette()
-    Surface(Modifier.size(42.dp, 49.dp), color = palette.paperEdge, shape = ControlShape) {
-        Box(contentAlignment = Alignment.Center) { Mark(style.emblem.glyph, palette.ink) }
+    val density = LocalDensity.current.density
+    // 展柜缩略图是纸面预览，课程名和操作由外层卡片提供给读屏。
+    CompositionLocalProvider(LocalDensity provides Density(density)) {
+        Column(
+            modifier.clearAndSetSemantics {}.drawBehind {
+                drawRect(Brush.linearGradient(listOf(palette.paperEdge, Parchment, palette.paperEdge)))
+                drawCertificateFrame(style, palette.border, frameScale = .35f)
+            }.padding(horizontal = 9.dp, vertical = 11.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            Text("LifeSkill", color = palette.ink, style = CertificateType.copy(fontSize = 8.sp), maxLines = 1)
+            Text("结业证书", color = palette.ink, style = CertificateType.copy(fontSize = 13.sp,
+                fontWeight = FontWeight.Bold), maxLines = 1)
+            certificate.recipient?.let {
+                Text(it, color = palette.ink, style = CertificateType.copy(fontSize = 8.sp),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(certificate.treeName, color = palette.ink, textAlign = TextAlign.Center,
+                style = CertificateType.copy(fontSize = 9.sp, lineHeight = 11.sp),
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Emblem(style.emblem.glyph, tint = palette.ink, background = palette.paperEdge, diameter = 23.dp)
+        }
     }
 }
 
@@ -124,22 +152,22 @@ private fun CertificateSeal(style: CertificateStyle, ink: Color) {
     }
 }
 
-private fun DrawScope.drawCertificateFrame(style: CertificateStyle, color: Color) {
-    val outer = 9.dp.toPx()
-    val inner = 14.dp.toPx()
+private fun DrawScope.drawCertificateFrame(style: CertificateStyle, color: Color, frameScale: Float = 1f) {
+    val outer = 9.dp.toPx() * frameScale
+    val inner = 14.dp.toPx() * frameScale
     for (inset in listOf(outer, inner)) {
         val frameSize = Size(size.width - 2 * inset, size.height - 2 * inset)
         if (frameSize.minDimension <= 0f) return
         drawRoundRect(
             color = color.copy(alpha = if (inset == outer) .9f else .62f),
             topLeft = Offset(inset, inset), size = frameSize,
-            cornerRadius = CornerRadius(if (style.theme == CertificateTheme.COMMUNICATION) 7.dp.toPx() else 0f),
-            style = Stroke(if (inset == outer) 1.dp.toPx() else .6.dp.toPx()),
+            cornerRadius = CornerRadius(if (style.theme == CertificateTheme.COMMUNICATION) 7.dp.toPx() * frameScale else 0f),
+            style = Stroke((if (inset == outer) 1.dp else .6.dp).toPx() * frameScale),
         )
     }
 
     // 将同一角纹镜像到四角。固定编号分别决定线段长度和小印记，两者组合成 16 个变体。
-    val length = (16 + style.cornerVariant % 4 * 2).dp.toPx()
+    val length = (16 + style.cornerVariant % 4 * 2).dp.toPx() * frameScale
     val variant = style.cornerVariant / 4
     for (horizontal in listOf(1f, -1f)) {
         for (vertical in listOf(1f, -1f)) {
@@ -147,15 +175,15 @@ private fun DrawScope.drawCertificateFrame(style: CertificateStyle, color: Color
             val top = if (vertical > 0f) inner else size.height - inner
             translate(left, top) {
                 scale(horizontal, vertical, Offset.Zero) {
-                    drawCertificateCorner(style.theme, color, length, variant)
+                    drawCertificateCorner(style.theme, color, length, variant, frameScale)
                 }
             }
         }
     }
 }
 
-private fun DrawScope.drawCertificateCorner(theme: CertificateTheme, color: Color, length: Float, variant: Int) {
-    val step = 4.dp.toPx()
+private fun DrawScope.drawCertificateCorner(theme: CertificateTheme, color: Color, length: Float, variant: Int, scale: Float) {
+    val step = 4.dp.toPx() * scale
     val corner = Path().apply {
         when (theme) {
             CertificateTheme.TECH -> {
@@ -182,13 +210,14 @@ private fun DrawScope.drawCertificateCorner(theme: CertificateTheme, color: Colo
             }
         }
     }
-    drawPath(corner, color, style = Stroke(1.dp.toPx()))
+    drawPath(corner, color, style = Stroke(1.dp.toPx() * scale))
     val markCenter = Offset(length * .60f, length * .60f)
-    val radius = 1.75.dp.toPx()
+    val radius = 1.75.dp.toPx() * scale
     when (variant) {
         0 -> drawCircle(color, radius * .7f, markCenter)
-        1 -> drawLine(color, markCenter - Offset(radius, radius), markCenter + Offset(radius, radius), 1.dp.toPx())
-        2 -> drawRect(color, markCenter - Offset(radius, radius), Size(2 * radius, 2 * radius), style = Stroke(.8.dp.toPx()))
+        1 -> drawLine(color, markCenter - Offset(radius, radius), markCenter + Offset(radius, radius), 1.dp.toPx() * scale)
+        2 -> drawRect(color, markCenter - Offset(radius, radius), Size(2 * radius, 2 * radius),
+            style = Stroke(.8.dp.toPx() * scale))
         3 -> drawPath(Path().apply {
             moveTo(markCenter.x, markCenter.y - radius)
             lineTo(markCenter.x + radius, markCenter.y)

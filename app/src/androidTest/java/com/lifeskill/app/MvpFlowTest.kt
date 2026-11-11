@@ -168,6 +168,7 @@ class MvpFlowTest {
             ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(lastDirection))
             personal.performClick().assertIsSelected()
             await("学习者")
+            ui.onNodeWithText(directions.first().name).assertDoesNotExist()
             ui.onNodeWithContentDescription("设置").assertIsDisplayed()
             ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书收藏夹"))
             learning.performClick().assertIsSelected()
@@ -178,27 +179,29 @@ class MvpFlowTest {
             ui.onNodeWithContentDescription("编辑资料").performClick()
             await("内置头像")
             personal.assertDoesNotExist()
-            ui.onNodeWithContentDescription("编程头像").performScrollTo().performClick().assertIsSelected()
+            AvatarPreset.entries.forEach { ui.onNodeWithContentDescription("${it.label}头像").assertExists() }
+            ui.onNodeWithContentDescription("橘猫头像").performScrollTo().performClick().assertIsSelected()
+            captureScreenshot("capturePersonalScreenshots", "avatars.png")
             val activity = ui.activity
             ui.onNodeWithText("从相册选择").performScrollTo().performTouchInput { click() }
             ui.waitUntil(8_000) { !ui.runOnUiThread { activity.hasWindowFocus() } }
             pressBack()
             ui.waitUntil(8_000) { ui.runOnUiThread { activity.hasWindowFocus() } }
-            ui.onNodeWithContentDescription("编程头像").assertIsSelected()
+            ui.onNodeWithContentDescription("橘猫头像").assertIsSelected()
             ui.onNode(hasSetTextAction() and hasText("昵称")).performScrollTo().performTextReplacement("  新昵称  ")
             ui.onNodeWithText("保存资料").performScrollTo().performClick()
             await("新昵称")
-            assertEquals(PersonalProfile("新昵称", ProfileAvatar.Preset(AvatarPreset.CODING)), runBlocking { profiles.current() })
+            assertEquals(PersonalProfile("新昵称", ProfileAvatar.Preset(AvatarPreset.CAT)), runBlocking { profiles.current() })
 
             ui.activityRule.scenario.recreate()
             await("新昵称")
             ui.onNodeWithContentDescription("编辑资料").performClick()
             await("内置头像")
             ui.onNodeWithText("恢复默认头像").performScrollTo().performClick()
-            ui.onNodeWithContentDescription("分支头像").assertIsSelected()
+            ui.onNodeWithContentDescription("短发女生头像").assertIsSelected()
             pressBack()
             await("新昵称")
-            assertEquals(ProfileAvatar.Preset(AvatarPreset.CODING), runBlocking { profiles.current().avatar })
+            assertEquals(ProfileAvatar.Preset(AvatarPreset.CAT), runBlocking { profiles.current().avatar })
             pressBack()
             learning.assertIsSelected()
             ui.onNodeWithTag(lastDirection).assertIsDisplayed()
@@ -589,16 +592,15 @@ class MvpFlowTest {
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("tab-personal").fetchSemanticsNodes().isNotEmpty() }
             ui.onNodeWithTag("tab-personal").performClick()
             await("更名后的学员")
-            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书收藏夹"))
-            ui.onNodeWithText("查看全部").performClick()
-            ui.onNodeWithTag("tab-personal").assertDoesNotExist()
-            ui.onNodeWithTag("certificate-collection").performScrollToNode(hasTestTag("collected-certificate-${tree.id}"))
-            ui.onNodeWithTag("collected-certificate-${tree.id}").performClick()
+            ui.onNodeWithText("查看全部").assertDoesNotExist()
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasTestTag("collected-certificate-${tree.id}"))
+            ui.onNodeWithTag("collected-certificate-${tree.id}").performTouchInput { click() }
             ui.onNodeWithText("证书学员").assertIsDisplayed()
             ui.onNode(hasText(tree.name) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
             pressBack()
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
-            ui.onNodeWithTag("certificate-collection").assertIsDisplayed()
+            ui.onNodeWithTag("personal-home").assertIsDisplayed()
+            ui.onNodeWithTag("tab-personal").assertIsSelected()
         } finally {
             runBlocking {
                 library.delete(tree.id)
@@ -697,7 +699,7 @@ class MvpFlowTest {
                 ui.onNodeWithTag(paperTag).assertIsDisplayed()
                 ui.onNode(hasText(name) and hasAnyAncestor(hasTestTag(paperTag))).assertIsDisplayed()
                 ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
-                captureCertificateScreenshot(theme)
+                captureScreenshot("captureCertificateScreenshots", "${theme.name.lowercase()}.png")
                 ui.onNodeWithText("关闭").performTouchInput { click() }
                 ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
                 ui.onNodeWithContentDescription("返回").performClick()
@@ -705,19 +707,34 @@ class MvpFlowTest {
                 ui.onNodeWithContentDescription("返回").performClick()
                 await(direction.name)
             }
+            ui.onNodeWithContentDescription("返回").performClick()
+            await("LifeSkill")
+            ui.onNodeWithTag("tab-personal").performTouchInput { click() }
+            await("证书收藏夹")
+            ui.onNodeWithText("查看全部").assertDoesNotExist()
+            val cabinet = ui.onNodeWithTag("personal-home")
+            examples.forEach { (_, _, name) -> cabinet.performScrollToNode(hasText(name) and hasClickAction()) }
+            ui.onNode(hasText(examples.last().third) and hasClickAction()).performTouchInput { click() }
+            ui.onNodeWithTag("certificate-paper-arts").assertIsDisplayed()
+            ui.onNodeWithText("关闭").performClick()
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+            cabinet.performScrollToIndex(0)
+            captureScreenshot("capturePersonalScreenshots", "cabinet.png")
         } finally {
             runBlocking { library.delete(direction.id) }
         }
     }
 
-    private fun captureCertificateScreenshot(theme: CertificateTheme) {
-        if (InstrumentationRegistry.getArguments().getString("captureCertificateScreenshots") != "true") return
+    private fun captureScreenshot(argument: String, filename: String) {
+        if (InstrumentationRegistry.getArguments().getString(argument) != "true") return
         ui.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val automation = instrumentation.uiAutomation
+        automation.waitForIdle(200, 3_000)
+        val screenshot = checkNotNull(automation.takeScreenshot())
         try {
             val directory = File(ui.activity.cacheDir, "certificate-screenshots").apply { mkdirs() }
-            File(directory, "${theme.name.lowercase()}.png").outputStream().use {
+            File(directory, filename).outputStream().use {
                 check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
         } finally {

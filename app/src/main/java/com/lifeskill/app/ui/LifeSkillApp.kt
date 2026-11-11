@@ -17,13 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -43,9 +38,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,6 +55,8 @@ import com.lifeskill.app.model.LearningStatistics
 import com.lifeskill.app.model.TreeAssessmentSummary
 import com.lifeskill.app.model.TreeChallenge
 import com.lifeskill.app.model.examAvailable
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 private const val PAGE_MOTION_MS = 220
 
@@ -120,16 +117,16 @@ internal fun LifeSkillApp(
             brush
         }
         SideEffect { onSystemBars(dark, gradient.first()) }
+        val showTabs = library != null && (route.page == Page.HOME || route.page == Page.ME)
+        val tabBackdrop = rememberLayerBackdrop()
+        // 玻璃层记录它下方的页面和渐变，标签栏作为独立浮层绘制，滚动内容可以从下面经过。
+        val recording = if (showTabs && liveTabGlass) Modifier.layerBackdrop(tabBackdrop)
+            .drawBehind { drawRect(backdrop()) } else Modifier
         Scaffold(
             modifier = Modifier.fillMaxSize()
                 .drawBehind { drawRect(backdrop()) }.safeDrawingPadding(),
             containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                if (library != null && (route.page == Page.HOME || route.page == Page.ME)) {
-                    HomeTabs(route.page, app::selectTab)
-                }
-            },
+            snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (showTabs) HomeTabClearance else 0.dp)) },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 val current = library
@@ -138,7 +135,7 @@ internal fun LifeSkillApp(
                 } else {
                     AnimatedContent(
                         targetState = navigation,
-                        modifier = Modifier.fillMaxSize().clipToBounds(),
+                        modifier = Modifier.fillMaxSize().clipToBounds().then(recording),
                         contentKey = { it.route.encode() },
                         transitionSpec = {
                             val backToTree = initialState.route.page == Page.TUTOR && targetState.route.page == Page.TREE
@@ -168,10 +165,9 @@ internal fun LifeSkillApp(
                                         val statistics = remember(displayedLibrary, assessments) {
                                             LearningStatistics.from(displayedLibrary, assessments)
                                         }
-                                        PersonalScreen(app, personalModel(container), statistics, active)
+                                        PersonalScreen(app, personalModel(container), statistics, active, dark)
                                     }
                                     Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
-                                    Page.CERTIFICATES -> CertificateCollectionScreen(app, personalModel(container), active)
                                     Page.DIRECTION -> entry?.let {
                                         DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, app, addition)
                                     }
@@ -205,25 +201,14 @@ internal fun LifeSkillApp(
                             }
                         }
                     }
+                    if (showTabs) {
+                        FloatingHomeTabs(route.page, tabBackdrop, dark, app::selectTab, Modifier.align(Alignment.BottomCenter))
+                    }
                     editor?.let { EditorDialog(it, current, app) }
                     deletion?.let { DeletionDialog(it, current, deleting, app) }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun HomeTabs(page: Page, select: (Page) -> Unit) {
-    val colors = NavigationBarItemDefaults.colors(selectedIconColor = Gold, selectedTextColor = Gold,
-        indicatorColor = GoldGround, unselectedIconColor = Muted, unselectedTextColor = Muted)
-    NavigationBar(containerColor = Panel, windowInsets = WindowInsets(0, 0, 0, 0)) {
-        NavigationBarItem(selected = page == Page.HOME, onClick = { select(Page.HOME) },
-            icon = { Mark(Glyph.BOOK, LocalContentColor.current) }, label = { Text("学习") },
-            modifier = Modifier.testTag("tab-learning"), colors = colors)
-        NavigationBarItem(selected = page == Page.ME, onClick = { select(Page.ME) },
-            icon = { Mark(Glyph.PERSON, LocalContentColor.current) }, label = { Text("我的") },
-            modifier = Modifier.testTag("tab-personal"), colors = colors)
     }
 }
 

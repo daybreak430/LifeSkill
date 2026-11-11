@@ -12,8 +12,8 @@ android {
         applicationId = "com.lifeskill.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 48
-        versionName = "0.13.0"
+        versionCode = 49
+        versionName = "0.13.1"
         testInstrumentationRunner = "com.lifeskill.app.LifeSkillTestRunner"
     }
 
@@ -41,6 +41,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
     implementation("androidx.room:room-runtime:2.8.5")
+    implementation("io.github.kyant0:backdrop:1.0.6") {
+        // Shapes 的 Android 产物共用 AndroidX Compose，版本由本项目 BOM 管理。
+        exclude(group = "org.jetbrains.compose.ui", module = "ui")
+    }
     implementation("org.commonmark:commonmark:0.32.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.32.0")
     ksp("androidx.room:room-compiler:2.8.5")

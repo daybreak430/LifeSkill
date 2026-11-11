@@ -29,8 +29,7 @@ internal class ProfileRepository(database: LifeSkillDatabase, private val secret
         if (this == null) return PersonalProfile()
         val json = JSONObject(secret.open(content, PROFILE_KEY))
         val avatar = json.optString("photo").takeIf(String::isNotEmpty)?.let { ProfileAvatar.Photo(it) }
-            ?: ProfileAvatar.Preset(AvatarPreset.entries.firstOrNull { it.name == json.optString("preset") }
-                ?: AvatarPreset.DEFAULT)
+            ?: ProfileAvatar.Preset(AvatarPreset.fromId(json.optString("preset")))
         return PersonalProfile(json.optString("nickname").takeIf(String::isNotEmpty), avatar)
     }
 

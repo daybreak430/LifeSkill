@@ -43,7 +43,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 internal enum class Page {
-    HOME, ME, PROFILE_EDIT, CERTIFICATES, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN,
+    HOME, ME, PROFILE_EDIT, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN,
 }
 
 internal data class Route(val page: Page, val id: String? = null) {
@@ -82,7 +82,12 @@ internal class AppViewModel(
 ) : ViewModel() {
     private val _appearance = MutableStateFlow(appearanceSettings.load())
     val appearance = _appearance.asStateFlow()
-    private val routes = state.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
+    private val routes = state.apply {
+        // 升级前停在收藏夹二级页时，从「我的」恢复展柜。
+        if (get<ArrayList<String>>("routes")?.lastOrNull() == "CERTIFICATES:") {
+            set("routes", arrayListOf(Route(Page.HOME).encode(), Route(Page.ME).encode()))
+        }
+    }.getStateFlow("routes", arrayListOf(Route(Page.HOME).encode()))
     val navigation = routes.map { NavigationFrame(Route.decode(it.last()), it.size) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, NavigationFrame(Route.decode(routes.value.last()), routes.value.size))
     private val _library = MutableStateFlow<Library?>(null)

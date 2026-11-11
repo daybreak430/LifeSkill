@@ -75,7 +75,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         modifier = Modifier.fillMaxSize().testTag("learning-directions"),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),
-        contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = 6.dp, bottom = 20.dp),
+        contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = 6.dp, bottom = HomeTabClearance),
     ) {
         item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
             Text("LifeSkill", Modifier.fillMaxWidth(), style = LibraryTitle)

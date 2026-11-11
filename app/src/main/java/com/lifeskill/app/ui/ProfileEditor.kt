@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,12 +41,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeskill.app.R
 import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.ProfileAvatar
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +83,7 @@ internal fun ProfileEditScreen(app: AppViewModel, model: PersonalViewModel, acti
                 Action("从相册选择", Glyph.CAMERA, { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     enabled = !state.busy)
                 PresetAvatars(profile.avatar, !state.busy, model::changeAvatar)
-                TextButton({ model.changeAvatar(ProfileAvatar.Preset(AvatarPreset.DEFAULT)) }, enabled = !state.busy) {
+                TextButton({ model.changeAvatar(ProfileAvatar.Preset(AvatarPreset.default)) }, enabled = !state.busy) {
                     Text("恢复默认头像")
                 }
                 NicknameField(profile.nickname.orEmpty(), model::changeNickname, !state.busy)
@@ -99,18 +102,19 @@ private fun PresetAvatars(avatar: ProfileAvatar, enabled: Boolean, change: (Prof
     Column(Modifier.selectableGroup(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("内置头像", style = MaterialTheme.typography.titleSmall)
-        AvatarPreset.entries.chunked(3).forEach { presets ->
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        AvatarPreset.entries.chunked(4).forEach { presets ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 presets.forEach { preset ->
                     val choice = ProfileAvatar.Preset(preset)
                     val selected = avatar == choice
                     Surface(
-                        Modifier.size(56.dp).clip(CircleShape).selectable(selected, enabled = enabled, role = Role.RadioButton) {
+                        Modifier.size(54.dp).clip(CircleShape).selectable(selected, enabled = enabled, role = Role.RadioButton) {
                             change(choice)
-                        }.semantics { contentDescription = "${preset.icon.label}头像" },
-                        shape = CircleShape, color = if (selected) GoldGround else Raised,
+                        }.semantics { contentDescription = "${preset.label}头像" },
+                        shape = CircleShape, color = if (selected) GoldGround else Panel,
+                        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) Gold else Line),
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Mark(preset.icon.glyph, if (selected) Gold else Muted) }
+                        IllustratedAvatar(preset, Modifier.fillMaxSize().padding(4.dp))
                     }
                 }
             }
@@ -129,7 +133,7 @@ internal fun ProfileAvatarImage(avatar: ProfileAvatar, diameter: Dp) {
     Box(Modifier.size(diameter).testTag("profile-avatar").semantics { contentDescription = "头像" },
         contentAlignment = Alignment.Center) {
         when (avatar) {
-            is ProfileAvatar.Preset -> Emblem(avatar.value.icon.glyph, diameter = diameter)
+            is ProfileAvatar.Preset -> IllustratedAvatar(avatar.value, Modifier.fillMaxSize())
             is ProfileAvatar.Photo -> {
                 val bitmap by produceState<ImageBitmap?>(null, avatar) {
                     value = withContext(Dispatchers.Default) {
@@ -140,8 +144,27 @@ internal fun ProfileAvatarImage(avatar: ProfileAvatar, diameter: Dp) {
                 bitmap?.let {
                     Image(it, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape),
                         contentScale = ContentScale.Crop)
-                } ?: Emblem(AvatarPreset.DEFAULT.icon.glyph, diameter = diameter)
+                } ?: IllustratedAvatar(AvatarPreset.default, Modifier.fillMaxSize())
             }
         }
     }
+}
+
+@Composable
+private fun IllustratedAvatar(preset: AvatarPreset, modifier: Modifier) {
+    val resource = when (preset) {
+        AvatarPreset.BOB -> R.drawable.avatar_bob
+        AvatarPreset.GLASSES -> R.drawable.avatar_glasses
+        AvatarPreset.LAVENDER -> R.drawable.avatar_lavender
+        AvatarPreset.SILVER -> R.drawable.avatar_silver
+        AvatarPreset.CURLS -> R.drawable.avatar_curls
+        AvatarPreset.SCARF -> R.drawable.avatar_scarf
+        AvatarPreset.CAT -> R.drawable.avatar_cat
+        AvatarPreset.DOG -> R.drawable.avatar_dog
+        AvatarPreset.FOX -> R.drawable.avatar_fox
+        AvatarPreset.RABBIT -> R.drawable.avatar_rabbit
+        AvatarPreset.ALIEN -> R.drawable.avatar_alien
+        AvatarPreset.ROBOT -> R.drawable.avatar_robot
+    }
+    Image(painterResource(resource), contentDescription = null, modifier.clip(CircleShape), contentScale = ContentScale.Crop)
 }
