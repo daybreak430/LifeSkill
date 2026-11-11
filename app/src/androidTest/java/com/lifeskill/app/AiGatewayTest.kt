@@ -1,12 +1,20 @@
 package com.lifeskill.app
 
+import androidx.room.Room
+import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.OpenAiGateway
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.RecoverableReply
+import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.TurnKind
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,6 +58,37 @@ class AiGatewayTest {
         expectError(Response(failure = SocketTimeoutException()), "超时")
         expectError(Response(failure = UnknownHostException()), "网络")
         expectError(Response(failure = SSLHandshakeException("模拟证书错误")), "HTTPS")
+    }
+
+    @Test fun deepSeekBlankJsonContentRetriesWithoutJsonModeAndKeepsTheOriginalRequest() = runBlocking {
+        val blank = Response(body = """{"choices":[{"finish_reason":"stop","message":{"content":"   "}}]}""")
+        val answer = Response(body = JSONObject().put("choices", JSONArray().put(
+            JSONObject().put("finish_reason", "stop").put("message", JSONObject().put("content", RepositoryTest.TREE_OFFER)),
+        )).toString())
+        val responses = ArrayDeque(listOf(blank, answer))
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        try {
+            val container = fixture(database, OpenAiGateway { responses.removeFirst() })
+            container.settings.save(ModelSettings(Provider.DEEPSEEK, apiKey = "test-key"))
+            val scope = ChatScope(ChatMode.GENERATE)
+            val topic = "从零学习文明 6"
+            container.conversations.send(scope, topic)
+
+            val initial = JSONObject(blank.written.toByteArray().decodeToString())
+            val retry = JSONObject(answer.written.toByteArray().decodeToString())
+            assertEquals("json_object", initial.getJSONObject("response_format").getString("type"))
+            assertFalse(retry.has("response_format"))
+            assertEquals(initial.getInt("max_tokens"), retry.getInt("max_tokens"))
+            val retryMessages = retry.getJSONArray("messages")
+            assertTrue(retryMessages.getJSONObject(0).getString("content").contains("完整的 JSON 对象"))
+            assertEquals(topic, retryMessages.getJSONObject(1).getString("content"))
+            val turns = container.conversations.watch(scope).first()
+            assertEquals(listOf(TurnKind.MESSAGE, TurnKind.TREE_OFFER), turns.map { it.kind })
+            assertTrue(responses.isEmpty())
+        } finally {
+            database.close()
+        }
     }
 
     @Test fun handlesProviderErrorsAndIncompleteOrUnexpectedResponses() = runBlocking {

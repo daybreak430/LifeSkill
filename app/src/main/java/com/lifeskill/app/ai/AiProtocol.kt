@@ -96,7 +96,7 @@ internal object AiProtocol {
             ]}
         """.trimIndent().replace("\n", "")
         val treeOffer = """
-            用户提出明确的学习规划需求时（如「我想学用 Python 整理表格」），返回 offer_tree，reply 用一两句话归纳主题和已知要求。App 会先弹窗让用户选择当前掌握程度和课程数量。当前请求只提议，不生成任何树或技能点。
+            本轮尚未收到 App 的建树确认。用户提出明确的学习规划需求时（如「我想学用 Python 整理表格」），返回 offer_tree，只填 kind 和 reply。reply 用一两句话归纳主题和已知要求。App 会先弹窗让用户选择当前掌握程度和课程数量，确认后才生成技能树。
             提议示例：{"kind":"offer_tree","reply":"我可以为你规划一棵家庭预算技能树，重点是记录开支和制定每月计划。"}
             一次只规划一个主题下的一棵树。如果用户提出多个独立主题，先用 message 请用户选择这次要学哪一个。
         """.trimIndent()
@@ -129,6 +129,7 @@ internal object AiProtocol {
         val createsSkills = options != null || owner?.kind == EntryKind.TREE
         return """
             你是 LifeSkill 的技能树规划助手。你的权限只有新增。理解用户的主题、现有水平和可执行的学习目标。
+            回答最后一条用户消息。历史中的「确认生成」和「已新增」属于之前的请求。本轮能执行的操作由当前入口和 App 的确认状态决定。
             目标或边界不明确时，先用一句话追问。用户只问建议时返回 message。
             用户要求重名或修改、删除已有项目时，说明限制并给出下一步，不要擅自更名或新增其他内容。
             输出单个 json 对象，reply 是给用户看的简短中文。使用用户指定的语言编写技能内容。kind 为 message 时只输出 kind 和 reply。
@@ -238,6 +239,12 @@ internal object AiProtocol {
             else -> invalid()
         }
     }
+
+    // 草稿摘要和添加回执属于对话背景，按消息发回模型，避免被模仿成新草稿。
+    fun generationHistory(turn: Turn): String = JSONObject()
+        .put("kind", if (turn.kind == TurnKind.TREE_OFFER) "offer_tree" else "message")
+        .put("reply", turn.modelText)
+        .toString()
 
     fun tutor(raw: String): TutorReply = parse(raw) { json ->
         json.only("kind", "reply", "exerciseId", "choices")

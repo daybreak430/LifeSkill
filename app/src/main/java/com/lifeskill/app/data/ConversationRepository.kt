@@ -188,7 +188,7 @@ internal class ConversationRepository(
             if (lastPending(scope)?.id != requestId) return
             val system = context.messages.first()
             val messages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + context.messages.drop(1)
-            val corrected = gateway.complete(config, messages, structured = true)
+            val corrected = gateway.complete(config, messages, structured = true, useJsonMode = !error.retryWithoutJsonMode)
             persistResponse(scope, requestId, context, corrected)
         }
     }
@@ -315,6 +315,7 @@ internal class ConversationRepository(
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
             val text = when {
                 mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
+                mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
                 it.kind == TurnKind.CHECK -> "【App 发起检验掌握】请出一道当前技能练习。"
                 it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按当前技能说明重新组织这节课。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""

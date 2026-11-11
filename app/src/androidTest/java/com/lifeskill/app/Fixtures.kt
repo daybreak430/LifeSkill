@@ -26,7 +26,7 @@ class FixtureApplication : LifeSkillApplication() {
     }
 }
 
-internal fun fixture(database: LifeSkillDatabase, ai: ScriptedGateway): AppContainer =
+internal fun fixture(database: LifeSkillDatabase, ai: AiGateway): AppContainer =
     AppContainer(database, SecretBox("lifeskill-tests"), FixtureSettings(), ai)
 
 internal class ScriptedGateway : AiGateway {
@@ -38,7 +38,9 @@ internal class ScriptedGateway : AiGateway {
         script.add(action)
     }
 
-    override suspend fun complete(settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean): String =
+    override suspend fun complete(
+        settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean,
+    ): String =
         checkNotNull(script.poll()) { "测试缺少预设 AI 响应。" }(messages)
 }
 

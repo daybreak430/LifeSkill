@@ -429,6 +429,36 @@ class RepositoryTest {
         return offer.id
     }
 
+    @Test fun repeatedTopicAfterAddingATreeKeepsJsonHistoryAndRequiresNewConfirmation() = runBlocking {
+        container.settings.save(ModelSettings(Provider.MINIMAX, apiKey = "test-key"))
+        val scope = ChatScope(ChatMode.GENERATE)
+        val conversations = container.conversations
+        val topic = "从零学习文明 6"
+        val offerId = offerTree(scope, topic)
+        ai.reply(newTreeBatch(33))
+        conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 33..33))
+        val draft = conversations.watch(scope).first().last()
+        val direction = container.library.snapshot().childrenOf(null).first()
+        conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        val library = container.library.snapshot()
+
+        ai.reply("可以继续规划这棵技能树。")
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("本轮尚未收到 App 的建树确认"))
+            assertTrue(messages.first().text.contains("上一次回复未通过格式校验"))
+            assertEquals(topic, messages.last().text)
+            val history = messages.filter { it.role == "assistant" }.map { JSONObject(it.text) }
+            assertEquals(listOf("offer_tree", "message"), history.map { it.getString("kind") })
+            assertTrue(history.last().getString("reply").contains("33 个技能点"))
+            TREE_OFFER
+        }
+        conversations.send(scope, topic)
+        val turns = conversations.watch(scope).first()
+        assertEquals(TurnKind.TREE_OFFER, turns.last().kind)
+        assertEquals(1, turns.count { it.kind == TurnKind.CREATED })
+        assertEquals(library, container.library.snapshot())
+    }
+
     @Test fun scopedGenerationCanAttachOnlyToNodesInItsTargetTree() = runBlocking {
         val direction = container.library.snapshot().childrenOf(null).first()
         val tree = add(direction, EntryKind.TREE, "当前树")

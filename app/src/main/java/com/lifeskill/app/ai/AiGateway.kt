@@ -13,10 +13,14 @@ import javax.net.ssl.SSLException
 
 internal data class ModelMessage(val role: String, val text: String)
 
-internal class RecoverableReply(message: String, val retryInstruction: String) : RuleViolation(message)
+internal class RecoverableReply(
+    message: String, val retryInstruction: String, val retryWithoutJsonMode: Boolean = false,
+) : RuleViolation(message)
 
 internal interface AiGateway {
-    suspend fun complete(settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean): String
+    suspend fun complete(
+        settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean = true,
+    ): String
 }
 
 internal class OpenAiGateway(
@@ -26,8 +30,10 @@ internal class OpenAiGateway(
         settings: ModelSettings,
         messages: List<ModelMessage>,
         structured: Boolean,
+        useJsonMode: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val valid = settings.validated()
+        val jsonMode = valid.provider == Provider.DEEPSEEK && structured && useJsonMode
         val connection = openConnection(URI("${valid.baseUrl}/chat/completions"))
         try {
             connection.requestMethod = "POST"
@@ -38,7 +44,7 @@ internal class OpenAiGateway(
             connection.setRequestProperty("Authorization", "Bearer ${valid.apiKey}")
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
-            val request = requestBody(valid, messages, structured).toString().toByteArray()
+            val request = requestBody(valid, messages, structured, jsonMode).toString().toByteArray()
             connection.setFixedLengthStreamingMode(request.size)
             connection.outputStream.use { it.write(request) }
             val status = connection.responseCode
@@ -54,7 +60,7 @@ internal class OpenAiGateway(
                     }
                 }
             }
-            readCompletion(raw)
+            readCompletion(raw, jsonMode)
         } catch (_: SocketTimeoutException) {
             throw RuleViolation("模型响应超时，请重试。")
         } catch (_: SSLException) {
@@ -66,7 +72,9 @@ internal class OpenAiGateway(
         }
     }
 
-    private fun requestBody(settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean): JSONObject =
+    private fun requestBody(
+        settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, jsonMode: Boolean,
+    ): JSONObject =
         JSONObject().apply {
             put("model", settings.model)
             put("stream", false)
@@ -76,10 +84,8 @@ internal class OpenAiGateway(
             when (settings.provider) {
                 Provider.DEEPSEEK -> {
                     put("thinking", JSONObject().put("type", "disabled"))
-                    if (structured) {
-                        put("response_format", JSONObject().put("type", "json_object"))
-                        put("max_tokens", 10_000)
-                    }
+                    if (jsonMode) put("response_format", JSONObject().put("type", "json_object"))
+                    if (structured) put("max_tokens", 10_000)
                 }
                 Provider.MINIMAX -> {
                     put("reasoning_effort", "low")
@@ -90,7 +96,7 @@ internal class OpenAiGateway(
             }
         }
 
-    private fun readCompletion(raw: String): String {
+    private fun readCompletion(raw: String, jsonMode: Boolean): String {
         val response = AiJson.objectOrNull(raw) ?: throw RecoverableReply(
             "模型服务返回的格式有误，请重试。",
             "请重新回答最后一条用户消息，直接输出一个完整的 JSON 对象。",
@@ -111,6 +117,8 @@ internal class OpenAiGateway(
         return text?.takeIf(String::isNotEmpty) ?: throw RecoverableReply(
             "模型没有返回文字，请重试。",
             "上一次没有返回正文。请重新回答最后一条用户消息，直接输出一个完整的 JSON 对象。",
+            // DeepSeek 的 JSON 模式会将无法识别的输出替换为空格。补试时仍要求 JSON，由应用校验。
+            retryWithoutJsonMode = jsonMode,
         )
     }
 
