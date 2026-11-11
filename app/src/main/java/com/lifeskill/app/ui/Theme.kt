@@ -144,6 +144,14 @@ private val DarkStudyColors = StudyColors(
     focusBand = Color(0xFF579783),
     iconViolet = Color(0xFFC3B1F6), iconBlue = Color(0xFF98C2F0),
     iconGreen = Color(0xFF8ED8B5), iconOrange = Color(0xFFF5B483),
+    mapNodePalette = MapNodePalette(
+        lockedFill = Color(0xFF202936),
+        lockedRim = Color(0xFF3B4758),
+        lockedInk = Color(0xFF8490A0),
+        lockedBadgeFill = Color(0xFF293443),
+        availableFill = Color(0xFF284A40),
+        availableRim = Color(0xFF77BDA2),
+    ),
 )
 
 private val LocalStudyColors = staticCompositionLocalOf { LightStudyColors }

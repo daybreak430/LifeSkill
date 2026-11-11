@@ -319,12 +319,18 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory())
 
-    fun send(text: String, check: Boolean = false) = run { repository.send(scope, text, check) }
-    fun generateTree(offerId: String, options: GenerationOptions) = run {
-        repository.generateTree(scope, offerId, options)
+    fun send(text: String, check: Boolean = false) = runQueued { onQueued ->
+        repository.send(scope, text, check, onQueued)
     }
 
-    fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
+    fun generateTree(offerId: String, options: GenerationOptions) = runQueued { onQueued ->
+        repository.generateTree(scope, offerId, options, onQueued)
+    }
+
+    fun restartLesson(requirements: String) = runQueued { onQueued ->
+        repository.restartLesson(scope, requirements, onQueued)
+    }
+
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
     fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }
     fun clearConversation() = run(clearing = true) { repository.clearGeneration(scope) }
@@ -339,12 +345,27 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     private fun run(
         addingDraft: Boolean = false, requestId: String? = null, clearing: Boolean = false, action: suspend () -> Unit,
     ) {
+        execute(addingDraft, requestId, clearing) { action() }
+    }
+
+    private fun runQueued(action: suspend (onRequestQueued: (String) -> Unit) -> Unit) {
+        execute(addingDraft = false, initialRequestId = null, clearing = false, action)
+    }
+
+    private fun execute(
+        addingDraft: Boolean, initialRequestId: String?, clearing: Boolean,
+        action: suspend (onRequestQueued: (String) -> Unit) -> Unit,
+    ) {
         if (_status.value.clearing || (_status.value.working && !clearing)) return
         if (clearing) runningAction?.cancel()
+        var requestId = initialRequestId
         _status.value = ChatStatus(working = true, requestId = requestId, clearing = clearing)
         runningAction = viewModelScope.launch {
             try {
-                action()
+                action { queuedId ->
+                    requestId = queuedId
+                    _status.value = _status.value.copy(requestId = queuedId)
+                }
                 ensureActive()
                 _status.value = ChatStatus(requestId = requestId)
             } catch (error: Exception) {

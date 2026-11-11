@@ -67,7 +67,8 @@ internal fun SkillMedallion(
                 else -> {
                     drawCircle(fill, radius = radius)
                     if (rim != null) {
-                        val stroke = 1.dp.toPx()
+                        // 可学习态使用更清楚的描边，避免深色主题下除焦点节点外看起来仍像锁定。
+                        val stroke = (if (locked) 1.dp else 1.5.dp).toPx()
                         drawCircle(rim, radius = (radius - stroke / 2).coerceAtLeast(0f), style = Stroke(stroke))
                     }
                 }

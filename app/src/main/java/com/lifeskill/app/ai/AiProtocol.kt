@@ -70,8 +70,12 @@ internal object AiProtocol {
     private const val LEGACY_TREE_LIMIT = 6
     private const val APPEND_LIMIT = 30
     private const val DIAGRAM_FORMAT =
-        "结构图、剖面图、空间关系图等非流程示意图优先使用 Unicode Box Drawing（如 ┌─┐│└─┘），也可使用 ASCII。" +
-            "用完整的 Markdown 代码围栏，语言标记为 diagram。用空格对齐，中文按两列计算。用短标签，避免制表符和表情。"
+        "只有结构图、剖面图、空间关系图等非流程示意图可以使用 Unicode Box Drawing（如 ┌─┐│└─┘）或 ASCII。" +
+            "这类字符图使用完整的 Markdown 代码围栏，语言标记为 diagram，不得承载流程步骤。" +
+            "用空格对齐，中文按两列计算。用短标签，避免制表符和表情。流程和步骤必须使用 Mermaid 代码围栏。"
+    private val fencedBlocks = Regex("""(?s)```([^\n`]*)\n(.*?)```""")
+    private val asciiFlowLanguages = setOf("diagram", "ascii", "box-drawing", "text", "plaintext", "unicode")
+    private val flowArrow = Regex("""→|←|↑|↓|-->|<--|==>|-\.->""")
     private val tutorKinds = mapOf(
         "teach" to TurnKind.MESSAGE,
         "offer_check" to TurnKind.CHECK_OFFER,
@@ -212,7 +216,7 @@ internal object AiProtocol {
             根据当前技能目标和实际教学进度判断是否适合检验。讲完足以检验目标的内容后，可用 offer_check 替代 teach，reply 写讲解或小结。App 会在回复下方提示并显示「检验掌握」。当前是否允许邀请检验：${if (canInviteCheck) "是，由你判断时机" else "否"}。
             用户说「${TutorRules.CONTINUE_REPLY}」时，继续讲解、补充提示或推进下一步。这是继续教学的请求，不是练习答案，不得判定 passed 或 retry。用户明确要求练习或 App 发起检验时可以出题。
             收到 App 发起重新学习的消息时，以当前技能说明和本次学习要求为准，从头安排讲解并直接开始第一小节。不要假设用户已经学过旧课。只有用户明确要求先出题时才以练习开场。
-            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。需要画流程图时，使用完整的 Markdown 代码围栏，语言标记为 mermaid，围栏内首行写 flowchart TD。每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
+            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。凡是流程、步骤、交易链路、因果、循环或分支关系，必须使用完整的 Markdown 代码围栏，语言标记为 mermaid，围栏内首行写 flowchart TD。每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。禁止用 ASCII、Unicode 框线、箭头链或 diagram 围栏代替流程图，即使历史回复使用字符图也必须改写为 mermaid。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
             $DIAGRAM_FORMAT
             只输出一个完整的 json 对象，不在对象外输出文字。Markdown 只写在 reply 字符串里，换行写成 \n，英文双引号用 \" 转义。每次讲清一个步骤，通常控制在 800 个中文字以内。讲解例：{"kind":"teach","reply":"**核心概念**：先从实际例子看起。"}。
             kind 为 teach、offer_check、exercise、passed、retry、off_topic 中的一个。邀请检验例：{"kind":"offer_check","reply":"以上就是核对账单的三个步骤。"}。exercise 一次只出一道可检验的题，优先单选，提供 3 或 4 个同类选项，不透露答案，reply 只写题干，choices 只写选项文字（App 会加 A、B 等按钮）。例：{"kind":"exercise","reply":"哪一步应先做？","choices":["核对输入","提交结果","归档文件"]}。需要实际演示或开放作答时可省略 choices。
@@ -282,7 +286,21 @@ internal object AiProtocol {
             ) invalidChoices()
             values
         } else emptyList()
-        TutorReply(json.text("reply", 6_000), kind, json.optionalText("exerciseId", 128), choices)
+        val reply = json.text("reply", 6_000)
+        if (containsAsciiFlow(reply)) {
+            throw RecoverableReply(
+                "AI 流程图格式需要调整，请重试。",
+                "上一次回复用 ASCII 字符图绘制了流程。请保持讲解内容不变，只把其中的流程图改写为完整的 mermaid 代码围栏，" +
+                    "围栏首行使用 flowchart TD，再按当前 JSON 格式输出。",
+            )
+        }
+        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices)
+    }
+
+    private fun containsAsciiFlow(markdown: String): Boolean = fencedBlocks.findAll(markdown).any { block ->
+        val language = block.groupValues[1].trim().substringBefore(' ').lowercase()
+        val source = block.groupValues[2]
+        (language.isEmpty() || language in asciiFlowLanguages) && flowArrow.findAll(source).take(2).count() >= 2
     }
 
     // 模型会模仿历史回复。保留同一 JSON 格式，避免把纯 Markdown 当成输出示例。

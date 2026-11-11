@@ -117,6 +117,18 @@ class RulesTest {
         assertEquals(emptyList<Any>(), after.unlocksSince(after))
     }
 
+    @Test fun allChildrenOfANewlyLitSkillBecomeAvailableTogether() {
+        val parent = Entry("parent", "tree", EntryKind.SKILL, "共同前置")
+        val left = parent.copy(id = "left", name = "左侧分支")
+        val right = parent.copy(id = "right", name = "右侧分支")
+        val before = Library(listOf(parent, left, right), listOf(Edge(left.id, parent.id), Edge(right.id, parent.id)))
+        val after = before.copy(entries = listOf(parent.copy(mastery = Mastery.AI, masteryVersion = 1), left, right))
+
+        assertEquals(SkillState.AVAILABLE, after.skillState(left.id))
+        assertEquals(SkillState.AVAILABLE, after.skillState(right.id))
+        assertEquals(setOf(left.id, right.id), after.unlocksSince(before).single().availableChildren)
+    }
+
     @Test fun homePrefersTheAvailableBranchAndStopsAtACompletedTree() {
         val tree = Entry("tree", "direction", EntryKind.TREE, "技能树")
         val root = Entry("root", tree.id, EntryKind.SKILL, "起点")

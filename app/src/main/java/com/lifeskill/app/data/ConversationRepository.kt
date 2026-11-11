@@ -44,22 +44,29 @@ internal class ConversationRepository(
         .map { turns -> turns.map { it.toTurn() } }
         .flowOn(Dispatchers.IO)
 
-    suspend fun send(scope: ChatScope, text: String, check: Boolean = false) {
+    suspend fun send(
+        scope: ChatScope, text: String, check: Boolean = false, onRequestQueued: (String) -> Unit = {},
+    ) {
         val input = text.trim()
         if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内检验掌握。")
         if (!check && input.length !in 1..INPUT_LIMIT) throw RuleViolation("请输入 1–${INPUT_LIMIT} 个字符。")
         val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
-        queueAndRespond(scope, kind, if (check && input != TutorRules.EXAM_REPLY) "检验掌握" else input)
+        queueAndRespond(
+            scope, kind, if (check && input != TutorRules.EXAM_REPLY) "检验掌握" else input,
+            onRequestQueued = onRequestQueued,
+        )
     }
 
-    suspend fun restartLesson(scope: ChatScope, requirements: String) {
+    suspend fun restartLesson(scope: ChatScope, requirements: String, onRequestQueued: (String) -> Unit = {}) {
         if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内重新学习。")
         val input = requirements.trim()
         if (input.length > INPUT_LIMIT) throw RuleViolation("本次学习要求最多 ${INPUT_LIMIT} 个字符。")
-        queueAndRespond(scope, TurnKind.RESTART, input)
+        queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued)
     }
 
-    suspend fun generateTree(scope: ChatScope, offerId: String, options: GenerationOptions) {
+    suspend fun generateTree(
+        scope: ChatScope, offerId: String, options: GenerationOptions, onRequestQueued: (String) -> Unit = {},
+    ) {
         if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中确认。")
         // 与待处理消息一起加密保存，自动补试、手动重试和重启都使用已确认的设置。
         val input = JSONObject()
@@ -67,10 +74,13 @@ internal class ConversationRepository(
             .put("minimum", options.courseCount.first)
             .put("maximum", options.courseCount.last)
             .toString()
-        queueAndRespond(scope, TurnKind.GENERATE_TREE, input, offerId)
+        queueAndRespond(scope, TurnKind.GENERATE_TREE, input, offerId, onRequestQueued)
     }
 
-    private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String, offerId: String? = null) {
+    private suspend fun queueAndRespond(
+        scope: ChatScope, kind: TurnKind, input: String, offerId: String? = null,
+        onRequestQueued: (String) -> Unit,
+    ) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
             requireUnlockedLesson(scope, owner)
@@ -106,6 +116,8 @@ internal class ConversationRepository(
             dao.insertTurn(turn.row(scope))
             turn.id
         }
+        // 先把待处理消息标识交给界面，成功回复覆盖旧历史时才能立即隐藏重试和撤回操作。
+        onRequestQueued(id)
         respond(scope, id)
     }
 

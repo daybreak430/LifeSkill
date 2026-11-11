@@ -821,6 +821,26 @@ class RepositoryTest {
         assertEquals("下一步是核对角色。", history.last().text)
     }
 
+    @Test fun requestIdReachesUiBeforeTutorModelStarts() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "请求状态")
+        val skill = add(tree, EntryKind.SKILL, "识别学习目标")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        var queuedId: String? = null
+        var callbackSeen = false
+        ai.enqueue {
+            assertTrue(callbackSeen)
+            """{"kind":"teach","reply":"先明确要解决的问题。"}"""
+        }
+
+        container.conversations.send(scope, "开始学习") { id ->
+            queuedId = id
+            callbackSeen = true
+        }
+
+        assertEquals(queuedId, container.conversations.watch(scope).first().first().id)
+    }
+
     @Test fun overLimitGenerationRepairsOnceBeforeWriting() = runBlocking {
         val direction = container.library.snapshot().childrenOf(null).first()
         val tree = add(direction, EntryKind.TREE, "边界数量")

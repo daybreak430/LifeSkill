@@ -485,6 +485,50 @@ class MvpFlowTest {
         await("左起点")
     }
 
+    @Test fun darkMapShowsEveryAvailableSiblingWithTheLearnableStyle() {
+        await("本职工作")
+        val settings = AppearanceSettings(ui.activity.applicationContext)
+        val originalAppearance = settings.load()
+        val library = fixture.container.library
+        val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "深色分支样式")) }
+        val tree = runBlocking { library.save(EntryEdit(null, direction.id, EntryKind.TREE, "并行分支")) }
+        val root = runBlocking { library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "共同前置", "掌握基础")) }
+        val left = runBlocking {
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "左侧分支", "完成左侧练习", setOf(root.id)))
+        }
+        val right = runBlocking {
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "右侧分支", "完成右侧练习", setOf(root.id)))
+        }
+        runBlocking { library.lightFromAssessment(root) }
+        try {
+            ui.onNodeWithTag("tab-personal").performClick()
+            ui.onNodeWithContentDescription("设置").performClick()
+            await("外观")
+            ui.onNodeWithText("深色").performClick().assertIsSelected()
+            pressBack()
+            ui.onNodeWithTag("tab-learning").performClick()
+            await("LifeSkill")
+            val cardTag = "direction-card-${direction.id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(cardTag))
+            ui.onNodeWithTag(cardTag).performTouchInput { click() }
+            await(direction.name)
+            ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
+            await("1 / 3 已点亮")
+
+            val available = SemanticsMatcher("可学习状态") { node ->
+                runCatching {
+                    node.config[SemanticsProperties.StateDescription].startsWith("可点亮")
+                }.getOrDefault(false)
+            }
+            ui.onNodeWithContentDescription(left.name).assert(available)
+            ui.onNodeWithContentDescription(right.name).assert(available)
+            captureScreenshot("captureSkillMapScreenshots", "dark-available-siblings.png")
+        } finally {
+            settings.save(originalAppearance)
+            runBlocking { library.delete(direction.id) }
+        }
+    }
+
     @Test fun treeExamUsesSeparatePageAndRevealsChallengesAfterPassing() {
         await("LifeSkill")
         val library = fixture.container.library
@@ -1098,6 +1142,8 @@ class MvpFlowTest {
         await("模型服务请求过于频繁，请稍后重试。")
         ui.onNodeWithText("重试").performClick()
         await("你想用什么主题？")
+        ui.onNodeWithText("重试").assertDoesNotExist()
+        ui.onNodeWithText("撤回编辑").assertDoesNotExist()
         send("请生成一个数据质量方向的技能树")
         await("当前掌握程度")
         ui.onNodeWithText("通用").assertDoesNotExist()

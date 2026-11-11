@@ -1,6 +1,7 @@
 package com.lifeskill.app
 
 import com.lifeskill.app.ai.AiProtocol
+import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
@@ -51,6 +52,30 @@ class AiProtocolTest {
             """{"kind":"create","reply":"已规划","trees":${"[".repeat(200)}0${"]".repeat(200)}}""",
         )
         bad.forEach { input -> assertThrows(RuleViolation::class.java) { AiProtocol.generation(input) } }
+    }
+
+    @Test fun rejectsAsciiFlowAndAcceptsMermaidFlow() {
+        val asciiFlow = """
+            ```diagram
+            ┌────────┐  →  ┌────────┐
+            │ 选品上架 │     │ 买家下单 │
+            └────────┘  ←  └────────┘
+            ```
+        """.trimIndent()
+        val error = assertThrows(RecoverableReply::class.java) {
+            AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", asciiFlow).toString())
+        }
+        assertTrue(error.retryInstruction.contains("mermaid"))
+
+        val mermaidFlow = """
+            ```mermaid
+            flowchart TD
+            A[选品上架] --> B[买家下单]
+            B --> C[平台结算]
+            ```
+        """.trimIndent()
+        assertEquals(TurnKind.MESSAGE,
+            AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", mermaidFlow).toString()).kind)
     }
 
     @Test fun generationAcceptsCatalogIconsAndIgnoresInvalidOptionalIcons() {
