@@ -177,6 +177,7 @@ internal object AiProtocol {
             用户已在 App 确认生成。根据前文确定学习主题、应用场景、用户目标和明确提出的要求，返回 create 草稿。trees 必须恰好包含 1 棵技能树。草稿由用户选择方向后添加，不要声称已添加。
             本次掌握程度为「${options.level.label}」。$level
             每个技能点对应一节课。$count 技能点总数为 1–${GenerationOptions.COURSE_LIMIT}。每节围绕一个可独立检验的目标，按真实的知识和操作依赖安排前置。课数少时聚焦核心能力，课数多时拆开确实需要单独学习和练习的能力。输出前核对 skills 的数组长度，达到本次确认的数量就结束。
+            第 1 层必须恰好有 1 个共同起点，只有这个技能的 requires 为 []。其余技能至少有一个紧邻上一层的前置，并能沿前置关系追溯到共同起点。只生成 1 节课时，该技能就是起点。
             一棵树可以有多条分支。先找共同基础，再找能并行学习的技能。两项技能依赖同一项基础且彼此独立时，将它们放在同一层，两个 requires 都引用这项基础。只有课数不足以分叉、每项技能确实依赖上一项，或用户明确要求线性顺序时，才排成单一路径。
             掌握程度和课程数量以本次 App 确认的选项为准。
         """.trimIndent()
@@ -186,7 +187,7 @@ internal object AiProtocol {
         ${if (newTree) "每棵树包含 name、icon、skills。树的 icon 应代表树名及整棵树的学习主题，从下方图标库选择，避开默认的 TREE。" else ""}
         每个 skill 包含 ref、name、goal、requires、icon，可加 shortName（地图简称，2–5 个字，保留技能的核心词）。goal 用简短句子说明本节要学的内容和可检验的目标。
         按每个技能点的名称和学习目标选择 icon，从以下图标库原样填写英文标识。相近的技能可以复用同一个图标，不同类型的技能应选各自贴切的图标。图标库：${iconCatalog(EntryIcon.entries.filterNot { it == EntryIcon.DIAMOND })}
-        ref 是同批同树唯一的简短英文标识；requires 引用同树 ref，无前置填 []。不要引用自己或形成循环。
+        ref 是同批同树唯一的简短英文标识；requires 引用同树 ref。${if (newTree) "" else "无前置填 []。"}不要引用自己或形成循环。
         无前置的技能为第 1 层。技能的所有直接前置必须处于紧邻的上一层。两项同层技能都必须掌握后才能学下一项时，可以把两者同时列为直接前置。只在内部核对层级，不输出 level 字段。
         ${if (newTree) "新树里的 requires 只能填写该树 skills 中实际存在的 ref。" else ""}
         每个技能点最多作为 ${SkillGraph.BRANCH_LIMIT} 个后续节点的前置。

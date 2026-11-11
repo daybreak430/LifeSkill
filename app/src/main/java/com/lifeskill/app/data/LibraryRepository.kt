@@ -186,6 +186,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val usedTreeIcons = (existingTrees.mapNotNull(Entry::icon) + draft.trees.mapNotNull(TreeDraft::icon))
             .groupingBy { it }.eachCount().toMutableMap()
         val newTrees = draft.trees.map { tree ->
+            requireSingleRoot(tree)
             val name = LibraryRules.name(tree.name)
             LibraryRules.checkUnique(name, existingTreeNames)
             existingTreeNames.add(name)
@@ -201,10 +202,18 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val names = mutableListOf<String>()
         val emptyLibrary = Library()
         trees.forEach { tree ->
+            requireSingleRoot(tree)
             val name = LibraryRules.name(tree.name)
             LibraryRules.checkUnique(name, names)
             names.add(name)
             planSkills(null, tree.skills, emptyLibrary)
+        }
+    }
+
+    private fun requireSingleRoot(tree: TreeDraft) {
+        // 这里读取整理后的前置关系。配合无环校验，唯一的无前置节点保证所有节点都能追溯到它。
+        if (tree.skills.count { it.requires.isEmpty() } != 1) {
+            throw RuleViolation("生成的技能树必须只有一个起点，其余技能点都需要前置。请重新生成。")
         }
     }
 

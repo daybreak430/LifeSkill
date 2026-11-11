@@ -227,7 +227,7 @@ class RepositoryTest {
         val scope = ChatScope(ChatMode.GENERATE)
         val invalid = """
             {"kind":"create","reply":"方案","directionName":"设计","trees":[
-              {"name":"树 A","skills":[]},
+              {"name":"树 A","skills":[{"ref":"base","name":"首节","goal":"能说明基础概念","requires":[]}]},
               {"name":"树 B","skills":[
                 {"ref":"base","name":"基础","goal":"能解释用途","requires":[]},
                 {"ref":"next","name":"进阶","goal":"能使用基础概念","requires":["base"]},
@@ -294,6 +294,18 @@ class RepositoryTest {
         val created = container.conversations.watch(scope).first().single()
         assertEquals(TurnKind.CREATED, created.kind)
         assertTrue(created.text.contains("略过 2 条"))
+    }
+
+    @Test fun confirmingLegacyDraftWithMultipleRootsLeavesLibraryAndDraftIntact() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val library = container.library.snapshot()
+        seedLegacyDraft(scope, CREATED.replace("\"requires\":[\"base\"]", "\"requires\":[]"))
+        val draft = container.conversations.watch(scope).first().single()
+
+        expectRule { container.conversations.confirmDraft(scope, draft.id, GenerationDestination.New("数据能力")) }
+
+        assertEquals(library, container.library.snapshot())
+        assertEquals(draft, container.conversations.watch(scope).first().single())
     }
 
     private suspend fun seedLegacyDraft(scope: ChatScope, raw: String) {
@@ -421,6 +433,45 @@ class RepositoryTest {
         conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
         val updated = container.library.snapshot()
         assertEquals(33, updated.childrenOf(updated.childrenOf(direction.id).single().id).size)
+    }
+
+    @Test fun disconnectedGenerationRetriesAndOnlyAcceptsATreeWithOneRoot() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val conversations = container.conversations
+        val original = container.library.snapshot()
+        val offerId = offerTree(scope)
+        val connected = newTreeBatch(4)
+        val invalid = JSONObject(connected)
+        val lastSkill = invalid.getJSONArray("trees").getJSONObject(0).getJSONArray("skills").getJSONObject(3)
+        lastSkill.put("requires", JSONArray())
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("第 1 层必须恰好有 1 个共同起点"))
+            invalid.toString()
+        }
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("必须只有一个起点"))
+            // 第三条分支会被裁剪，再次产生一个无前置节点。
+            lastSkill.put("requires", JSONArray().put("skill_0"))
+            invalid.toString()
+        }
+
+        expectRule { conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 4..4)) }
+        val pending = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.GENERATE_TREE, pending.kind)
+        assertEquals(original, container.library.snapshot())
+
+        ai.reply(connected)
+        conversations.retry(scope, pending.id)
+        val draft = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.DRAFT, draft.kind)
+        val direction = original.childrenOf(null).first()
+        conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        val library = container.library.snapshot()
+        val (root, first, second, followUp) = library.childrenOf(library.childrenOf(direction.id).single().id)
+        assertTrue(library.prerequisitesOf(root.id).isEmpty())
+        assertEquals(setOf(root.id), library.prerequisitesOf(first.id))
+        assertEquals(setOf(root.id), library.prerequisitesOf(second.id))
+        assertEquals(setOf(first.id), library.prerequisitesOf(followUp.id))
     }
 
     private suspend fun offerTree(scope: ChatScope, request: String = "生成数据技能树"): String {
@@ -835,7 +886,11 @@ class RepositoryTest {
 
     private fun newTreeBatch(count: Int, name: String = "数据审计"): String {
         val response = JSONObject(skillBatch(count))
-        val tree = JSONObject().put("name", name).put("skills", response.remove("skills"))
+        val skills = response.remove("skills") as JSONArray
+        for (index in 1 until count) {
+            skills.getJSONObject(index).put("requires", JSONArray().put("skill_${(index - 1) / 2}"))
+        }
+        val tree = JSONObject().put("name", name).put("skills", skills)
         return response.put("trees", JSONArray().put(tree)).toString()
     }
 
