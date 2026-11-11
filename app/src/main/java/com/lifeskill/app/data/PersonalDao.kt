@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -34,6 +35,9 @@ internal interface PersonalDao {
     @Query("SELECT * FROM collected_certificates ORDER BY sequence DESC")
     fun watchCertificates(): Flow<List<CollectedCertificateRow>>
 
+    @Query("SELECT * FROM collected_certificates")
+    suspend fun certificates(): List<CollectedCertificateRow>
+
     @Query("SELECT * FROM collected_certificates WHERE treeId = :treeId")
     fun watchCertificate(treeId: String): Flow<CollectedCertificateRow?>
 
@@ -42,4 +46,7 @@ internal interface PersonalDao {
 
     @Insert
     suspend fun insertCertificate(row: CollectedCertificateRow)
+
+    @Update
+    suspend fun updateCertificate(row: CollectedCertificateRow)
 }

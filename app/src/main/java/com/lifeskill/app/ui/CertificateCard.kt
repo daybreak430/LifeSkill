@@ -1,6 +1,7 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.ProfileAvatar
 
 private val Parchment = Color(0xFFFCF7ED)
 private val CertificateType = TextStyle(fontFamily = FontFamily.Serif, localeList = LocaleList(Locale("zh-CN")))
@@ -61,7 +65,7 @@ private fun CertificateTheme.palette() = when (this) {
 }
 
 @Composable
-internal fun CertificateCard(treeName: String, style: CertificateStyle, recipient: String?) {
+internal fun CertificateCard(treeName: String, style: CertificateStyle, recipient: String, avatar: ProfileAvatar) {
     val palette = style.theme.palette()
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("certificate-paper-${style.theme.name.lowercase()}"),
@@ -71,7 +75,7 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle, recipien
             Modifier.fillMaxWidth().drawBehind {
                 drawRect(Brush.linearGradient(listOf(palette.paperEdge, Parchment, palette.paperEdge)))
                 drawCertificateFrame(style, palette.border)
-            }.padding(horizontal = 34.dp, vertical = 36.dp),
+            }.padding(horizontal = 30.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -79,29 +83,42 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle, recipien
                 Text("LifeSkill", color = palette.ink,
                     style = CertificateType.copy(fontSize = 21.sp, fontWeight = FontWeight.SemiBold))
             }
-            Spacer(Modifier.height(29.dp))
+            Spacer(Modifier.height(23.dp))
             Text("结业证书", Modifier.semantics { heading() }, color = palette.ink, textAlign = TextAlign.Center,
-                style = CertificateType.copy(fontSize = 39.sp, lineHeight = 50.sp, letterSpacing = 3.sp,
+                style = CertificateType.copy(fontSize = 37.sp, lineHeight = 48.sp, letterSpacing = 3.sp,
                     fontWeight = FontWeight.Bold))
             Text("CERTIFICATE OF COMPLETION", color = palette.ink, textAlign = TextAlign.Center,
                 style = CertificateType.copy(fontSize = 10.sp, lineHeight = 15.sp, letterSpacing = 1.25.sp))
-            Spacer(Modifier.height(if (recipient == null) 38.dp else 24.dp))
-            recipient?.let { name ->
-                Text("颁发给", color = palette.ink, style = CertificateType.copy(fontSize = 13.sp))
-                Text(name, color = palette.ink, textAlign = TextAlign.Center,
-                    style = CertificateType.copy(fontSize = 29.sp, lineHeight = 38.sp,
-                        fontWeight = FontWeight.SemiBold, lineBreak = LineBreak.Heading))
-                Spacer(Modifier.height(15.dp))
-            }
+            Spacer(Modifier.height(23.dp))
+            CertificateRecipient(recipient, avatar, palette)
+            Spacer(Modifier.height(23.dp))
             Text(treeName, color = palette.ink, textAlign = TextAlign.Center,
-                style = CertificateType.copy(fontSize = 27.sp, lineHeight = 38.sp,
+                style = CertificateType.copy(fontSize = 25.sp, lineHeight = 34.sp,
                     fontWeight = FontWeight.SemiBold, lineBreak = LineBreak.Heading))
-            Spacer(Modifier.height(17.dp))
+            Spacer(Modifier.height(13.dp))
             Canvas(Modifier.width(64.dp).height(2.dp)) {
                 drawLine(palette.border, Offset(0f, center.y), Offset(size.width, center.y), 1.dp.toPx())
             }
-            Spacer(Modifier.height(25.dp))
+            Spacer(Modifier.height(16.dp))
             CertificateSeal(style, palette.ink)
+        }
+    }
+}
+
+@Composable
+private fun CertificateRecipient(name: String, avatar: ProfileAvatar, palette: CertificatePalette) {
+    Row(
+        Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.border(1.dp, palette.border, CircleShape).padding(4.dp)) {
+            ProfileAvatarImage(avatar, 54.dp, Modifier.testTag("certificate-avatar"))
+        }
+        Column(Modifier.widthIn(max = 184.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("颁发给", color = palette.ink, style = CertificateType.copy(fontSize = 12.sp, letterSpacing = 1.sp))
+            Text(name, color = palette.ink,
+                style = CertificateType.copy(fontSize = 26.sp, lineHeight = 33.sp,
+                    fontWeight = FontWeight.SemiBold, lineBreak = LineBreak.Heading))
         }
     }
 }
@@ -124,8 +141,9 @@ internal fun CertificateThumbnail(certificate: CollectedCertificate, modifier: M
             Text("LifeSkill", color = palette.ink, style = CertificateType.copy(fontSize = 8.sp), maxLines = 1)
             Text("结业证书", color = palette.ink, style = CertificateType.copy(fontSize = 13.sp,
                 fontWeight = FontWeight.Bold), maxLines = 1)
-            certificate.recipient?.let {
-                Text(it, color = palette.ink, style = CertificateType.copy(fontSize = 8.sp),
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                ProfileAvatarImage(certificate.avatar, 16.dp)
+                Text(certificate.recipient, color = palette.ink, style = CertificateType.copy(fontSize = 8.sp),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(certificate.treeName, color = palette.ink, textAlign = TextAlign.Center,
@@ -138,17 +156,17 @@ internal fun CertificateThumbnail(certificate: CollectedCertificate, modifier: M
 
 @Composable
 private fun CertificateSeal(style: CertificateStyle, ink: Color) {
-    Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) {
             val radius = size.minDimension / 2
             drawCircle(ink.copy(alpha = .055f), radius - 3.dp.toPx())
             drawCircle(ink, radius - 1.dp.toPx(), style = Stroke(1.5.dp.toPx()))
             drawCircle(ink.copy(alpha = .66f), radius - 5.dp.toPx(), style = Stroke(.75.dp.toPx()))
             for (side in listOf(-1f, 1f)) {
-                drawCircle(ink, 1.35.dp.toPx(), center + Offset(side * 25.dp.toPx(), 0f))
+                drawCircle(ink, 1.2.dp.toPx(), center + Offset(side * 21.dp.toPx(), 0f))
             }
         }
-        Mark(style.emblem.glyph, ink, Modifier.size(32.dp))
+        Mark(style.emblem.glyph, ink, Modifier.size(28.dp))
     }
 }
 

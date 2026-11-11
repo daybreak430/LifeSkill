@@ -9,6 +9,8 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.BootstrapRow
+import com.lifeskill.app.data.CollectedCertificateRow
 import com.lifeskill.app.data.PersonalProfileRow
 import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.data.readAvatarPhoto
@@ -50,6 +52,7 @@ class PersonalStorageTest {
         val lit = Entry("old-skill", old.id, EntryKind.SKILL, "已学会", mastery = Mastery.AI)
         val unlit = Entry("new-skill", old.id, EntryKind.SKILL, "未学会")
         val frozenStyle = CertificateStyle.forTree(old.copy(icon = EntryIcon.CODE))
+        val profile = PersonalProfile("现在的昵称", ProfileAvatar.Preset(AvatarPreset.CAT))
         try {
             createVersionThree(name).use { database ->
                 database.execSQL("INSERT INTO bootstrap (id) VALUES (1)")
@@ -73,12 +76,12 @@ class PersonalStorageTest {
             }
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
-                app.profiles.save(PersonalProfile(nickname = "现在的昵称"))
-                repeat(2) { app.certificates.importLegacy() }
+                app.profiles.save(profile)
+                repeat(2) { app.certificates.prepareArchive() }
                 val archive = app.certificates.certificates.first()
                 assertEquals(listOf(
-                    CollectedCertificate(second.id, second.name, CertificateStyle.forTree(second), null),
-                    CollectedCertificate(old.id, old.name, frozenStyle, null),
+                    CollectedCertificate(second.id, second.name, CertificateStyle.forTree(second), profile.displayName, profile.avatar),
+                    CollectedCertificate(old.id, old.name, frozenStyle, profile.displayName, profile.avatar),
                 ), archive)
                 assertNull(app.certificates.watchCertificate(waiting.id).first())
                 val stats = LearningStatistics.from(app.library.snapshot(), app.assessments.summaries.first())
@@ -93,9 +96,43 @@ class PersonalStorageTest {
             }
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
-                app.certificates.importLegacy()
+                app.certificates.prepareArchive()
                 assertEquals(listOf(waiting.id, second.id, old.id), app.certificates.certificates.first().map { it.treeId })
-                assertNull(app.certificates.watchCertificate(old.id).first()?.recipient)
+                assertEquals(profile.displayName, app.certificates.watchCertificate(old.id).first()?.recipient)
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+        Unit
+    }
+
+    @Test fun backfillsIssuedPortraitAndKeepsVisibilityAcrossReopen() = runBlocking {
+        val name = "certificate-portrait-${UUID.randomUUID()}"
+        val secret = SecretBox("lifeskill-tests")
+        val tree = Entry("archived-tree", null, EntryKind.TREE, "摄影入门", icon = EntryIcon.CAMERA)
+        val style = CertificateStyle.forTree(tree)
+        val cat = ProfileAvatar.Preset(AvatarPreset.CAT)
+        val issued = CollectedCertificate(tree.id, tree.name, style, "签发时昵称", cat)
+        try {
+            withDatabase(name) { database ->
+                val app = fixture(database, ScriptedGateway())
+                database.skills().insertBootstrap(BootstrapRow(2))
+                val payload = JSONObject().put("name", tree.name).put("style", style.id).put("recipient", issued.recipient)
+                database.personal().insertCertificate(CollectedCertificateRow(sequence = 12, treeId = tree.id,
+                    content = secret.seal(payload.toString(), "${tree.id}:certificate")))
+                app.profiles.save(PersonalProfile("当前昵称", cat))
+                app.certificates.prepareArchive()
+                assertEquals(issued, app.certificates.watchCertificate(tree.id).first())
+                app.certificates.setHidden(tree.id, true)
+                app.profiles.save(PersonalProfile("再次改名", ProfileAvatar.Preset(AvatarPreset.DOG)))
+            }
+            withDatabase(name) { database ->
+                val app = fixture(database, ScriptedGateway())
+                app.certificates.prepareArchive()
+                assertEquals(issued.copy(hidden = true), app.certificates.certificates.first().single())
+                app.certificates.setHidden(tree.id, false)
+                assertEquals(issued, app.certificates.certificates.first().single())
+                assertEquals(12L, database.personal().certificate(tree.id)?.sequence)
             }
         } finally {
             context.deleteDatabase(name)

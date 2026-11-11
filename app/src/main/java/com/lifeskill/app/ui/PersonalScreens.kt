@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -19,15 +20,20 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,8 +64,12 @@ internal fun PersonalScreen(
     app: AppViewModel, model: PersonalViewModel, statistics: LearningStatistics, active: Boolean, dark: Boolean,
 ) {
     val result by model.personalData.collectAsStateWithLifecycle()
+    val visibility by model.certificateVisibility.collectAsStateWithLifecycle()
     val data = result?.getOrNull()
+    val certificates = data?.certificates.orEmpty()
+    val (hidden, visible) = remember(certificates) { certificates.partition { it.hidden } }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var browsingHidden by rememberSaveable { mutableStateOf(false) }
     val columnWidth = 144.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
@@ -87,25 +97,72 @@ internal fun PersonalScreen(
                     StudyStatisticsCard(statistics, data.certificates.size)
                 }
                 item(key = "certificate-heading", span = { GridItemSpan(maxLineSpan) }) {
-                    Text("证书收藏夹", Modifier.padding(top = 7.dp).semantics { heading() },
-                        style = MaterialTheme.typography.titleLarge)
-                }
-                if (data.certificates.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Surface(Modifier.fillMaxWidth(), shape = PanelShape, color = Panel) {
-                            EmptyState("暂无结业证书", "通过验收并收下证书后，会在这里展示。") { Emblem(Glyph.DIAMOND) }
+                    Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("证书展柜", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+                        if (hidden.isNotEmpty()) {
+                            TextButton({ browsingHidden = true }) { Text("已隐藏（${hidden.size}）") }
                         }
                     }
                 }
-                items(data.certificates, key = { it.treeId }) { certificate ->
-                    CertificateDisplay(certificate, dark) { selectedId = certificate.treeId }
+                if (visible.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Surface(Modifier.fillMaxWidth(), shape = PanelShape, color = Panel) {
+                            if (hidden.isEmpty()) {
+                                EmptyState("暂无结业证书", "通过验收并收下证书后，会在这里展示。") { Emblem(Glyph.DIAMOND) }
+                            } else {
+                                EmptyState("暂无展示的证书") { Emblem(Glyph.DIAMOND) }
+                            }
+                        }
+                    }
+                }
+                items(visible, key = { it.treeId }) { certificate ->
+                    CertificateDisplay(certificate, dark) {
+                        browsingHidden = false
+                        selectedId = certificate.treeId
+                    }
                 }
             }
         }
     }
-    if (active) data?.certificates?.firstOrNull { it.treeId == selectedId }?.let {
-        IssuedCertificateDialog(it) { selectedId = null }
+    if (active) {
+        val selected = certificates.firstOrNull { it.treeId == selectedId }
+        if (selected != null) {
+            val controls = CertificateVisibilityControl(selected.hidden, visibility) {
+                model.setCertificateHidden(selected.treeId, !selected.hidden)
+            }
+            IssuedCertificateDialog(selected, controls) {
+                selectedId = null
+                model.clearCertificateVisibility()
+            }
+        } else if (browsingHidden && hidden.isNotEmpty()) {
+            HiddenCertificatesDialog(hidden, { browsingHidden = false }) { selectedId = it }
+        }
     }
+}
+
+@Composable
+private fun HiddenCertificatesDialog(certificates: List<CollectedCertificate>, close: () -> Unit, open: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = close, shape = DialogShape, containerColor = Panel,
+        title = { Text("已隐藏的证书") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(certificates, key = { it.treeId }) { certificate ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape).background(Raised)
+                            .clickable(role = Role.Button, onClickLabel = "查看结业证书") { open(certificate.treeId) }
+                            .testTag("hidden-certificate-${certificate.treeId}").padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(certificate.treeName, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Mark(Glyph.NEXT, Muted)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(close) { Text("关闭") } },
+    )
 }
 
 @Composable

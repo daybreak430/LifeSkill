@@ -162,7 +162,8 @@ private fun ExamResult(
     }
     if (active && certificate != null) when (certificateMode) {
         CertificateMode.COLLECT -> ExamCertificateDialog(
-            issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.nickname,
+            issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.profile.nickname,
+            issued?.avatar ?: certificate.profile.avatar,
             collected = issued != null, status = status, onCollect = collectCertificate,
         ) { certificateMode = null }
         CertificateMode.VIEW -> issued?.let { IssuedCertificateDialog(it) { certificateMode = null } }

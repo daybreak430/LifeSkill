@@ -9,6 +9,7 @@ import com.lifeskill.app.model.EXAM_ANSWER_LIMIT
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.ExamAttempt
 import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.PersonalProfile
 import com.lifeskill.app.model.TreeChallenge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
 
 internal data class AssessmentStatus(val busy: Boolean = false, val error: String? = null)
 internal data class ExamDraft(val attemptId: String, val answers: List<ExamAnswer>)
-internal data class ExamCertificateContext(val issued: CollectedCertificate?, val nickname: String?)
+internal data class ExamCertificateContext(val issued: CollectedCertificate?, val profile: PersonalProfile)
 
 internal class TreeAssessmentViewModel(
     private val repository: TreeAssessmentRepository,
@@ -39,7 +40,7 @@ internal class TreeAssessmentViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val certificate = combine(certificates.watchCertificate(treeId), profiles.profile) { issued, profile ->
-        ExamCertificateContext(issued, profile.nickname)
+        ExamCertificateContext(issued, profile)
     }.catch { error ->
         if (error is Exception) _examStatus.value = AssessmentStatus(error = readable(error, "无法读取结业证书。"))
         else throw error

@@ -24,10 +24,16 @@ internal class CertificateRepository(
 
     fun watchCertificate(treeId: String) = dao.watchCertificate(treeId).map { it?.decode() }.flowOn(Dispatchers.IO)
 
-    suspend fun importLegacy() = database.withTransaction { importLegacyInTransaction() }
+    suspend fun prepareArchive() = database.withTransaction { prepareArchiveInTransaction() }
+
+    suspend fun setHidden(treeId: String, hidden: Boolean) = database.withTransaction {
+        val row = dao.certificate(treeId) ?: throw RuleViolation("这张证书已不存在。")
+        val payload = row.payload()
+        if (payload.optBoolean("hidden") != hidden) savePayload(row, payload.put("hidden", hidden))
+    }
 
     suspend fun issue(treeId: String, attemptId: String, enteredNickname: String? = null) = database.withTransaction {
-        importLegacyInTransaction()
+        prepareArchiveInTransaction()
         val attempt = assessments.attempt(treeId, attemptId) ?: throw RuleViolation("本次考试已不存在。")
         if ((attempt.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后可领取结业证书。")
         if (dao.certificate(treeId) != null) return@withTransaction
@@ -36,7 +42,28 @@ internal class CertificateRepository(
         val recipient = if (enteredNickname == null) profile.nickname ?: throw RuleViolation("请填写证书署名。")
             else checkNotNull(validatedNickname(enteredNickname, required = true))
         if (recipient != profile.nickname) profiles.save(profile.copy(nickname = recipient))
-        dao.insertCertificate(CollectedCertificate(treeId, tree.name, CertificateStyle.forTree(tree), recipient).encode())
+        dao.insertCertificate(CollectedCertificate(treeId, tree.name, CertificateStyle.forTree(tree), recipient,
+            profile.avatar).encode())
+    }
+
+    private suspend fun prepareArchiveInTransaction() {
+        importLegacyInTransaction()
+        val bootstrap = database.skills()
+        if (bootstrap.initialized(CERTIFICATE_RECIPIENTS_ID)) return
+        val rows = dao.certificates()
+        if (rows.isNotEmpty()) {
+            val profile = profiles.current()
+            // 旧档案缺少头像。用升级时的本地资料补齐，已签发的昵称与入库顺序保持不变。
+            for (row in rows) {
+                val payload = row.payload()
+                if (!payload.has("avatar")) {
+                    payload.put("avatar", JSONObject().putAvatar(profile.avatar))
+                    if (payload.optString("recipient").isBlank()) payload.put("recipient", profile.displayName)
+                    savePayload(row, payload)
+                }
+            }
+        }
+        bootstrap.insertBootstrap(BootstrapRow(CERTIFICATE_RECIPIENTS_ID))
     }
 
     private suspend fun importLegacyInTransaction() {
@@ -48,27 +75,37 @@ internal class CertificateRepository(
             val attempt = TreeAssessmentProtocol.decodeAttempt(row.id, secret.open(row.content, "${row.id}:exam"))
             if (attempt.certificateCollected && receipts[row.treeId] == null) receipts[row.treeId] = attempt.certificateStyle
         }
-        for ((treeId, savedStyle) in receipts) {
-            val tree = checkNotNull(library.entry(treeId))
-            val style = savedStyle ?: CertificateStyle.forTree(tree)
-            dao.insertCertificate(CollectedCertificate(treeId, tree.name, style, recipient = null).encode())
+        if (receipts.isNotEmpty()) {
+            val profile = profiles.current()
+            for ((treeId, savedStyle) in receipts) {
+                val tree = checkNotNull(library.entry(treeId))
+                val style = savedStyle ?: CertificateStyle.forTree(tree)
+                dao.insertCertificate(CollectedCertificate(treeId, tree.name, style, profile.displayName, profile.avatar).encode())
+            }
         }
         bootstrap.insertBootstrap(BootstrapRow(CERTIFICATE_ARCHIVE_ID))
     }
 
     private fun CollectedCertificate.encode(): CollectedCertificateRow {
         val json = JSONObject().put("name", treeName).put("style", style.id).put("recipient", recipient)
+            .put("avatar", JSONObject().putAvatar(avatar))
         return CollectedCertificateRow(treeId = treeId, content = secret.seal(json.toString(), "$treeId:certificate"))
     }
 
     private fun CollectedCertificateRow.decode(): CollectedCertificate {
-        val json = JSONObject(secret.open(content, "$treeId:certificate"))
+        val json = payload()
         return CollectedCertificate(treeId, json.getString("name"),
             checkNotNull(CertificateStyle.fromId(json.getString("style"))),
-            json.optString("recipient").takeIf(String::isNotEmpty))
+            json.getString("recipient"), json.getJSONObject("avatar").readAvatar(), json.optBoolean("hidden"))
     }
+
+    private fun CollectedCertificateRow.payload() = JSONObject(secret.open(content, "$treeId:certificate"))
+
+    private suspend fun savePayload(row: CollectedCertificateRow, payload: JSONObject) =
+        dao.updateCertificate(row.copy(content = secret.seal(payload.toString(), "${row.treeId}:certificate")))
 
     private companion object {
         const val CERTIFICATE_ARCHIVE_ID = 2
+        const val CERTIFICATE_RECIPIENTS_ID = 3
     }
 }

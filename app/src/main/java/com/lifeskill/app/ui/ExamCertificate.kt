@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -59,6 +60,8 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.DEFAULT_PROFILE_NAME
+import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.validatedNickname
 
@@ -67,15 +70,21 @@ private val CertificatePaper = Color(0xFFFFF3DA)
 private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
 
+internal data class CertificateVisibilityControl(val hidden: Boolean, val status: AssessmentStatus, val toggle: () -> Unit)
+
 @Composable
-internal fun IssuedCertificateDialog(certificate: CollectedCertificate, onClose: () -> Unit) {
-    ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, onClose = onClose)
+internal fun IssuedCertificateDialog(
+    certificate: CollectedCertificate, visibility: CertificateVisibilityControl? = null, onClose: () -> Unit,
+) {
+    ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, certificate.avatar,
+        visibility = visibility, onClose = onClose)
 }
 
 @Composable
 internal fun ExamCertificateDialog(
-    treeName: String, style: CertificateStyle, recipient: String?, collected: Boolean = false,
-    status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null, onClose: () -> Unit,
+    treeName: String, style: CertificateStyle, recipient: String?, avatar: ProfileAvatar, collected: Boolean = false,
+    status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null,
+    visibility: CertificateVisibilityControl? = null, onClose: () -> Unit,
 ) {
     val viewing = onCollect == null
     var opened by rememberSaveable { mutableStateOf(viewing) }
@@ -105,7 +114,7 @@ internal fun ExamCertificateDialog(
 
     Dialog(
         onDismissRequest = {
-            if (!status.busy) {
+            if (!status.busy && visibility?.status?.busy != true) {
                 if (enteringNickname && !exiting) enteringNickname = false else closing = true
             }
         },
@@ -190,10 +199,9 @@ internal fun ExamCertificateDialog(
                     }.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    CertificateCard(treeName, style, recipient)
+                    CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar)
                     if (viewing) {
-                        Action("关闭", Glyph.CLOSE, { closing = true }, Modifier.fillMaxWidth(),
-                            primary = true, enabled = !exiting)
+                        CertificateViewerActions(visibility, exiting) { closing = true }
                     } else {
                         if (requested && status.error != null) AssessmentStatusText(status)
                         Action("收下", Glyph.CHECK, {
@@ -208,6 +216,21 @@ internal fun ExamCertificateDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CertificateViewerActions(visibility: CertificateVisibilityControl?, exiting: Boolean, close: () -> Unit) {
+    val enabled = !exiting && visibility?.status?.busy != true
+    visibility?.status?.error?.let { Text(it, color = CertificatePaper, style = MaterialTheme.typography.bodySmall) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (visibility != null) {
+            TextButton(onClick = visibility.toggle, modifier = Modifier.weight(1f), enabled = enabled) {
+                Text(if (visibility.hidden) "取消隐藏" else "隐藏该证书", color = CertificatePaper)
+            }
+        }
+        Action("关闭", Glyph.CLOSE, close, Modifier.weight(1f), primary = true, enabled = enabled)
     }
 }
 

@@ -170,11 +170,11 @@ class MvpFlowTest {
             await("学习者")
             ui.onNodeWithText(directions.first().name).assertDoesNotExist()
             ui.onNodeWithContentDescription("设置").assertIsDisplayed()
-            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书收藏夹"))
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书展柜"))
             learning.performClick().assertIsSelected()
             ui.onNodeWithTag(lastDirection).assertIsDisplayed()
             personal.performClick()
-            ui.onNodeWithText("证书收藏夹").assertIsDisplayed()
+            ui.onNodeWithText("证书展柜").assertIsDisplayed()
             ui.onNodeWithTag("personal-home").performScrollToNode(hasText("学习者"))
             ui.onNodeWithContentDescription("编辑资料").performClick()
             await("内置头像")
@@ -197,8 +197,8 @@ class MvpFlowTest {
             await("新昵称")
             ui.onNodeWithContentDescription("编辑资料").performClick()
             await("内置头像")
-            ui.onNodeWithText("恢复默认头像").performScrollTo().performClick()
-            ui.onNodeWithContentDescription("短发女生头像").assertIsSelected()
+            ui.onNodeWithText("恢复默认头像").assertDoesNotExist()
+            ui.onNodeWithContentDescription("短发女生头像").performClick().assertIsSelected()
             pressBack()
             await("新昵称")
             assertEquals(ProfileAvatar.Preset(AvatarPreset.CAT), runBlocking { profiles.current().avatar })
@@ -650,6 +650,8 @@ class MvpFlowTest {
         ui.onNodeWithText("查看结业证书").performTouchInput { click() }
         ui.onNodeWithText("结业证书").assertIsDisplayed()
         ui.onNodeWithText("证书学员").assertIsDisplayed()
+        ui.onNodeWithTag("certificate-avatar").assertIsDisplayed()
+        ui.onNodeWithText("隐藏该证书").assertDoesNotExist()
         envelope.assertDoesNotExist()
         ui.onNodeWithText("收下").assertDoesNotExist()
         ui.onNodeWithText("关闭").performTouchInput { click() }
@@ -660,6 +662,10 @@ class MvpFlowTest {
         await("LifeSkill")
         val library = fixture.container.library
         val exams = fixture.container.assessments
+        val profiles = fixture.container.profiles
+        val originalProfile = runBlocking {
+            profiles.current().also { profiles.save(PersonalProfile("林知远", ProfileAvatar.Preset(AvatarPreset.CAT))) }
+        }
         val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "结业证书样式")) }
         val examples = listOf(
             Triple(CertificateTheme.TECH, EntryIcon.CODE, "Python 自动化与脚本开发"),
@@ -680,7 +686,7 @@ class MvpFlowTest {
                     exams.submitExam(tree.id, attempt.id, attempt.questions.map { question ->
                         ExamAnswer(question.correctChoices, "核对金额")
                     })
-                    fixture.container.certificates.issue(tree.id, attempt.id, "样式测试学员")
+                    fixture.container.certificates.issue(tree.id, attempt.id)
                 }
             }
             val directionTag = "direction-card-${direction.id}"
@@ -698,6 +704,8 @@ class MvpFlowTest {
                 val paperTag = "certificate-paper-${theme.name.lowercase()}"
                 ui.onNodeWithTag(paperTag).assertIsDisplayed()
                 ui.onNode(hasText(name) and hasAnyAncestor(hasTestTag(paperTag))).assertIsDisplayed()
+                ui.onNodeWithText("林知远").assertIsDisplayed()
+                ui.onNodeWithTag("certificate-avatar").assertIsDisplayed()
                 ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
                 captureScreenshot("captureCertificateScreenshots", "${theme.name.lowercase()}.png")
                 ui.onNodeWithText("关闭").performTouchInput { click() }
@@ -710,18 +718,36 @@ class MvpFlowTest {
             ui.onNodeWithContentDescription("返回").performClick()
             await("LifeSkill")
             ui.onNodeWithTag("tab-personal").performTouchInput { click() }
-            await("证书收藏夹")
+            await("证书展柜")
             ui.onNodeWithText("查看全部").assertDoesNotExist()
             val cabinet = ui.onNodeWithTag("personal-home")
             examples.forEach { (_, _, name) -> cabinet.performScrollToNode(hasText(name) and hasClickAction()) }
-            ui.onNode(hasText(examples.last().third) and hasClickAction()).performTouchInput { click() }
+            val certificate = hasText(examples.last().third) and hasClickAction()
+            ui.onNode(certificate).performTouchInput { click() }
             ui.onNodeWithTag("certificate-paper-arts").assertIsDisplayed()
+            captureScreenshot("captureCertificateScreenshots", "cabinet-certificate.png")
+            ui.onNodeWithText("隐藏该证书").performScrollTo().performTouchInput { click() }
+            await("取消隐藏")
             ui.onNodeWithText("关闭").performClick()
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+            ui.onNode(certificate).assertDoesNotExist()
+            cabinet.performScrollToNode(hasText("已隐藏（1）"))
+            ui.onNodeWithText("已隐藏（1）").performClick()
+            await("已隐藏的证书")
+            ui.onNode(certificate).performClick()
+            ui.onNodeWithText("取消隐藏").performScrollTo().performTouchInput { click() }
+            await("隐藏该证书")
+            ui.onNodeWithText("关闭").performClick()
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+            cabinet.performScrollToNode(certificate)
+            ui.onNodeWithText("已隐藏（1）").assertDoesNotExist()
             cabinet.performScrollToIndex(0)
             captureScreenshot("capturePersonalScreenshots", "cabinet.png")
         } finally {
-            runBlocking { library.delete(direction.id) }
+            runBlocking {
+                library.delete(direction.id)
+                profiles.save(originalProfile)
+            }
         }
     }
 

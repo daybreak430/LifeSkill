@@ -36,6 +36,27 @@ internal class PersonalViewModel(private val container: AppContainer) : ViewMode
 
     private val _editor = MutableStateFlow(ProfileEditorState())
     val editor = _editor.asStateFlow()
+    private val _certificateVisibility = MutableStateFlow(AssessmentStatus())
+    val certificateVisibility = _certificateVisibility.asStateFlow()
+
+    fun setCertificateHidden(treeId: String, hidden: Boolean) {
+        if (_certificateVisibility.value.busy) return
+        _certificateVisibility.value = AssessmentStatus(busy = true)
+        viewModelScope.launch {
+            try {
+                container.certificates.setHidden(treeId, hidden)
+                _certificateVisibility.value = AssessmentStatus()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _certificateVisibility.value = AssessmentStatus(error = readable(error, "无法更新证书的展示状态，请重试。"))
+            }
+        }
+    }
+
+    fun clearCertificateVisibility() {
+        if (!_certificateVisibility.value.busy) _certificateVisibility.value = AssessmentStatus()
+    }
 
     fun beginEdit() {
         if (_editor.value.profile != null) return

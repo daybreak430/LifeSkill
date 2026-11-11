@@ -123,7 +123,7 @@ internal class AppViewModel(
         viewModelScope.launch {
             try {
                 container.library.initialize()
-                container.certificates.importLegacy()
+                container.certificates.prepareArchive()
                 container.library.library.collect { current ->
                     val previous = _library.value
                     _library.value = current

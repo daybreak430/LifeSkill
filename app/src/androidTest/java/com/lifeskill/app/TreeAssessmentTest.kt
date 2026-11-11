@@ -7,6 +7,7 @@ import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.ai.TreeAssessmentProtocol
 import com.lifeskill.app.model.CertificateStyle
+import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.CollectedCertificate
@@ -17,6 +18,8 @@ import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.ExamQuestionType
 import com.lifeskill.app.model.EXAM_QUESTION_COUNT
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.PersonalProfile
+import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.TreeChallenge
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -122,15 +125,17 @@ class TreeAssessmentTest {
         assertNull(container.profiles.current().nickname)
         assertTrue(archive.certificates.first().isEmpty())
         val certificateStyle = CertificateStyle.forTree(tree)
+        val portrait = ProfileAvatar.Preset(AvatarPreset.CAT)
+        container.profiles.save(PersonalProfile(avatar = portrait))
         archive.issue(tree.id, second.id, "  学习伙伴  ")
         archive.issue(tree.id, second.id, "重复提交")
-        val issued = CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴")
+        val issued = CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴", portrait)
         assertEquals(issued, archive.certificates.first().single())
         assertEquals("学习伙伴", container.profiles.current().nickname)
         assertTrue(exams.summaries.first().getValue(tree.id).passed)
 
         container.library.save(EntryEdit(tree.id, tree.parentId, EntryKind.TREE, "重新命名的课程", icon = EntryIcon.CAMERA))
-        container.profiles.save(container.profiles.current().copy(nickname = "新版昵称"))
+        container.profiles.save(PersonalProfile("新版昵称", ProfileAvatar.Preset(AvatarPreset.DOG)))
         gateway.reply(examFixture("第三轮"))
         exams.startExam(tree.id)
         val third = exams.watchAttempts(tree.id).first().first()

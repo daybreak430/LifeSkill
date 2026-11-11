@@ -1,6 +1,7 @@
 package com.lifeskill.app.model
 
 internal const val NICKNAME_LIMIT = 24
+internal const val DEFAULT_PROFILE_NAME = "学习者"
 
 internal enum class AvatarPreset(val label: String) {
     BOB("短发女生"), GLASSES("眼镜男生"), LAVENDER("紫发青年"), SILVER("银发女士"),
@@ -30,7 +31,7 @@ internal data class PersonalProfile(
     val nickname: String? = null,
     val avatar: ProfileAvatar = ProfileAvatar.Preset(AvatarPreset.default),
 ) {
-    val displayName get() = nickname ?: "学习者"
+    val displayName get() = nickname ?: DEFAULT_PROFILE_NAME
 }
 
 internal fun validatedNickname(value: String, required: Boolean = false): String? {
@@ -44,7 +45,8 @@ internal fun validatedNickname(value: String, required: Boolean = false): String
 }
 
 internal data class CollectedCertificate(
-    val treeId: String, val treeName: String, val style: CertificateStyle, val recipient: String?,
+    val treeId: String, val treeName: String, val style: CertificateStyle, val recipient: String, val avatar: ProfileAvatar,
+    val hidden: Boolean = false,
 )
 
 internal data class LearningStatistics(val skills: Progress, val passedTrees: Int) {

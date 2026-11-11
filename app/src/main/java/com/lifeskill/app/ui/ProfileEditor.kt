@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +39,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -83,9 +81,6 @@ internal fun ProfileEditScreen(app: AppViewModel, model: PersonalViewModel, acti
                 Action("从相册选择", Glyph.CAMERA, { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     enabled = !state.busy)
                 PresetAvatars(profile.avatar, !state.busy, model::changeAvatar)
-                TextButton({ model.changeAvatar(ProfileAvatar.Preset(AvatarPreset.default)) }, enabled = !state.busy) {
-                    Text("恢复默认头像")
-                }
                 NicknameField(profile.nickname.orEmpty(), model::changeNickname, !state.busy)
                 AssessmentStatusText(AssessmentStatus(error = state.error))
                 Action("保存资料", Glyph.CHECK, {
@@ -129,8 +124,8 @@ internal fun NicknameField(value: String, change: (String) -> Unit, enabled: Boo
 }
 
 @Composable
-internal fun ProfileAvatarImage(avatar: ProfileAvatar, diameter: Dp) {
-    Box(Modifier.size(diameter).testTag("profile-avatar").semantics { contentDescription = "头像" },
+internal fun ProfileAvatarImage(avatar: ProfileAvatar, diameter: Dp, modifier: Modifier = Modifier) {
+    Box(modifier.size(diameter).semantics { contentDescription = "头像" },
         contentAlignment = Alignment.Center) {
         when (avatar) {
             is ProfileAvatar.Preset -> IllustratedAvatar(avatar.value, Modifier.fillMaxSize())
