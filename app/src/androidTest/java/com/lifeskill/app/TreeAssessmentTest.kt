@@ -89,6 +89,7 @@ class TreeAssessmentTest {
         assertEquals(0, exams.watchAttempts(tree.id).first().single().score)
         assertFalse(exams.summaries.first().getValue(tree.id).passed)
         expectRule { exams.startChallenge(tree.id, TreeChallenge.DIAGNOSTIC) }
+        expectRule { exams.collectCertificate(tree.id, first.id) }
 
         gateway.enqueue { messages ->
             assertEquals(EXAM_QUESTION_COUNT, JSONObject(messages.last().text).getJSONArray("previousQuestions").length())
@@ -107,7 +108,11 @@ class TreeAssessmentTest {
         }
         gateway.reply(markFixture())
         exams.submitExam(tree.id, second.id, passing)
-        assertEquals(60, exams.watchAttempts(tree.id).first().first().score)
+        val passedAttempt = exams.watchAttempts(tree.id).first().first()
+        assertEquals(60, passedAttempt.score)
+        assertFalse(passedAttempt.certificateCollected)
+        repeat(2) { exams.collectCertificate(tree.id, second.id) }
+        assertEquals(passedAttempt.copy(certificateCollected = true), exams.watchAttempts(tree.id).first().first())
         assertTrue(exams.summaries.first().getValue(tree.id).passed)
 
         gateway.reply(examFixture("第三轮"))
@@ -179,6 +184,7 @@ class TreeAssessmentTest {
         assertEquals(8, attempt.questions.size)
         assertEquals(2, attempt.questions.count { it.type == ExamQuestionType.SHORT })
         assertEquals(100, attempt.score)
+        assertFalse(attempt.certificateCollected)
     }
 
     private suspend fun expectRule(action: suspend () -> Unit) {

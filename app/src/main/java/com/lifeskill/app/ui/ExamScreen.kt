@@ -71,8 +71,8 @@ internal fun ExamScreen(
             reviewing -> ExamReview(attempts.orEmpty(), Modifier.weight(1f))
             latest?.score != null -> key(latest.id) {
                 ExamResult(
-                    tree.name, checkNotNull(latest.score), checkNotNull(best), ready, status, active,
-                    model::startExam, { reviewing = true },
+                    tree.name, latest, checkNotNull(best), ready, status, active,
+                    model::startExam, { reviewing = true }, { model.collectCertificate(latest.id) },
                 )
             }
             latest != null -> key(latest.id) {
@@ -110,12 +110,16 @@ private fun ExamIntro(ready: Boolean, status: AssessmentStatus, start: () -> Uni
     }
 }
 
+private enum class CertificateMode { COLLECT, VIEW }
+
 @Composable
 private fun ExamResult(
-    treeName: String, score: Int, best: Int, ready: Boolean, status: AssessmentStatus, active: Boolean,
-    retake: () -> Unit, review: () -> Unit,
+    treeName: String, attempt: ExamAttempt, best: Int, ready: Boolean, status: AssessmentStatus, active: Boolean,
+    retake: () -> Unit, review: () -> Unit, collectCertificate: () -> Unit,
 ) {
-    var showingCertificate by rememberSaveable { mutableStateOf(false) }
+    val score = checkNotNull(attempt.score)
+    val passed = score >= EXAM_PASS_SCORE
+    var certificateMode by rememberSaveable { mutableStateOf<CertificateMode?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -137,19 +141,26 @@ private fun ExamResult(
                 }
             }
         }
-        if (score >= EXAM_PASS_SCORE) item {
-            Action("获取结业证书", Glyph.DIAMOND, { showingCertificate = true }, Modifier.fillMaxWidth())
+        if (passed) item {
+            val collected = attempt.certificateCollected
+            Action(
+                if (collected) "查看结业证书" else "获取结业证书", Glyph.DIAMOND,
+                { certificateMode = if (collected) CertificateMode.VIEW else CertificateMode.COLLECT },
+                Modifier.fillMaxWidth(), primary = true, enabled = !status.busy,
+            )
         }
         item { Action("查看错题集", Glyph.BOOK, review, Modifier.fillMaxWidth()) }
         if (best < EXAM_MAX_SCORE) item {
             Action(if (status.busy) "正在出题" else "再考一次", Glyph.RESTART, retake, Modifier.fillMaxWidth(),
-                primary = true, enabled = ready && !status.busy)
+                primary = !passed, enabled = ready && !status.busy)
             if (!ready) Text("点亮全部课程后可再考。", color = Muted, style = MaterialTheme.typography.bodyMedium)
         }
         item { AssessmentStatusText(status) }
     }
-    if (active && showingCertificate) {
-        ExamCertificateDialog(treeName, score) { showingCertificate = false }
+    val mode = certificateMode
+    if (active && mode != null) {
+        ExamCertificateDialog(treeName, score, mode == CertificateMode.VIEW, attempt.certificateCollected,
+            status, collectCertificate) { certificateMode = null }
     }
 }
 

@@ -64,9 +64,14 @@ private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
 
 @Composable
-internal fun ExamCertificateDialog(treeName: String, score: Int, onClose: () -> Unit) {
-    var opened by rememberSaveable { mutableStateOf(false) }
+internal fun ExamCertificateDialog(
+    treeName: String, score: Int, viewing: Boolean, collected: Boolean, status: AssessmentStatus,
+    onCollect: () -> Unit, onClose: () -> Unit,
+) {
+    var opened by rememberSaveable { mutableStateOf(viewing) }
     var closing by rememberSaveable { mutableStateOf(false) }
+    var requested by rememberSaveable { mutableStateOf(false) }
+    val exiting = closing || (!viewing && collected)
     var drag by remember { mutableFloatStateOf(0f) }
     val opening = remember { Animatable(if (opened) 1f else 0f) }
     val exit = remember { Animatable(0f) }
@@ -79,15 +84,15 @@ internal fun ExamCertificateDialog(treeName: String, score: Int, onClose: () -> 
     LaunchedEffect(opened) {
         if (opened) opening.animateTo(1f, tween(720))
     }
-    LaunchedEffect(closing) {
-        if (closing) {
+    LaunchedEffect(exiting) {
+        if (exiting) {
             exit.animateTo(1f, tween(240))
             close()
         }
     }
 
     Dialog(
-        onDismissRequest = { closing = true },
+        onDismissRequest = { if (!requested || !status.busy) closing = true },
         properties = DialogProperties(
             dismissOnClickOutside = false,
             usePlatformDefaultWidth = false,
@@ -118,7 +123,7 @@ internal fun ExamCertificateDialog(treeName: String, score: Int, onClose: () -> 
             contentAlignment = Alignment.Center,
         ) {
             if (showEnvelope) {
-                val interaction = if (opened || closing) {
+                val interaction = if (opened || exiting) {
                     Modifier.clearAndSetSemantics { hideFromAccessibility() }
                 } else {
                     Modifier.semantics(mergeDescendants = true) {
@@ -165,8 +170,16 @@ internal fun ExamCertificateDialog(treeName: String, score: Int, onClose: () -> 
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CertificateCard(treeName, score)
-                    Action("收下", Glyph.CHECK, { closing = true }, Modifier.fillMaxWidth(),
-                        primary = true, enabled = canCollect && !closing)
+                    if (viewing) {
+                        Action("关闭", Glyph.CLOSE, { closing = true }, Modifier.fillMaxWidth(),
+                            primary = true, enabled = !exiting)
+                    } else {
+                        if (requested && status.error != null) AssessmentStatusText(status)
+                        Action("收下", Glyph.CHECK, {
+                            requested = true
+                            onCollect()
+                        }, Modifier.fillMaxWidth(), primary = true, enabled = canCollect && !exiting && !status.busy)
+                    }
                 }
             }
         }
@@ -175,10 +188,10 @@ internal fun ExamCertificateDialog(treeName: String, score: Int, onClose: () -> 
 
 @Composable
 private fun CertificateEnvelope(progress: () -> Float) {
-    Canvas(Modifier.fillMaxWidth().height(142.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(200.dp)) {
         val flap = motionPhase(progress(), 0f, .42f)
-        val top = size.height * .32f
-        val fold = Offset(center.x, top + size.height * .30f)
+        val top = size.height * .27f
+        val fold = Offset(center.x, top + size.height * .25f)
         val bottom = size.height - 1.dp.toPx()
         val left = 2.dp.toPx()
         val right = size.width - left

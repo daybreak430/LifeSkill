@@ -514,6 +514,7 @@ class MvpFlowTest {
             ui.onNodeWithText("验收考试").performTouchInput { click() }
             await("未通过")
             ui.onNodeWithText("获取结业证书").assertDoesNotExist()
+            ui.onNodeWithText("查看结业证书").assertDoesNotExist()
         } finally {
             runBlocking {
                 library.delete(tree.id)
@@ -551,8 +552,19 @@ class MvpFlowTest {
         } finally {
             ui.mainClock.autoAdvance = true
         }
+        ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
         ui.onNodeWithText("结业证书").assertDoesNotExist()
         ui.onNodeWithText("90 分").assertIsDisplayed()
+        entry.assertDoesNotExist()
+
+        ui.activityRule.scenario.recreate()
+        await("查看结业证书")
+        ui.onNodeWithText("查看结业证书").performTouchInput { click() }
+        ui.onNodeWithText("验收成绩 90 分").assertIsDisplayed()
+        envelope.assertDoesNotExist()
+        ui.onNodeWithText("收下").assertDoesNotExist()
+        ui.onNodeWithText("关闭").performTouchInput { click() }
+        ui.onNodeWithText("验收成绩 90 分").assertDoesNotExist()
     }
 
     @Test fun skillMapWrapsIntoTwoColumnsAndOnlyScrollsVertically() {

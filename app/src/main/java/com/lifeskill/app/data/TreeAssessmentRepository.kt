@@ -99,6 +99,15 @@ internal class TreeAssessmentRepository(
         }
     }
 
+    suspend fun collectCertificate(treeId: String, attemptId: String) = database.withTransaction {
+        val row = dao.attempt(treeId, attemptId) ?: throw RuleViolation("本次考试已不存在。")
+        if ((row.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后可领取结业证书。")
+        val attempt = row.decode()
+        if (!attempt.certificateCollected) {
+            dao.update(row.copy(content = attempt.copy(certificateCollected = true).encode()))
+        }
+    }
+
     suspend fun startChallenge(treeId: String, kind: TreeChallenge) {
         val (previous, learning) = database.withTransaction {
             val current = requirePassedTree(treeId)
@@ -191,7 +200,7 @@ internal class TreeAssessmentRepository(
         }
     }
 
-    private fun ExamAttempt.encode() = secret.seal(TreeAssessmentProtocol.encodeAttempt(questions, answers, marks), "$id:exam")
+    private fun ExamAttempt.encode() = secret.seal(TreeAssessmentProtocol.encodeAttempt(this), "$id:exam")
     private fun ExamAttemptRow.decode() = TreeAssessmentProtocol.decodeAttempt(id, secret.open(content, "$id:exam"))
     private fun TreeChallengeRow.decode() = TreeAssessmentProtocol.decodeSession(secret.open(content, challengeKey(treeId, kind)))
     private fun challengeKey(treeId: String, kind: String) = "$treeId:challenge:$kind"

@@ -61,6 +61,10 @@ internal class TreeAssessmentViewModel(
         repository.submitExam(treeId, attempt.id, answersFor(attempt))
     }
 
+    fun collectCertificate(attemptId: String) = run(_examStatus) {
+        repository.collectCertificate(treeId, attemptId)
+    }
+
     fun startChallenge(kind: TreeChallenge) = run(challengeOperations.getValue(kind)) {
         repository.startChallenge(treeId, kind)
     }

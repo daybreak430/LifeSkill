@@ -100,12 +100,13 @@ internal object TreeAssessmentProtocol {
         ChallengeReply(feedback, accepted, if (required) next else "")
     }
 
-    fun encodeAttempt(questions: List<ExamQuestion>, answers: List<ExamAnswer>, marks: List<ExamMark>) = JSONObject()
-        .put("questions", JSONArray(questions.map(::questionJson)))
-        .put("answers", JSONArray(answers.map(::answerJson)))
-        .put("marks", JSONArray(marks.mapIndexed { index, mark ->
+    fun encodeAttempt(attempt: ExamAttempt) = JSONObject()
+        .put("questions", JSONArray(attempt.questions.map(::questionJson)))
+        .put("answers", JSONArray(attempt.answers.map(::answerJson)))
+        .put("marks", JSONArray(attempt.marks.mapIndexed { index, mark ->
             JSONObject().put("number", index + 1).put("points", mark.points).put("feedback", mark.feedback)
-        })).toString()
+        }))
+        .put("certificateCollected", attempt.certificateCollected).toString()
 
     fun decodeAttempt(id: String, stored: String): ExamAttempt {
         val json = JSONObject(stored)
@@ -117,7 +118,8 @@ internal object TreeAssessmentProtocol {
         }
         val marks = json.getJSONArray("marks")
         return ExamAttempt(id, questions, answers,
-            if (marks.length() == 0) emptyList() else decodeMarks(marks, questions))
+            if (marks.length() == 0) emptyList() else decodeMarks(marks, questions),
+            certificateCollected = json.optBoolean("certificateCollected", false))
     }
 
     fun encodeSession(session: ChallengeSession) = JSONObject().put("prompt", session.prompt)
