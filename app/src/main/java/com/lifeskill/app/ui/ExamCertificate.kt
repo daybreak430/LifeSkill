@@ -19,6 +19,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,7 +74,6 @@ private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
 private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
-private val CertificateDanger = Color(0xFFFFB4AB)
 
 internal data class CertificateViewerControls(
     val status: AssessmentStatus, val destroy: () -> Unit, val toggleVisibility: (() -> Unit)? = null,
@@ -242,18 +243,38 @@ private fun CertificateViewerActions(
     controls: CertificateViewerControls, exiting: Boolean, confirmDestruction: () -> Unit, close: () -> Unit,
 ) {
     val enabled = !exiting && !controls.status.busy
+    var secondaryExpanded by rememberSaveable { mutableStateOf(false) }
     controls.status.error?.let { Text(it, color = CertificatePaper, style = MaterialTheme.typography.bodySmall) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        if (controls.toggleVisibility != null) {
-            TextButton(onClick = controls.toggleVisibility, modifier = Modifier.weight(1f), enabled = enabled) {
-                Text(if (controls.hidden) "取消隐藏" else "隐藏该证书", color = CertificatePaper)
+        Box(Modifier.weight(1f)) {
+            TextButton(
+                onClick = { secondaryExpanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled,
+            ) {
+                Text("更多", color = CertificatePaper)
+            }
+            DropdownMenu(expanded = secondaryExpanded, onDismissRequest = { secondaryExpanded = false }) {
+                if (controls.toggleVisibility != null) {
+                    DropdownMenuItem(
+                        text = { Text(if (controls.hidden) "取消隐藏" else "隐藏该证书") },
+                        onClick = {
+                            secondaryExpanded = false
+                            controls.toggleVisibility()
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("销毁证书", color = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        secondaryExpanded = false
+                        confirmDestruction()
+                    },
+                )
             }
         }
         Action("关闭", Glyph.CLOSE, close, Modifier.weight(1f), primary = true, enabled = enabled)
-    }
-    TextButton(onClick = confirmDestruction, modifier = Modifier.fillMaxWidth(), enabled = enabled) {
-        Text("销毁证书", color = CertificateDanger)
     }
 }
 

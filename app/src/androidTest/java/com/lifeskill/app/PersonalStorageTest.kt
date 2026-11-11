@@ -15,6 +15,7 @@ import com.lifeskill.app.data.PersonalProfileRow
 import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.data.readAvatarPhoto
 import com.lifeskill.app.model.CertificateStyle
+import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.Entry
@@ -152,16 +153,49 @@ class PersonalStorageTest {
                 app.certificates.prepareArchive()
                 val sample = app.certificates.certificates.first().single()
                 assertTrue(sample.isSample)
-                assertNull(sample.collectedAt)
+                val sampleDate = checkNotNull(sample.collectedAt)
                 app.certificates.setHidden(sample.treeId, true)
                 assertTrue(app.certificates.certificates.first().single().hidden)
                 app.certificates.destroy(sample.treeId)
                 assertTrue(app.certificates.watchCertificate(sample.treeId).first().destroyed)
+                assertEquals(sampleDate, sample.collectedAt)
             }
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
                 repeat(2) { app.certificates.prepareArchive() }
                 assertTrue(app.certificates.certificates.first().isEmpty())
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+        Unit
+    }
+
+    @Test fun backfillsMissingDateForExistingSampleCertificate() = runBlocking {
+        val name = "certificate-sample-date-${UUID.randomUUID()}"
+        val sampleId = "lifeskill:certificate-sample"
+        val secret = SecretBox("lifeskill-tests")
+        val style = CertificateStyle(CertificateTheme.BUSINESS, EntryIcon.BOOK, 0)
+        try {
+            withDatabase(name) { database ->
+                val app = fixture(database, ScriptedGateway())
+                database.skills().insertBootstrap(BootstrapRow(2))
+                database.skills().insertBootstrap(BootstrapRow(3))
+                val payload = JSONObject()
+                    .put("name", "学习方法入门")
+                    .put("style", style.id)
+                    .put("recipient", "示例学员")
+                    .put("avatar", JSONObject().put("preset", AvatarPreset.CAT.name))
+                database.personal().insertCertificate(CollectedCertificateRow(
+                    treeId = sampleId,
+                    content = secret.seal(payload.toString(), "$sampleId:certificate"),
+                ))
+
+                app.certificates.prepareArchive()
+                val sample = app.certificates.certificates.first().single()
+                val sampleDate = checkNotNull(sample.collectedAt)
+                app.certificates.prepareArchive()
+                assertEquals(sampleDate, app.certificates.watchCertificate(sampleId).first().issued?.collectedAt)
             }
         } finally {
             context.deleteDatabase(name)

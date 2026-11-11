@@ -72,8 +72,16 @@ internal class CertificateRepository(
         if (dao.certificate(SAMPLE_CERTIFICATE_ID) == null) {
             dao.insertCertificate(CollectedCertificate(
                 SAMPLE_CERTIFICATE_ID, "学习方法入门", CertificateStyle(CertificateTheme.BUSINESS, EntryIcon.BOOK, 0),
-                "示例学员", ProfileAvatar.Preset(AvatarPreset.CAT), isSample = true,
+                "示例学员", ProfileAvatar.Preset(AvatarPreset.CAT), collectedAt = OffsetDateTime.now(), isSample = true,
             ).encode())
+        } else {
+            dao.certificate(SAMPLE_CERTIFICATE_ID)?.let { sample ->
+                val payload = sample.payload()
+                // 已安装版本的示例证书可能没有日期，补入后保持为固定的展示日期。
+                if (!payload.optBoolean("destroyed") && payload.optString("collectedAt").isEmpty()) {
+                    savePayload(sample, payload.put("collectedAt", OffsetDateTime.now().toString()))
+                }
+            }
         }
     }
 

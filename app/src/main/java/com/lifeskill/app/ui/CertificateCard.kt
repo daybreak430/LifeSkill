@@ -56,7 +56,7 @@ import java.time.format.DateTimeFormatter
 
 private val Parchment = Color(0xFFFCF7ED)
 private val CertificateType = TextStyle(fontFamily = FontFamily.Serif, localeList = LocaleList(Locale("zh-CN")))
-private val CertificateTimeFormat = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", java.util.Locale.ROOT)
+private val CertificateDateFormat = DateTimeFormatter.ofPattern("uuuu年M月d日", java.util.Locale.ROOT)
 
 private data class CertificatePalette(val ink: Color, val border: Color, val paperEdge: Color)
 
@@ -109,7 +109,9 @@ internal fun CertificateCard(
             CertificateSeal(style, palette.ink)
             if (collectedAt != null) {
                 Spacer(Modifier.height(10.dp))
-                Text("获取时间  ${CertificateTimeFormat.format(collectedAt)}", Modifier.testTag("certificate-collected-at"),
+                val dateLabel = if (isSample) "展示日期" else "首次收下"
+                Text("$dateLabel  ${CertificateDateFormat.format(collectedAt)}",
+                    Modifier.testTag("certificate-collected-at"),
                     color = palette.ink, textAlign = TextAlign.Center, style = CertificateType.copy(fontSize = 12.sp))
             }
         }

@@ -36,6 +36,6 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 **数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v4，保留 v1 到 v4 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
 
-**证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和获取时间。证书档案独立于技能树，删除树后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书可隐藏和销毁，获取证书统计只计入未销毁的正式证书。
+**证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和首次收下日期。证书档案独立于技能树，删除树后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书带展示日期，可隐藏和销毁，获取证书统计只计入未销毁的正式证书。
 
 业务细节见 [MVP 技术设计](mvp.md)，扩展步骤见[二次开发指南](customization.md)。
