@@ -474,6 +474,7 @@ class MvpFlowTest {
             await("90 分")
             ui.onNodeWithText("通过验收").assertIsDisplayed()
             ui.onNodeWithText("再考一次").assertIsEnabled()
+            collectExamCertificate(tree.name)
             ui.onNodeWithText("查看错题集").performTouchInput { click() }
             await("验收填空3")
             ui.onAllNodesWithText("未作答")[0].assertIsDisplayed()
@@ -500,12 +501,58 @@ class MvpFlowTest {
             pressBack()
             map.performScrollToNode(hasText("挑战成功"))
             ui.onNodeWithText("挑战成功").assertIsDisplayed()
+
+            runBlocking {
+                val exams = fixture.container.assessments
+                fixture.ai.reply(examFixture("重考"))
+                exams.startExam(tree.id)
+                val retake = exams.watchAttempts(tree.id).first().first()
+                fixture.ai.reply(markFixture())
+                exams.submitExam(tree.id, retake.id, retake.answers)
+            }
+            map.performScrollToNode(hasText("验收考试"))
+            ui.onNodeWithText("验收考试").performTouchInput { click() }
+            await("未通过")
+            ui.onNodeWithText("获取结业证书").assertDoesNotExist()
         } finally {
             runBlocking {
                 library.delete(tree.id)
                 library.delete(direction.id)
             }
         }
+    }
+
+    private fun collectExamCertificate(treeName: String) {
+        val entry = ui.onNodeWithText("获取结业证书")
+        val envelope = ui.onNode(hasText("上滑拆开") and hasClickAction())
+        entry.performTouchInput { click() }
+        envelope.assertIsDisplayed()
+        pressBack()
+        envelope.assertDoesNotExist()
+        ui.onNodeWithText("90 分").assertIsDisplayed()
+
+        entry.performTouchInput { click() }
+        envelope.performTouchInput { click() }
+        envelope.performTouchInput { swipe(Offset(width * .15f, centerY), Offset(width * .85f, centerY)) }
+        envelope.performTouchInput { swipe(Offset(centerX, height * .2f), Offset(centerX, height * .8f)) }
+        ui.onNodeWithText("收下").assertDoesNotExist()
+        envelope.performTouchInput { swipe(Offset(centerX, height * .85f), Offset(centerX, height * .15f)) }
+
+        ui.onNodeWithText("结业证书").assertIsDisplayed()
+        ui.onNodeWithText("验收成绩 90 分").assertIsDisplayed()
+        ui.onNode(hasText(treeName) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
+        val collect = ui.onNodeWithText("收下").assertIsEnabled()
+        ui.mainClock.autoAdvance = false
+        try {
+            collect.performTouchInput { click() }
+            ui.mainClock.advanceTimeBy(96)
+            ui.onNodeWithText("结业证书").assertExists()
+            ui.mainClock.advanceTimeBy(300)
+        } finally {
+            ui.mainClock.autoAdvance = true
+        }
+        ui.onNodeWithText("结业证书").assertDoesNotExist()
+        ui.onNodeWithText("90 分").assertIsDisplayed()
     }
 
     @Test fun skillMapWrapsIntoTwoColumnsAndOnlyScrollsVertically() {

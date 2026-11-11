@@ -69,10 +69,12 @@ internal fun ExamScreen(
         }
         when {
             reviewing -> ExamReview(attempts.orEmpty(), Modifier.weight(1f))
-            latest?.score != null -> ExamResult(
-                checkNotNull(latest.score), checkNotNull(best), ready, status,
-                model::startExam, { reviewing = true },
-            )
+            latest?.score != null -> key(latest.id) {
+                ExamResult(
+                    tree.name, checkNotNull(latest.score), checkNotNull(best), ready, status, active,
+                    model::startExam, { reviewing = true },
+                )
+            }
             latest != null -> key(latest.id) {
                 val answers = draft?.takeIf { it.attemptId == latest.id }?.answers ?: latest.answers
                 ExamPaper(latest, answers, status, { index, answer -> model.updateAnswer(latest, index, answer) },
@@ -110,8 +112,10 @@ private fun ExamIntro(ready: Boolean, status: AssessmentStatus, start: () -> Uni
 
 @Composable
 private fun ExamResult(
-    score: Int, best: Int, ready: Boolean, status: AssessmentStatus, retake: () -> Unit, review: () -> Unit,
+    treeName: String, score: Int, best: Int, ready: Boolean, status: AssessmentStatus, active: Boolean,
+    retake: () -> Unit, review: () -> Unit,
 ) {
+    var showingCertificate by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -133,6 +137,9 @@ private fun ExamResult(
                 }
             }
         }
+        if (score >= EXAM_PASS_SCORE) item {
+            Action("获取结业证书", Glyph.DIAMOND, { showingCertificate = true }, Modifier.fillMaxWidth())
+        }
         item { Action("查看错题集", Glyph.BOOK, review, Modifier.fillMaxWidth()) }
         if (best < EXAM_MAX_SCORE) item {
             Action(if (status.busy) "正在出题" else "再考一次", Glyph.RESTART, retake, Modifier.fillMaxWidth(),
@@ -140,6 +147,9 @@ private fun ExamResult(
             if (!ready) Text("点亮全部课程后可再考。", color = Muted, style = MaterialTheme.typography.bodyMedium)
         }
         item { AssessmentStatusText(status) }
+    }
+    if (active && showingCertificate) {
+        ExamCertificateDialog(treeName, score) { showingCertificate = false }
     }
 }
 
