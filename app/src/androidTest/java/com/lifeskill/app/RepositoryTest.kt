@@ -343,8 +343,14 @@ class RepositoryTest {
         val (source, destination) = container.library.snapshot().childrenOf(null)
         val scope = ChatScope(ChatMode.GENERATE, source.id)
         val offerId = offerTree(scope, "生成信息化技能树")
-        ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","icon":"TREE","skills":[{"ref":"intro","name":"认识信息系统","goal":"能用 SQL 查询数据","requires":[],"icon":"CODE"}]}]}""")
-        container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 1..1))
+        ai.reply("""
+            {"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","icon":"TREE","skills":[
+              {"ref":"intro","name":"认识信息系统","goal":"能说明数据表的用途","requires":[],"icon":"CODE"},
+              {"ref":"query","name":"查询数据","goal":"能按条件筛选数据","requires":["intro"]},
+              {"ref":"quality","name":"检查数据质量","goal":"能识别空值和重复项","requires":["intro"]}
+            ]}]}
+        """.trimIndent())
+        container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 3..3))
         val draft = container.conversations.watch(scope).first().last()
         assertEquals(source.id, draft.preview?.suggestedDirectionId)
         assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
@@ -354,7 +360,13 @@ class RepositoryTest {
         val tree = library.childrenOf(destination.id).single()
         assertEquals("信息化基础", tree.name)
         assertEquals(EntryIcon.CHART, tree.icon)
-        assertEquals(EntryIcon.CODE, library.childrenOf(tree.id).single().icon)
+        val skills = library.childrenOf(tree.id).associateBy(Entry::name)
+        val intro = skills.getValue("认识信息系统")
+        assertEquals(3, skills.size)
+        assertEquals(EntryIcon.CODE, intro.icon)
+        assertTrue(library.prerequisitesOf(intro.id).isEmpty())
+        assertEquals(setOf(intro.id), library.prerequisitesOf(skills.getValue("查询数据").id))
+        assertEquals(setOf(intro.id), library.prerequisitesOf(skills.getValue("检查数据质量").id))
     }
 
     @Test fun newTreeRequiresConfirmationAndKeepsTheConfirmedCountAcrossRetries() = runBlocking {

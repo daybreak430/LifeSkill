@@ -8,6 +8,7 @@ import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
@@ -87,7 +88,13 @@ internal object AiProtocol {
                 }
             })
         val exampleSkill = """{"ref":"budget","name":"列出固定支出","shortName":"固定支出","goal":"学习识别每月重复的账单项目，并能归纳三项固定支出。","requires":[],"icon":"PRACTICAL"}"""
-        val exampleTree = """{"name":"家庭预算","icon":"CHART","skills":[$exampleSkill]}"""
+        val exampleTree = """
+            {"name":"家庭预算","icon":"CHART","skills":[
+              {"ref":"cashflow","name":"识别家庭收支","goal":"能从账单中区分收入和支出。","requires":[],"icon":"CHART"},
+              {"ref":"fixed","name":"估算固定开支","goal":"能算出每月重复账单的合计金额。","requires":["cashflow"],"icon":"PRACTICAL"},
+              {"ref":"variable","name":"归类可变开支","goal":"能把一周的日常消费归入适当类别。","requires":["cashflow"],"icon":"BOOK"}
+            ]}
+        """.trimIndent().replace("\n", "")
         val treeOffer = """
             用户提出明确的学习规划需求时（如「我想学用 Python 整理表格」），返回 offer_tree，reply 用一两句话归纳主题和已知要求。App 会先弹窗让用户选择当前掌握程度和课程数量。当前请求只提议，不生成任何树或技能点。
             提议示例：{"kind":"offer_tree","reply":"我可以为你规划一棵家庭预算技能树，重点是记录开支和制定每月计划。"}
@@ -154,6 +161,7 @@ internal object AiProtocol {
             用户已在 App 确认生成。根据前文确定学习主题、应用场景、用户目标和明确提出的要求，返回 create 草稿。trees 必须恰好包含 1 棵技能树。草稿由用户选择方向后添加，不要声称已添加。
             本次掌握程度为「${options.level.label}」。$level
             每个技能点对应一节课。$count 技能点总数为 1–${GenerationOptions.COURSE_LIMIT}。每节围绕一个可独立检验的目标，按真实的知识和操作依赖安排前置。课数少时聚焦核心能力，课数多时拆开确实需要单独学习和练习的能力。输出前核对 skills 的数组长度，达到本次确认的数量就结束。
+            一棵树可以有多条分支。先找共同基础，再找能并行学习的技能。两项技能依赖同一项基础且彼此独立时，将它们放在同一层，两个 requires 都引用这项基础。只有课数不足以分叉、每项技能确实依赖上一项，或用户明确要求线性顺序时，才排成单一路径。
             掌握程度和课程数量以本次 App 确认的选项为准。
         """.trimIndent()
     }
@@ -163,9 +171,9 @@ internal object AiProtocol {
         每个 skill 包含 ref、name、goal、requires、icon，可加 shortName（地图简称，2–5 个字，保留技能的核心词）。goal 用简短句子说明本节要学的内容和可检验的目标。
         按每个技能点的名称和学习目标选择 icon，从以下图标库原样填写英文标识。相近的技能可以复用同一个图标，不同类型的技能应选各自贴切的图标。图标库：${iconCatalog(EntryIcon.entries.filterNot { it == EntryIcon.DIAMOND })}
         ref 是同批同树唯一的简短英文标识；requires 引用同树 ref，无前置填 []。不要引用自己或形成循环。
-        无前置的技能为第 1 层。技能的所有直接前置必须处于同一层，技能本身在紧邻的下一层。若 B 依赖 A，C 依赖 B，C 的 requires 只能列 B，不能再列 A。只在内部核对层级，不输出 level 字段。
+        无前置的技能为第 1 层。技能的所有直接前置必须处于紧邻的上一层。两项同层技能都必须掌握后才能学下一项时，可以把两者同时列为直接前置。只在内部核对层级，不输出 level 字段。
         ${if (newTree) "新树里的 requires 只能填写该树 skills 中实际存在的 ref。" else ""}
-        每个技能点最多作为两个后续节点的前置。内容较多时拆成逐步进阶的路径，不要从同一点分出三条支线。
+        每个技能点最多作为 ${SkillGraph.BRANCH_LIMIT} 个后续节点的前置。
         名称不超过 ${LibraryRules.NAME_LIMIT} 个字符且不可换行，学习目标不超过 ${LibraryRules.GOAL_LIMIT} 个字符。树名和技能点名在同层唯一，目标应可检验。
     """.trimIndent()
 
