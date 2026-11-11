@@ -57,6 +57,7 @@ import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -111,6 +112,38 @@ class MvpFlowTest {
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
         ui.onNodeWithText("AI 生成").assertIsDisplayed()
+    }
+
+    @Test fun clearGenerationUsesConfirmationAndStartsFreshWhileReplyIsPending() {
+        await("AI 生成技能树")
+        ui.onNodeWithContentDescription("设置").assertIsDisplayed()
+        ui.onNodeWithText("AI 生成技能树").performClick()
+        await("AI 生成")
+        ui.onNodeWithContentDescription("设置").assertDoesNotExist()
+
+        fixture.ai.enqueue { awaitCancellation() }
+        send("清空前的学习请求")
+        await("清空前的学习请求")
+        ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+        ui.onNodeWithText("清空当前会话").performTouchInput { click() }
+        await("清空当前会话？")
+        pressBack()
+        ui.onNodeWithText("清空当前会话？").assertDoesNotExist()
+        ui.onNodeWithText("清空前的学习请求").assertIsDisplayed()
+
+        ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+        ui.onNodeWithText("清空当前会话").performTouchInput { click() }
+        await("清空当前会话？")
+        ui.onNodeWithText("清空").performTouchInput { click() }
+        await("一起规划技能树")
+        ui.onNodeWithText("清空前的学习请求").assertDoesNotExist()
+
+        fixture.ai.reply("""{"kind":"message","reply":"新会话收到"}""")
+        send("清空后的学习请求")
+        await("新会话收到")
+        ui.onNodeWithContentDescription("返回").performClick()
+        await("AI 生成技能树")
+        ui.onNodeWithContentDescription("设置").assertIsDisplayed()
     }
 
     @Test fun chatAlignsCharacterDiagramsAndScrollsLongRepliesToTheLastOption() {

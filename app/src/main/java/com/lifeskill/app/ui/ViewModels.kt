@@ -28,6 +28,8 @@ import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.unlocksSince
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -273,6 +275,7 @@ internal data class ChatStatus(
     val error: String? = null,
     val draftError: String? = null,
     val requestId: String? = null,
+    val clearing: Boolean = false,
 )
 
 internal data class ChatHistory(val turns: List<Turn> = emptyList(), val celebrationId: String? = null)
@@ -280,6 +283,7 @@ internal data class ChatHistory(val turns: List<Turn> = emptyList(), val celebra
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
     private val _status = MutableStateFlow(ChatStatus())
+    private var runningAction: Job? = null
     val status = _status.asStateFlow()
     val history = repository.watch(scope)
         .runningFold<List<Turn>, ChatHistory?>(null) { previous, turns ->
@@ -305,6 +309,7 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
     fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }
+    fun clearConversation() = run(clearing = true) { repository.clearGeneration(scope) }
     fun confirmDraft(id: String, destination: GenerationDestination) = run(addingDraft = true) {
         repository.confirmDraft(scope, id, destination)
     }
@@ -313,16 +318,25 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         _status.value = _status.value.copy(draftError = null)
     }
 
-    private fun run(addingDraft: Boolean = false, requestId: String? = null, action: suspend () -> Unit) {
-        if (_status.value.working) return
-        _status.value = ChatStatus(working = true, requestId = requestId)
-        viewModelScope.launch {
+    private fun run(
+        addingDraft: Boolean = false, requestId: String? = null, clearing: Boolean = false, action: suspend () -> Unit,
+    ) {
+        if (_status.value.clearing || (_status.value.working && !clearing)) return
+        if (clearing) runningAction?.cancel()
+        _status.value = ChatStatus(working = true, requestId = requestId, clearing = clearing)
+        runningAction = viewModelScope.launch {
             try {
                 action()
+                ensureActive()
                 _status.value = ChatStatus(requestId = requestId)
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                ensureActive()
                 _status.value = if (addingDraft) ChatStatus(draftError = readable(error, "添加失败，请重试。"))
-                else ChatStatus(error = readable(error, "本次请求失败，请重试。"), requestId = requestId)
+                else ChatStatus(
+                    error = readable(error, if (clearing) "清空会话失败，请重试。" else "本次请求失败，请重试。"),
+                    requestId = requestId,
+                )
             }
         }
     }

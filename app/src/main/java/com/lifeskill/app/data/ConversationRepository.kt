@@ -118,6 +118,12 @@ internal class ConversationRepository(
         if (lastPending(scope)?.id == id) dao.deleteTurn(scope.id, id)
     }
 
+    suspend fun clearGeneration(scope: ChatScope) {
+        if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中清空会话。")
+        // 同一条 SQL 移除所有消息及待处理请求，旧回复会因请求标识失效而无法写回。
+        dao.clearTurns(scope.id)
+    }
+
     suspend fun confirmDraft(scope: ChatScope, id: String, destination: GenerationDestination) = database.withTransaction {
         if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中确认添加。")
         val row = dao.turn(scope.id, id) ?: throw RuleViolation("这份草稿已不存在。")
@@ -310,15 +316,14 @@ internal class ConversationRepository(
         dao.recentTurns(scope.id, 1).firstOrNull { it.speaker == Speaker.USER.name }?.toTurn()
 
     private fun newTreeHistory(recent: List<Turn>, input: Turn): List<Turn> {
-        val offerId = recent.getOrNull(recent.lastIndex - 1)
-            ?.takeIf { input.kind == TurnKind.GENERATE_TREE && it.kind == TurnKind.TREE_OFFER }?.id
-        val previousPlan = recent.indexOfLast {
-            it.id != offerId && (it.kind == TurnKind.TREE_OFFER || it.kind == TurnKind.DRAFT || it.kind == TurnKind.CREATED)
+        val latestOffer = recent.getOrNull(recent.lastIndex - 1)?.takeIf { it.kind == TurnKind.TREE_OFFER }
+        val boundary = recent.indexOfLast {
+            it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.TREE_QUESTION && it.id != latestOffer?.id
         }
-        // 保留用户的要求、当前的追问和本轮确认的提议。历史草稿、回执及普通回复不参与下一轮规划。
-        return recent.filterIndexed { index, turn ->
-            turn.id == input.id || turn.id == offerId || (turn.speaker == Speaker.USER && turn.kind == TurnKind.MESSAGE) ||
-                (index > previousPlan && turn.kind == TurnKind.TREE_QUESTION)
+        // 保留本轮要求和连续追问。紧接提议的补充仍可引用原主题，旧规划的用户消息不再参与。
+        return recent.drop(boundary + 1).filter { turn ->
+            turn.speaker == Speaker.USER || turn.kind == TurnKind.TREE_QUESTION ||
+                (input.kind == TurnKind.GENERATE_TREE && turn.id == latestOffer?.id)
         }
     }
 

@@ -16,12 +16,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,13 +45,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun AiChatHeader(
     title: String, subtitle: String?, onBack: () -> Unit,
-    onRestart: (() -> Unit)?, restartEnabled: Boolean, onSettings: () -> Unit,
+    onRestart: (() -> Unit)?, restartEnabled: Boolean, onClearConversation: (() -> Unit)?,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(if (onRestart != null) 96.dp else 48.dp)) {
+        Box(Modifier.width(48.dp)) {
             GlyphButton(Glyph.BACK, "返回", onBack, background = aiColors.panel)
         }
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -58,7 +64,21 @@ internal fun AiChatHeader(
         if (onRestart != null) {
             GlyphButton(Glyph.RESTART, "重新学习", onRestart, enabled = restartEnabled, background = aiColors.panel)
         }
-        GlyphButton(Glyph.SETTINGS, "设置", onSettings, background = aiColors.panel)
+        if (onClearConversation != null) {
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                GlyphButton(Glyph.MORE, "更多操作", { expanded = true }, background = aiColors.panel)
+                DropdownMenu(
+                    expanded = expanded, onDismissRequest = { expanded = false },
+                    shape = ControlShape, containerColor = Panel,
+                ) {
+                    DropdownMenuItem(text = { Text("清空当前会话") }, onClick = {
+                        expanded = false
+                        onClearConversation()
+                    })
+                }
+            }
+        }
     }
 }
 

@@ -86,11 +86,12 @@ internal object AiProtocol {
         owner: Entry?, candidates: List<Entry>, remainingBranches: Map<String, Int>, levels: Map<String, Int>,
         options: GenerationOptions? = null,
     ): String {
+        val planningNewTree = options == null && owner?.kind != EntryKind.TREE
         val context = JSONObject()
             .put("scope", owner?.kind?.name ?: "HOME")
-            .put("target", owner?.name ?: JSONObject.NULL)
+            .put("target", owner?.name?.takeUnless { planningNewTree } ?: JSONObject.NULL)
             .put("items", JSONArray().apply {
-                candidates.forEach { candidate ->
+                candidates.takeUnless { planningNewTree }.orEmpty().forEach { candidate ->
                     val item = JSONObject().put("id", candidate.id).put("name", candidate.name)
                     remainingBranches[candidate.id]?.let { item.put("remainingBranches", it) }
                     levels[candidate.id]?.let { item.put("level", it + 1) }
@@ -106,9 +107,9 @@ internal object AiProtocol {
             ]}
         """.trimIndent().replace("\n", "")
         val treeOffer = """
-            本轮尚未收到 App 的建树确认。用户提出明确的学习规划需求时（如「我想学用 Python 整理表格」），返回 offer_tree，只填 kind 和 reply。reply 用一两句话归纳主题和已知要求。App 会先弹窗让用户选择当前掌握程度和课程数量，确认后才生成技能树。
+            本轮尚未收到 App 的建树确认。只要能确定一个可学习的主题（如「摄影」或「从零学习文明7游戏」），直接返回 offer_tree，只填 kind 和 reply。reply 用一两句话归纳主题和已知要求。用户没有指定细分目标或用途时，按该主题的常规学习路线规划。App 会先弹窗让用户选择当前掌握程度和课程数量，确认后才生成技能树。
             提议示例：{"kind":"offer_tree","reply":"我可以为你规划一棵家庭预算技能树，重点是记录开支和制定每月计划。"}
-            一次只规划一个主题下的一棵树。主题不明确或有多个独立主题时，用 clarify_tree 追问一句，只填 kind 和 reply。
+            一次只规划一个主题下的一棵树。用户最新消息明确指定主题时，以该主题为准，不把以前聊过的主题重新列为候选。只有无法确定学习主题，或最新需求同时提出多个独立主题且未说明先学哪一个时，才用 clarify_tree 追问一句，只填 kind 和 reply。
             追问示例：{"kind":"clarify_tree","reply":"这次想先学摄影还是剪辑？"}
         """.trimIndent()
         // 仅展示当前入口接受的结构，避免模型把首页字段带到方向或技能树的回复。
@@ -132,7 +133,7 @@ internal object AiProtocol {
             """.trimIndent()
             owner == null -> """
                 $treeOffer
-                items 列出已有方向。用户明确只建方向时，允许返回 create，输出只含 kind、reply、directionName。
+                用户明确只建方向时，允许返回 create，输出只含 kind、reply、directionName。
                 仅建新方向示例：{"kind":"create","reply":"已规划。","directionName":"家庭理财"}
             """.trimIndent()
             else -> treeOffer
@@ -141,13 +142,14 @@ internal object AiProtocol {
         return """
             你是 LifeSkill 的技能树规划助手。你的权限只有新增。理解用户的主题、现有水平和可执行的学习目标。
             回答最后一条用户消息。历史讨论只用于理解学习要求。本轮能执行的操作由当前入口和 App 的确认状态决定。
-            目标或边界不明确时，先用一句话追问。用户只问建议时返回 message。
+            用户只问建议时返回 message。
+            ${if (owner?.kind == EntryKind.TREE) "追加内容无法确定时，只问一句完成追加所必需的问题。"
+              else "技能树的归属由 App 在草稿生成后通过弹窗确认。对话中不得询问要放在哪个学习方向、是否新建方向，或请用户从现有方向中选择。用户明确只要求新建方向时按该请求处理。"}
             用户要求修改或删除已有项目时，说明限制并给出下一步。
             ${if (owner?.kind == EntryKind.TREE) "检查 items 中的当前技能点，避免生成同名技能点。"
               else "用户明确要求创建技能树时，按本轮确认状态提议或生成草稿。App 会在用户选定方向并添加时查询当前技能库检查重名。允许重新规划聊过的主题，也允许为同一主题在其他方向规划技能树。"}
             输出单个 json 对象，reply 是给用户看的简短中文。使用用户指定的语言编写技能内容。kind 为 message 时只输出 kind 和 reply。
             $DIAGRAM_FORMAT
-            追问或建议示例：{"kind":"message","reply":"你想先学习哪一类工作流？"}
             $format
             示例只说明结构，实际名称、数量、标识和目标均来自用户需求及 App 数据。只输出当前入口允许的字段。
             ${options?.let(::newTreeInstructions).orEmpty()}

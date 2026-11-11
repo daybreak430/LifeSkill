@@ -339,6 +339,24 @@ internal fun DeletionDialog(entry: Entry, library: Library, busy: Boolean, app: 
 }
 
 @Composable
+internal fun ClearConversationDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape, containerColor = Panel,
+        title = { Text("清空当前会话？") },
+        text = { Text("聊天记录和未添加的草稿将被永久删除。已添加的技能树和学习进度会保留。") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm, shape = ControlShape,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError),
+            ) { Text("清空") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
 internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Unit) {
     var requirements by remember { mutableStateOf("") }
     val exceedsLimit = requirements.trim().length > ConversationRepository.INPUT_LIMIT

@@ -94,6 +94,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val checkOffered = !locked && !examAvailable && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
+    var showClearConversation by rememberSaveable { mutableStateOf(false) }
     var openedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     val draftTurn = history.firstOrNull { it.id == selectedDraftId && it.preview != null }
@@ -113,7 +114,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val statusMatches = status.requestId == null || status.requestId == pending?.id
     // 重试或撤回已提交时，旧历史快照可能晚一帧更新，不能重新出现重试按钮。
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
-    val footerVisible = !settled && (pending != null || statusMatches && (status.working || status.error != null))
+    val footerVisible = !status.clearing && !settled &&
+        (pending != null || statusMatches && (status.working || status.error != null))
     val canSend = !status.working && pending == null
 
     fun submit(text: String, check: Boolean = false) {
@@ -128,15 +130,17 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         selectedDraftId = id
     }
 
-    LaunchedEffect(pageActive, canSend, latestDraft?.id, editor == null) {
-        if (pageActive && canSend && editor == null && latestDraft != null && openedDraftId != latestDraft.id) {
+    LaunchedEffect(pageActive, canSend, latestDraft?.id, editor == null, showClearConversation) {
+        if (pageActive && canSend && editor == null && !showClearConversation &&
+            latestDraft != null && openedDraftId != latestDraft.id
+        ) {
             openedDraftId = latestDraft.id
             openDraft(latestDraft.id)
         }
     }
 
-    LaunchedEffect(pageActive, canSend, treeOffer?.id) {
-        if (pageActive && canSend && treeOffer != null && openedOfferId != treeOffer.id) {
+    LaunchedEffect(pageActive, canSend, treeOffer?.id, showClearConversation) {
+        if (pageActive && canSend && !showClearConversation && treeOffer != null && openedOfferId != treeOffer.id) {
             keyboard?.hide()
             openedOfferId = treeOffer.id
             selectedOfferId = treeOffer.id
@@ -179,7 +183,11 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         AiChatHeader(
             if (tutor) "AI 老师" else "AI 生成", owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
-            restartEnabled = !status.working, onSettings = { app.open(Route(Page.SETTINGS)) },
+            restartEnabled = !status.working,
+            onClearConversation = if (!tutor) ({
+                keyboard?.hide()
+                showClearConversation = true
+            }) else null,
         )
         LazyColumn(
             state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("chat-messages"),
@@ -322,7 +330,21 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             },
         )
     }
-    if (pageActive && canSend && treeOffer != null && treeOffer.id == selectedOfferId) {
+    if (pageActive && showClearConversation) {
+        ClearConversationDialog(
+            onDismiss = { showClearConversation = false },
+            onConfirm = {
+                showClearConversation = false
+                draft = ""
+                selectedDraftId = null
+                selectedOfferId = null
+                openedDraftId = latestDraft?.id ?: openedDraftId
+                openedOfferId = treeOffer?.id ?: openedOfferId
+                chat.clearConversation()
+            },
+        )
+    }
+    if (pageActive && !showClearConversation && canSend && treeOffer != null && treeOffer.id == selectedOfferId) {
         TreeGenerationDialog(
             onDismiss = { selectedOfferId = null },
             onConfirm = { options ->
@@ -332,7 +354,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             },
         )
     }
-    draftTurn?.takeIf { pageActive && editor == null }?.let { turn ->
+    draftTurn?.takeIf { pageActive && editor == null && !showClearConversation }?.let { turn ->
         val preview = checkNotNull(turn.preview)
         AddDraftDialog(
             preview, library.childrenOf(null), status.working, status.draftError,

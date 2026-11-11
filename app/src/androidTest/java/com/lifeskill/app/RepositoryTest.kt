@@ -431,6 +431,70 @@ class RepositoryTest {
         return offer.id
     }
 
+    @Test fun clearingGenerationPreservesOtherChatsAndSavedTreesAndIgnoresLateReplies() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val scope = ChatScope(ChatMode.GENERATE)
+        val other = ChatScope(ChatMode.GENERATE, direction.id)
+        val conversations = container.conversations
+        val offer = offerTree(scope)
+        ai.reply(CREATED)
+        conversations.generateTree(scope, offer, GenerationOptions(GenerationLevel.BEGINNER, 2..2))
+        val draft = conversations.watch(scope).first().last()
+        conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        offerTree(other)
+        val otherHistory = conversations.watch(other).first()
+        val savedLibrary = container.library.snapshot()
+        val waiting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+
+        withTimeout(10_000) {
+            ai.enqueue {
+                waiting.complete(Unit)
+                release.await()
+                TREE_OFFER
+            }
+            val oldRequest = async { conversations.send(scope, "旧会话请求") }
+            waiting.await()
+            conversations.clearGeneration(scope)
+            assertTrue(conversations.watch(scope).first().isEmpty())
+            ai.reply("""{"kind":"message","reply":"新会话回复"}""")
+            conversations.send(scope, "新会话请求")
+            release.complete(Unit)
+            oldRequest.await()
+        }
+
+        assertEquals(listOf("新会话请求", "新会话回复"), conversations.watch(scope).first().map { it.text })
+        assertEquals(otherHistory, conversations.watch(other).first())
+        assertEquals(savedLibrary, container.library.snapshot())
+    }
+
+    @Test fun newTreePlanningDoesNotSendDirectionsOrPriorTopicsAsChoices() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val conversations = container.conversations
+        offerTree(scope, "从零学习文明6游戏")
+        ai.reply("""{"kind":"message","reply":"可以继续规划摄影。"}""")
+        conversations.send(scope, "摄影")
+        val request = "从0到1到100学习文明7游戏"
+        ai.enqueue { messages ->
+            val prompt = messages.first().text
+            assertTrue(prompt.contains("对话中不得询问要放在哪个学习方向"))
+            assertTrue(prompt.contains("只要能确定一个可学习的主题"))
+            assertTrue(prompt.contains("只有无法确定学习主题"))
+            assertTrue(prompt.contains("\"items\":[]"))
+            assertEquals(listOf(request), messages.filter { it.role == "user" }.map { it.text })
+            TREE_OFFER
+        }
+        conversations.send(scope, request)
+        assertEquals(TurnKind.TREE_OFFER, conversations.watch(scope).first().last().kind)
+
+        ai.enqueue { messages ->
+            assertEquals(listOf(request, "重点讲外交"), messages.filter { it.role == "user" }.map { it.text })
+            TREE_OFFER
+        }
+        conversations.send(scope, "重点讲外交")
+        assertEquals(TurnKind.TREE_OFFER, conversations.watch(scope).first().last().kind)
+    }
+
     @Test fun repeatedTopicChecksDuplicatesOnlyInTheSelectedDirectionAtAddTime() = runBlocking {
         container.settings.save(ModelSettings(Provider.MINIMAX, apiKey = "test-key"))
         val scope = ChatScope(ChatMode.GENERATE)
