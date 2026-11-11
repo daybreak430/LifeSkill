@@ -49,7 +49,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, usag
                 style = MaterialTheme.typography.labelLarge, color = Muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            EntryMenu(skill, app)
+            EntryUsageMenu(skill, app, usage)
             GlyphButton(Glyph.CLOSE, "关闭课时详情", app::back)
         }
         Column(
@@ -86,7 +86,6 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, usag
                     LessonMarkdown(skill.goal)
                 }
             }
-            AiUsageSummary(usage, Modifier.padding(horizontal = 4.dp))
             if (prerequisites.isNotEmpty()) {
                 Text("先修课", Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium)
                 prerequisites.forEach { entry ->

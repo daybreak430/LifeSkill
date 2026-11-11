@@ -557,11 +557,17 @@ class MvpFlowTest {
             ui.onNodeWithTag(cardTag).performTouchInput { click() }
             await(tree.name)
             ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
-            await("1,200 Token · 预估 ¥0.0034")
-            ui.onNodeWithText("AI 用量").assertIsDisplayed()
+            await("课程大纲")
+            openAiUsage("整门课程", "1,200 Token · 预估 ¥0.0034")
+            pressBack()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("整门课程").fetchSemanticsNodes().isEmpty() }
+            ui.onNodeWithText("课程大纲").assertIsDisplayed()
             ui.onNodeWithContentDescription(skill.name).performTouchInput { click() }
             await("学习目标")
-            ui.onNodeWithText("1,200 Token · 预估 ¥0.0034").assertIsDisplayed()
+            openAiUsage("本节课", "1,200 Token · 预估 ¥0.0034")
+            ui.onNodeWithContentDescription("关闭 AI 用量").performTouchInput { click() }
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("本节课").fetchSemanticsNodes().isEmpty() }
+            ui.onNodeWithText("学习目标").assertIsDisplayed()
             pressBack()
             await("课程大纲")
             val map = ui.onNodeWithTag("skill-map")
@@ -673,6 +679,14 @@ class MvpFlowTest {
                 profiles.save(original)
             }
         }
+    }
+
+    private fun openAiUsage(scope: String, usageText: String) {
+        ui.onNodeWithText(usageText).assertDoesNotExist()
+        ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+        ui.onNodeWithText("AI 用量").performTouchInput { click() }
+        await(scope)
+        ui.onNodeWithText(usageText).assertIsDisplayed()
     }
 
     private fun collectExamCertificate(treeName: String, usageText: String) {

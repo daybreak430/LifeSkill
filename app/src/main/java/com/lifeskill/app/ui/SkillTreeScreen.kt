@@ -97,13 +97,12 @@ internal fun SkillTreeScreen(
                 library.byId[tree.parentId]?.name.orEmpty(), Modifier.weight(1f).padding(start = 8.dp),
                 style = MaterialTheme.typography.labelLarge, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            EntryMenu(tree, app)
+            EntryUsageMenu(tree, app, usage, generationUsage)
         }
         Text(
             tree.name, Modifier.padding(horizontal = 20.dp), style = LibraryTitle,
             maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
-        AiUsageSummary(usage, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), generation = generationUsage)
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -213,11 +213,14 @@ private fun RevealAddition(
 }
 
 @Composable
-internal fun EntryMenu(entry: Entry, app: AppViewModel) {
+internal fun EntryMenu(entry: Entry, app: AppViewModel, onShowUsage: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     Box {
         GlyphButton(Glyph.MORE, "更多操作", { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = ControlShape, containerColor = Panel) {
+            if (onShowUsage != null) {
+                DropdownMenuItem(text = { Text("AI 用量") }, onClick = { open = false; onShowUsage() })
+            }
             DropdownMenuItem(text = { Text("编辑${entry.kind.label}") }, onClick = { open = false; app.edit(entry) })
             DropdownMenuItem(
                 text = { Text("删除${entry.kind.label}", color = MaterialTheme.colorScheme.error) },
