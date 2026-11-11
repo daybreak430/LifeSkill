@@ -1,5 +1,6 @@
 package com.lifeskill.app.ai
 
+import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.ChallengeExchange
 import com.lifeskill.app.model.ChallengeSession
 import com.lifeskill.app.model.DIAGNOSTIC_QUESTIONS
@@ -106,7 +107,8 @@ internal object TreeAssessmentProtocol {
         .put("marks", JSONArray(attempt.marks.mapIndexed { index, mark ->
             JSONObject().put("number", index + 1).put("points", mark.points).put("feedback", mark.feedback)
         }))
-        .put("certificateCollected", attempt.certificateCollected).toString()
+        .put("certificateCollected", attempt.certificateCollected)
+        .put("certificateStyle", attempt.certificateStyle?.id).toString()
 
     fun decodeAttempt(id: String, stored: String): ExamAttempt {
         val json = JSONObject(stored)
@@ -119,7 +121,8 @@ internal object TreeAssessmentProtocol {
         val marks = json.getJSONArray("marks")
         return ExamAttempt(id, questions, answers,
             if (marks.length() == 0) emptyList() else decodeMarks(marks, questions),
-            certificateCollected = json.optBoolean("certificateCollected", false))
+            certificateCollected = json.optBoolean("certificateCollected", false),
+            certificateStyle = CertificateStyle.fromId(json.optString("certificateStyle")))
     }
 
     fun encodeSession(session: ChallengeSession) = JSONObject().put("prompt", session.prompt)

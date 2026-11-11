@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.EXAM_MAX_SCORE
 import com.lifeskill.app.model.EXAM_PASS_SCORE
 import com.lifeskill.app.model.Entry
@@ -70,8 +71,10 @@ internal fun ExamScreen(
         when {
             reviewing -> ExamReview(attempts.orEmpty(), Modifier.weight(1f))
             latest?.score != null -> key(latest.id) {
+                val style = attempts?.firstNotNullOfOrNull(ExamAttempt::certificateStyle)
+                    ?: CertificateStyle.forTree(tree)
                 ExamResult(
-                    tree.name, latest, checkNotNull(best), ready, status, active,
+                    tree.name, latest, style, checkNotNull(best), ready, status, active,
                     model::startExam, { reviewing = true }, { model.collectCertificate(latest.id) },
                 )
             }
@@ -114,7 +117,8 @@ private enum class CertificateMode { COLLECT, VIEW }
 
 @Composable
 private fun ExamResult(
-    treeName: String, attempt: ExamAttempt, best: Int, ready: Boolean, status: AssessmentStatus, active: Boolean,
+    treeName: String, attempt: ExamAttempt, style: CertificateStyle, best: Int, ready: Boolean,
+    status: AssessmentStatus, active: Boolean,
     retake: () -> Unit, review: () -> Unit, collectCertificate: () -> Unit,
 ) {
     val score = checkNotNull(attempt.score)
@@ -145,7 +149,10 @@ private fun ExamResult(
             val collected = attempt.certificateCollected
             Action(
                 if (collected) "查看结业证书" else "获取结业证书", Glyph.DIAMOND,
-                { certificateMode = if (collected) CertificateMode.VIEW else CertificateMode.COLLECT },
+                {
+                    certificateMode = if (collected) CertificateMode.VIEW else CertificateMode.COLLECT
+                    if (collected && attempt.certificateStyle == null) collectCertificate()
+                },
                 Modifier.fillMaxWidth(), primary = true, enabled = !status.busy,
             )
         }
@@ -159,7 +166,7 @@ private fun ExamResult(
     }
     val mode = certificateMode
     if (active && mode != null) {
-        ExamCertificateDialog(treeName, score, mode == CertificateMode.VIEW, attempt.certificateCollected,
+        ExamCertificateDialog(treeName, style, mode == CertificateMode.VIEW, attempt.certificateCollected,
             status, collectCertificate) { certificateMode = null }
     }
 }

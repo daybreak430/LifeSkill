@@ -5,10 +5,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.ai.TreeAssessmentProtocol
+import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.ExamQuestionType
@@ -111,10 +114,13 @@ class TreeAssessmentTest {
         val passedAttempt = exams.watchAttempts(tree.id).first().first()
         assertEquals(60, passedAttempt.score)
         assertFalse(passedAttempt.certificateCollected)
+        val certificateStyle = CertificateStyle.forTree(tree)
         repeat(2) { exams.collectCertificate(tree.id, second.id) }
-        assertEquals(passedAttempt.copy(certificateCollected = true), exams.watchAttempts(tree.id).first().first())
+        assertEquals(passedAttempt.copy(certificateCollected = true, certificateStyle = certificateStyle),
+            exams.watchAttempts(tree.id).first().first())
         assertTrue(exams.summaries.first().getValue(tree.id).passed)
 
+        container.library.save(EntryEdit(tree.id, tree.parentId, EntryKind.TREE, tree.name, icon = EntryIcon.CAMERA))
         gateway.reply(examFixture("第三轮"))
         exams.startExam(tree.id)
         val third = exams.watchAttempts(tree.id).first().first()
@@ -135,8 +141,16 @@ class TreeAssessmentTest {
         assertEquals("未作答。", attempts.last().marks.first().feedback)
         assertEquals(100, exams.summaries.first().getValue(tree.id).bestScore)
         expectRule { exams.startExam(tree.id) }
-        val saved = database.assessments().attempt(tree.id, third.id)
-        assertFalse(checkNotNull(saved).content.contains("以凭证核对金额"))
+        val saved = checkNotNull(database.assessments().attempt(tree.id, third.id))
+        assertFalse(saved.content.contains("以凭证核对金额"))
+
+        // 模拟 0.12.4 已领取但未保存样式的记录。重考后沿用原证书，图标改动不影响已签发样式。
+        val legacyReceipt = attempts.first().copy(certificateCollected = true)
+        val encoded = SecretBox("lifeskill-tests").seal(TreeAssessmentProtocol.encodeAttempt(legacyReceipt), "${third.id}:exam")
+        database.assessments().update(saved.copy(content = encoded))
+        assertEquals(legacyReceipt, exams.watchAttempts(tree.id).first().first())
+        exams.collectCertificate(tree.id, third.id)
+        assertEquals(legacyReceipt.copy(certificateStyle = certificateStyle), exams.watchAttempts(tree.id).first().first())
     }
 
     @Test fun challengesRequireThreeDiagnosticAnswersAndAcceptRevisedFeynmanExplanation() = runBlocking {
@@ -185,6 +199,7 @@ class TreeAssessmentTest {
         assertEquals(2, attempt.questions.count { it.type == ExamQuestionType.SHORT })
         assertEquals(100, attempt.score)
         assertFalse(attempt.certificateCollected)
+        assertNull(attempt.certificateStyle)
     }
 
     private suspend fun expectRule(action: suspend () -> Unit) {

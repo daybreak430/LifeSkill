@@ -40,6 +40,7 @@ internal data class ExamAttempt(
     val answers: List<ExamAnswer> = questions.map { ExamAnswer() },
     val marks: List<ExamMark> = emptyList(),
     val certificateCollected: Boolean = false,
+    val certificateStyle: CertificateStyle? = null,
 ) {
     val score get() = marks.takeIf { it.isNotEmpty() }?.sumOf(ExamMark::points)
 }

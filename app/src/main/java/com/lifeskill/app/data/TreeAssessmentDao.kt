@@ -58,6 +58,9 @@ internal interface TreeAssessmentDao {
     @Query("SELECT * FROM exam_attempts WHERE treeId = :treeId AND id = :attemptId")
     suspend fun attempt(treeId: String, attemptId: String): ExamAttemptRow?
 
+    @Query("SELECT * FROM exam_attempts WHERE treeId = :treeId AND score >= :passScore ORDER BY sequence DESC")
+    suspend fun passedAttempts(treeId: String, passScore: Int): List<ExamAttemptRow>
+
     @Insert
     suspend fun insert(row: ExamAttemptRow)
 

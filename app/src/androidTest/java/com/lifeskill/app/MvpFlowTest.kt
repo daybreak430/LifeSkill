@@ -1,5 +1,6 @@
 package com.lifeskill.app
 
+import android.graphics.Bitmap
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
@@ -49,11 +50,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.AppearanceMode
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
@@ -66,6 +69,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.json.JSONObject
+import java.io.File
 import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
@@ -540,7 +544,8 @@ class MvpFlowTest {
         envelope.performTouchInput { swipe(Offset(centerX, height * .85f), Offset(centerX, height * .15f)) }
 
         ui.onNodeWithText("结业证书").assertIsDisplayed()
-        ui.onNodeWithText("验收成绩 90 分").assertIsDisplayed()
+        ui.onNode(hasText("90 分", substring = true) and hasAnyAncestor(hasTestTag("exam-certificate")))
+            .assertDoesNotExist()
         ui.onNode(hasText(treeName) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
         val collect = ui.onNodeWithText("收下").assertIsEnabled()
         ui.mainClock.autoAdvance = false
@@ -560,11 +565,82 @@ class MvpFlowTest {
         ui.activityRule.scenario.recreate()
         await("查看结业证书")
         ui.onNodeWithText("查看结业证书").performTouchInput { click() }
-        ui.onNodeWithText("验收成绩 90 分").assertIsDisplayed()
+        ui.onNodeWithText("结业证书").assertIsDisplayed()
         envelope.assertDoesNotExist()
         ui.onNodeWithText("收下").assertDoesNotExist()
         ui.onNodeWithText("关闭").performTouchInput { click() }
-        ui.onNodeWithText("验收成绩 90 分").assertDoesNotExist()
+        ui.onNodeWithText("结业证书").assertDoesNotExist()
+    }
+
+    @Test fun showsFourCertificateThemesWithoutScores() {
+        await("LifeSkill")
+        val library = fixture.container.library
+        val exams = fixture.container.assessments
+        val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "结业证书样式")) }
+        val examples = listOf(
+            Triple(CertificateTheme.TECH, EntryIcon.CODE, "Python 自动化与脚本开发"),
+            Triple(CertificateTheme.BUSINESS, EntryIcon.CHART, "财务分析与商业决策"),
+            Triple(CertificateTheme.COMMUNICATION, EntryIcon.SPEECH, "结构化表达与公众演讲"),
+            Triple(CertificateTheme.ARTS, EntryIcon.CAMERA, "街头摄影与城市影像叙事"),
+        )
+        try {
+            runBlocking {
+                examples.forEach { (_, icon, name) ->
+                    val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, name, icon = icon))
+                    val skill = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "主题实践", "完成一个主题案例"))
+                    library.lightFromAssessment(skill)
+                    fixture.ai.reply(examFixture())
+                    exams.startExam(tree.id)
+                    val attempt = exams.watchAttempts(tree.id).first().single()
+                    fixture.ai.reply(markFixture())
+                    exams.submitExam(tree.id, attempt.id, attempt.questions.map { question ->
+                        ExamAnswer(question.correctChoices, "核对金额")
+                    })
+                    exams.collectCertificate(tree.id, attempt.id)
+                }
+            }
+            val directionTag = "direction-card-${direction.id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(directionTag))
+            ui.onNodeWithTag(directionTag).performTouchInput { click() }
+            await(direction.name)
+            examples.forEach { (theme, _, name) ->
+                ui.onNodeWithTag("skill-tree-list").performScrollToNode(hasText(name))
+                ui.onNode(hasText(name) and hasClickAction()).performClick()
+                ui.onNodeWithTag("skill-map").performScrollToNode(hasText("验收考试"))
+                ui.onNodeWithText("验收考试").performTouchInput { click() }
+                await("100 分")
+                ui.onNodeWithText("查看结业证书").performTouchInput { click() }
+
+                val paperTag = "certificate-paper-${theme.name.lowercase()}"
+                ui.onNodeWithTag(paperTag).assertIsDisplayed()
+                ui.onNode(hasText(name) and hasAnyAncestor(hasTestTag(paperTag))).assertIsDisplayed()
+                ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
+                captureCertificateScreenshot(theme)
+                ui.onNodeWithText("关闭").performTouchInput { click() }
+                ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+                ui.onNodeWithContentDescription("返回").performClick()
+                ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-map").fetchSemanticsNodes().isNotEmpty() }
+                ui.onNodeWithContentDescription("返回").performClick()
+                await(direction.name)
+            }
+        } finally {
+            runBlocking { library.delete(direction.id) }
+        }
+    }
+
+    private fun captureCertificateScreenshot(theme: CertificateTheme) {
+        if (InstrumentationRegistry.getArguments().getString("captureCertificateScreenshots") != "true") return
+        ui.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            val directory = File(ui.activity.cacheDir, "certificate-screenshots").apply { mkdirs() }
+            File(directory, "${theme.name.lowercase()}.png").outputStream().use {
+                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally {
+            screenshot.recycle()
+        }
     }
 
     @Test fun skillMapWrapsIntoTwoColumnsAndOnlyScrollsVertically() {

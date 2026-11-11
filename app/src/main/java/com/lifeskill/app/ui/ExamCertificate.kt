@@ -2,9 +2,7 @@ package com.lifeskill.app.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,18 +42,16 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import com.lifeskill.app.model.CertificateStyle
 
 private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
@@ -65,7 +60,7 @@ private val CertificateInk = Color(0xFF214437)
 
 @Composable
 internal fun ExamCertificateDialog(
-    treeName: String, score: Int, viewing: Boolean, collected: Boolean, status: AssessmentStatus,
+    treeName: String, style: CertificateStyle, viewing: Boolean, collected: Boolean, status: AssessmentStatus,
     onCollect: () -> Unit, onClose: () -> Unit,
 ) {
     var opened by rememberSaveable { mutableStateOf(viewing) }
@@ -169,7 +164,7 @@ internal fun ExamCertificateDialog(
                     }.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    CertificateCard(treeName, score)
+                    CertificateCard(treeName, style)
                     if (viewing) {
                         Action("关闭", Glyph.CLOSE, { closing = true }, Modifier.fillMaxWidth(),
                             primary = true, enabled = !exiting)
@@ -214,24 +209,5 @@ private fun CertificateEnvelope(progress: () -> Float) {
         val seal = 1f - motionPhase(flap, 0f, .5f)
         drawCircle(CertificateGold.copy(alpha = seal), 11.dp.toPx() * seal, tip)
         drawCircle(CertificateInk.copy(alpha = .42f * seal), 6.dp.toPx() * seal, tip)
-    }
-}
-
-@Composable
-private fun CertificateCard(treeName: String, score: Int) {
-    Surface(shape = PanelShape, color = CertificatePaper, border = BorderStroke(1.dp, CertificateGold)) {
-        Column(
-            Modifier.fillMaxWidth().padding(8.dp).border(1.dp, CertificateGold, ControlShape)
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Emblem(Glyph.CHECK, tint = CertificatePaper, background = CertificateInk, diameter = 52.dp)
-            Text("结业证书", Modifier.semantics { heading() }, color = CertificateInk,
-                style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            Text(treeName, color = CertificateInk, style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center)
-            Text("验收成绩 $score 分", color = CertificateInk, style = MaterialTheme.typography.bodyMedium)
-        }
     }
 }
