@@ -57,6 +57,9 @@ import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.ExamAnswer
+import com.lifeskill.app.model.AvatarPreset
+import com.lifeskill.app.model.PersonalProfile
+import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
@@ -82,7 +85,7 @@ class MvpFlowTest {
         val original = settings.load()
         try {
             await("本职工作")
-            ui.onNodeWithContentDescription("设置").performClick()
+            openSettings()
             await("外观")
             ui.onNodeWithText("浅色").performClick().assertIsSelected()
             assertEquals(AppearanceMode.LIGHT, settings.load())
@@ -120,10 +123,10 @@ class MvpFlowTest {
 
     @Test fun clearGenerationUsesConfirmationAndStartsFreshWhileReplyIsPending() {
         await("AI 生成技能树")
-        ui.onNodeWithContentDescription("设置").assertIsDisplayed()
+        ui.onNodeWithTag("tab-personal").assertIsDisplayed()
         ui.onNodeWithText("AI 生成技能树").performClick()
         await("AI 生成")
-        ui.onNodeWithContentDescription("设置").assertDoesNotExist()
+        ui.onNodeWithTag("tab-personal").assertDoesNotExist()
 
         fixture.ai.enqueue { awaitCancellation() }
         send("清空前的学习请求")
@@ -147,7 +150,64 @@ class MvpFlowTest {
         await("新会话收到")
         ui.onNodeWithContentDescription("返回").performClick()
         await("AI 生成技能树")
-        ui.onNodeWithContentDescription("设置").assertIsDisplayed()
+        ui.onNodeWithTag("tab-personal").assertIsDisplayed()
+    }
+
+    @Test fun tabsRestoreScrollAndProfileEditorKeepsOnlySavedChanges() {
+        await("LifeSkill")
+        val profiles = fixture.container.profiles
+        val library = fixture.container.library
+        val original = runBlocking { profiles.current().also { profiles.save(PersonalProfile()) } }
+        val directions = runBlocking {
+            (1..12).map { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "标签测试方向 $it")) }
+        }
+        try {
+            val learning = ui.onNodeWithTag("tab-learning").assertIsSelected()
+            val personal = ui.onNodeWithTag("tab-personal")
+            val lastDirection = "direction-card-${directions.last().id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(lastDirection))
+            personal.performClick().assertIsSelected()
+            await("学习者")
+            ui.onNodeWithContentDescription("设置").assertIsDisplayed()
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书收藏夹"))
+            learning.performClick().assertIsSelected()
+            ui.onNodeWithTag(lastDirection).assertIsDisplayed()
+            personal.performClick()
+            ui.onNodeWithText("证书收藏夹").assertIsDisplayed()
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("学习者"))
+            ui.onNodeWithContentDescription("编辑资料").performClick()
+            await("内置头像")
+            personal.assertDoesNotExist()
+            ui.onNodeWithContentDescription("编程头像").performScrollTo().performClick().assertIsSelected()
+            val activity = ui.activity
+            ui.onNodeWithText("从相册选择").performScrollTo().performTouchInput { click() }
+            ui.waitUntil(8_000) { !ui.runOnUiThread { activity.hasWindowFocus() } }
+            pressBack()
+            ui.waitUntil(8_000) { ui.runOnUiThread { activity.hasWindowFocus() } }
+            ui.onNodeWithContentDescription("编程头像").assertIsSelected()
+            ui.onNode(hasSetTextAction() and hasText("昵称")).performScrollTo().performTextReplacement("  新昵称  ")
+            ui.onNodeWithText("保存资料").performScrollTo().performClick()
+            await("新昵称")
+            assertEquals(PersonalProfile("新昵称", ProfileAvatar.Preset(AvatarPreset.CODING)), runBlocking { profiles.current() })
+
+            ui.activityRule.scenario.recreate()
+            await("新昵称")
+            ui.onNodeWithContentDescription("编辑资料").performClick()
+            await("内置头像")
+            ui.onNodeWithText("恢复默认头像").performScrollTo().performClick()
+            ui.onNodeWithContentDescription("分支头像").assertIsSelected()
+            pressBack()
+            await("新昵称")
+            assertEquals(ProfileAvatar.Preset(AvatarPreset.CODING), runBlocking { profiles.current().avatar })
+            pressBack()
+            learning.assertIsSelected()
+            ui.onNodeWithTag(lastDirection).assertIsDisplayed()
+        } finally {
+            runBlocking {
+                profiles.save(original)
+                directions.forEach { library.delete(it.id) }
+            }
+        }
     }
 
     @Test fun chatAlignsCharacterDiagramsAndScrollsLongRepliesToTheLastOption() {
@@ -425,6 +485,8 @@ class MvpFlowTest {
     @Test fun treeExamUsesSeparatePageAndRevealsChallengesAfterPassing() {
         await("LifeSkill")
         val library = fixture.container.library
+        val profiles = fixture.container.profiles
+        val original = runBlocking { profiles.current().also { profiles.save(PersonalProfile()) } }
         val (direction, tree, skill) = runBlocking {
             val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "验收考试导航"))
             val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "验收流程测试"))
@@ -519,10 +581,29 @@ class MvpFlowTest {
             await("未通过")
             ui.onNodeWithText("获取结业证书").assertDoesNotExist()
             ui.onNodeWithText("查看结业证书").assertDoesNotExist()
+
+            runBlocking {
+                profiles.save(profiles.current().copy(nickname = "更名后的学员"))
+                library.delete(direction.id)
+            }
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("tab-personal").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithTag("tab-personal").performClick()
+            await("更名后的学员")
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书收藏夹"))
+            ui.onNodeWithText("查看全部").performClick()
+            ui.onNodeWithTag("tab-personal").assertDoesNotExist()
+            ui.onNodeWithTag("certificate-collection").performScrollToNode(hasTestTag("collected-certificate-${tree.id}"))
+            ui.onNodeWithTag("collected-certificate-${tree.id}").performClick()
+            ui.onNodeWithText("证书学员").assertIsDisplayed()
+            ui.onNode(hasText(tree.name) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
+            pressBack()
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+            ui.onNodeWithTag("certificate-collection").assertIsDisplayed()
         } finally {
             runBlocking {
                 library.delete(tree.id)
                 library.delete(direction.id)
+                profiles.save(original)
             }
         }
     }
@@ -548,15 +629,15 @@ class MvpFlowTest {
             .assertDoesNotExist()
         ui.onNode(hasText(treeName) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
         val collect = ui.onNodeWithText("收下").assertIsEnabled()
-        ui.mainClock.autoAdvance = false
-        try {
-            collect.performTouchInput { click() }
-            ui.mainClock.advanceTimeBy(96)
-            ui.onNodeWithText("结业证书").assertExists()
-            ui.mainClock.advanceTimeBy(300)
-        } finally {
-            ui.mainClock.autoAdvance = true
-        }
+        collect.performScrollTo().performTouchInput { click() }
+        await("填写证书署名")
+        ui.onNodeWithText("取消").performScrollTo().performClick()
+        ui.onNodeWithText("结业证书").assertIsDisplayed()
+        assertEquals(null, runBlocking { fixture.container.profiles.current().nickname })
+        collect.performScrollTo().performTouchInput { click() }
+        await("填写证书署名")
+        ui.onNodeWithTag("certificate-nickname").performTextReplacement("  证书学员  ")
+        ui.onNodeWithText("保存并收下").performScrollTo().performTouchInput { click() }
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
         ui.onNodeWithText("结业证书").assertDoesNotExist()
         ui.onNodeWithText("90 分").assertIsDisplayed()
@@ -566,6 +647,7 @@ class MvpFlowTest {
         await("查看结业证书")
         ui.onNodeWithText("查看结业证书").performTouchInput { click() }
         ui.onNodeWithText("结业证书").assertIsDisplayed()
+        ui.onNodeWithText("证书学员").assertIsDisplayed()
         envelope.assertDoesNotExist()
         ui.onNodeWithText("收下").assertDoesNotExist()
         ui.onNodeWithText("关闭").performTouchInput { click() }
@@ -596,7 +678,7 @@ class MvpFlowTest {
                     exams.submitExam(tree.id, attempt.id, attempt.questions.map { question ->
                         ExamAnswer(question.correctChoices, "核对金额")
                     })
-                    exams.collectCertificate(tree.id, attempt.id)
+                    fixture.container.certificates.issue(tree.id, attempt.id, "样式测试学员")
                 }
             }
             val directionTag = "direction-card-${direction.id}"
@@ -760,7 +842,7 @@ class MvpFlowTest {
 
     @Test fun manualLibraryGenerationMapAndTutorWorkThroughTheirScreens() {
         await("本职工作")
-        ui.onNodeWithContentDescription("设置").performClick()
+        openSettings()
         await("deepseek-flash")
         ui.onNodeWithText("MiniMax").performClick()
         await("MiniMax-M3.1-Flash")
@@ -771,6 +853,7 @@ class MvpFlowTest {
         ui.onNodeWithText("保存").performClick()
         await("已保存为当前模型")
         pressBack()
+        ui.onNodeWithTag("tab-learning").performClick()
         await("本职工作")
         ui.onNodeWithText("新增方向").performClick()
         val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
@@ -1082,6 +1165,11 @@ class MvpFlowTest {
         ui.onNodeWithTag("chat-input").performTextReplacement(text)
         // 文本测试会唤起键盘。用发送语义避免把按键测试和键盘动画的坐标变化混在一起。
         ui.onNodeWithContentDescription("发送").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+    }
+
+    private fun openSettings() {
+        ui.onNodeWithTag("tab-personal").performClick()
+        ui.onNodeWithContentDescription("设置").performClick()
     }
 
     private fun fill(label: String, value: String) {

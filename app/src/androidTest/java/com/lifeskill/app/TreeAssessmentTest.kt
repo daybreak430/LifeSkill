@@ -5,11 +5,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
-import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.ai.TreeAssessmentProtocol
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
@@ -55,6 +55,7 @@ class TreeAssessmentTest {
 
     @Test fun examUsesTeachingThenValidatesGradesAndKeepsEveryRetake() = runBlocking {
         val exams = container.assessments
+        val archive = container.certificates
         expectRule { exams.startExam(tree.id) }
         expectRule { exams.startChallenge(tree.id, TreeChallenge.FEYNMAN) }
 
@@ -92,7 +93,8 @@ class TreeAssessmentTest {
         assertEquals(0, exams.watchAttempts(tree.id).first().single().score)
         assertFalse(exams.summaries.first().getValue(tree.id).passed)
         expectRule { exams.startChallenge(tree.id, TreeChallenge.DIAGNOSTIC) }
-        expectRule { exams.collectCertificate(tree.id, first.id) }
+        expectRule { archive.issue(tree.id, first.id, "未通过者") }
+        assertNull(container.profiles.current().nickname)
 
         gateway.enqueue { messages ->
             assertEquals(EXAM_QUESTION_COUNT, JSONObject(messages.last().text).getJSONArray("previousQuestions").length())
@@ -114,13 +116,21 @@ class TreeAssessmentTest {
         val passedAttempt = exams.watchAttempts(tree.id).first().first()
         assertEquals(60, passedAttempt.score)
         assertFalse(passedAttempt.certificateCollected)
+        assertTrue(archive.certificates.first().isEmpty())
+        expectRule { archive.issue(tree.id, second.id) }
+        expectRule { archive.issue(tree.id, second.id, "字".repeat(25)) }
+        assertNull(container.profiles.current().nickname)
+        assertTrue(archive.certificates.first().isEmpty())
         val certificateStyle = CertificateStyle.forTree(tree)
-        repeat(2) { exams.collectCertificate(tree.id, second.id) }
-        assertEquals(passedAttempt.copy(certificateCollected = true, certificateStyle = certificateStyle),
-            exams.watchAttempts(tree.id).first().first())
+        archive.issue(tree.id, second.id, "  学习伙伴  ")
+        archive.issue(tree.id, second.id, "重复提交")
+        val issued = CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴")
+        assertEquals(issued, archive.certificates.first().single())
+        assertEquals("学习伙伴", container.profiles.current().nickname)
         assertTrue(exams.summaries.first().getValue(tree.id).passed)
 
-        container.library.save(EntryEdit(tree.id, tree.parentId, EntryKind.TREE, tree.name, icon = EntryIcon.CAMERA))
+        container.library.save(EntryEdit(tree.id, tree.parentId, EntryKind.TREE, "重新命名的课程", icon = EntryIcon.CAMERA))
+        container.profiles.save(container.profiles.current().copy(nickname = "新版昵称"))
         gateway.reply(examFixture("第三轮"))
         exams.startExam(tree.id)
         val third = exams.watchAttempts(tree.id).first().first()
@@ -144,13 +154,13 @@ class TreeAssessmentTest {
         val saved = checkNotNull(database.assessments().attempt(tree.id, third.id))
         assertFalse(saved.content.contains("以凭证核对金额"))
 
-        // 模拟 0.12.4 已领取但未保存样式的记录。重考后沿用原证书，图标改动不影响已签发样式。
-        val legacyReceipt = attempts.first().copy(certificateCollected = true)
-        val encoded = SecretBox("lifeskill-tests").seal(TreeAssessmentProtocol.encodeAttempt(legacyReceipt), "${third.id}:exam")
-        database.assessments().update(saved.copy(content = encoded))
-        assertEquals(legacyReceipt, exams.watchAttempts(tree.id).first().first())
-        exams.collectCertificate(tree.id, third.id)
-        assertEquals(legacyReceipt.copy(certificateStyle = certificateStyle), exams.watchAttempts(tree.id).first().first())
+        archive.issue(tree.id, third.id)
+        assertEquals(issued, archive.certificates.first().single())
+        val savedCertificate = checkNotNull(database.personal().certificate(tree.id))
+        assertFalse(savedCertificate.content.contains("学习伙伴"))
+        container.library.delete(tree.id)
+        assertTrue(exams.watchAttempts(tree.id).first().isEmpty())
+        assertEquals(issued, archive.watchCertificate(tree.id).first())
     }
 
     @Test fun challengesRequireThreeDiagnosticAnswersAndAcceptRevisedFeynmanExplanation() = runBlocking {
@@ -241,7 +251,7 @@ internal fun markFixture(pointsAdjustment: Int = 0): String = JSONObject().put("
 internal fun challengeFixture(feedback: String, accepted: Boolean, next: String): String =
     JSONObject().put("feedback", feedback).put("accepted", accepted).put("next", next).toString()
 
-private fun legacyAttemptFixture(): String {
+internal fun legacyAttemptFixture(): String {
     val questions = ExamQuestionType.entries.flatMap { type ->
         (1..2).map { index ->
             JSONObject().put("type", type.name).put("prompt", "旧版${type.label}$index")

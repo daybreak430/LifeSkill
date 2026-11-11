@@ -109,8 +109,8 @@ internal abstract class SkillDao {
     @Query("SELECT edges.* FROM edges JOIN entries ON entries.id = edges.skillId WHERE entries.parentId = :treeId")
     abstract suspend fun edgesInTree(treeId: String): List<EdgeRow>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM bootstrap WHERE id = 1)")
-    abstract suspend fun initialized(): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM bootstrap WHERE id = :id)")
+    abstract suspend fun initialized(id: Int = 1): Boolean
 
     @Insert
     abstract suspend fun insertBootstrap(row: BootstrapRow)
@@ -200,12 +200,13 @@ internal abstract class SkillDao {
 
 @Database(
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
-        ExamAttemptRow::class, TreeChallengeRow::class],
-    version = 3,
+        ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class],
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {
     abstract fun skills(): SkillDao
     abstract fun assessments(): TreeAssessmentDao
+    abstract fun personal(): PersonalDao
 }

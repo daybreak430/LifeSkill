@@ -17,8 +17,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -38,6 +43,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +56,7 @@ import com.lifeskill.app.R
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.LearningStatistics
 import com.lifeskill.app.model.TreeAssessmentSummary
 import com.lifeskill.app.model.TreeChallenge
 import com.lifeskill.app.model.examAvailable
@@ -118,6 +125,11 @@ internal fun LifeSkillApp(
                 .drawBehind { drawRect(backdrop()) }.safeDrawingPadding(),
             containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                if (library != null && (route.page == Page.HOME || route.page == Page.ME)) {
+                    HomeTabs(route.page, app::selectTab)
+                }
+            },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 val current = library
@@ -152,6 +164,14 @@ internal fun LifeSkillApp(
                             stateHolder.SaveableStateProvider(displayedRoute.encode()) {
                                 when (displayedRoute.page) {
                                     Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition)
+                                    Page.ME -> {
+                                        val statistics = remember(displayedLibrary, assessments) {
+                                            LearningStatistics.from(displayedLibrary, assessments)
+                                        }
+                                        PersonalScreen(app, personalModel(container), statistics, active)
+                                    }
+                                    Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
+                                    Page.CERTIFICATES -> CertificateCollectionScreen(app, personalModel(container), active)
                                     Page.DIRECTION -> entry?.let {
                                         DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, app, addition)
                                     }
@@ -193,6 +213,20 @@ internal fun LifeSkillApp(
     }
 }
 
+@Composable
+private fun HomeTabs(page: Page, select: (Page) -> Unit) {
+    val colors = NavigationBarItemDefaults.colors(selectedIconColor = Gold, selectedTextColor = Gold,
+        indicatorColor = GoldGround, unselectedIconColor = Muted, unselectedTextColor = Muted)
+    NavigationBar(containerColor = Panel, windowInsets = WindowInsets(0, 0, 0, 0)) {
+        NavigationBarItem(selected = page == Page.HOME, onClick = { select(Page.HOME) },
+            icon = { Mark(Glyph.BOOK, LocalContentColor.current) }, label = { Text("学习") },
+            modifier = Modifier.testTag("tab-learning"), colors = colors)
+        NavigationBarItem(selected = page == Page.ME, onClick = { select(Page.ME) },
+            icon = { Mark(Glyph.PERSON, LocalContentColor.current) }, label = { Text("我的") },
+            modifier = Modifier.testTag("tab-personal"), colors = colors)
+    }
+}
+
 private fun Modifier.routeInput(active: Boolean): Modifier =
     if (active) this else clearAndSetSemantics { hideFromAccessibility() }.pointerInput(Unit) {
         awaitPointerEventScope {
@@ -210,6 +244,13 @@ private fun conversationModel(container: AppContainer, scope: ChatScope): ChatVi
 private fun assessmentModel(container: AppContainer, treeId: String): TreeAssessmentViewModel = viewModel(
     key = "assessment:$treeId",
     factory = remember(container, treeId) {
-        viewModelFactory { initializer { TreeAssessmentViewModel(container.assessments, treeId) } }
+        viewModelFactory {
+            initializer { TreeAssessmentViewModel(container.assessments, treeId, container.certificates, container.profiles) }
+        }
     },
+)
+
+@Composable
+private fun personalModel(container: AppContainer): PersonalViewModel = viewModel(
+    factory = remember(container) { viewModelFactory { initializer { PersonalViewModel(container) } } },
 )

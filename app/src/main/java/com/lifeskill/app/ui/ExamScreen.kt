@@ -56,6 +56,7 @@ internal fun ExamScreen(
     val attempts by model.attempts.collectAsStateWithLifecycle()
     val status by model.examStatus.collectAsStateWithLifecycle()
     val draft by model.examDraft.collectAsStateWithLifecycle()
+    val certificate by model.certificate.collectAsStateWithLifecycle()
     val latest = attempts?.firstOrNull()
     val best = attempts.orEmpty().mapNotNull(ExamAttempt::score).maxOrNull()
     var reviewing by rememberSaveable { mutableStateOf(false) }
@@ -71,11 +72,10 @@ internal fun ExamScreen(
         when {
             reviewing -> ExamReview(attempts.orEmpty(), Modifier.weight(1f))
             latest?.score != null -> key(latest.id) {
-                val style = attempts?.firstNotNullOfOrNull(ExamAttempt::certificateStyle)
-                    ?: CertificateStyle.forTree(tree)
                 ExamResult(
-                    tree.name, latest, style, checkNotNull(best), ready, status, active,
-                    model::startExam, { reviewing = true }, { model.collectCertificate(latest.id) },
+                    tree.name, checkNotNull(latest.score), CertificateStyle.forTree(tree), certificate,
+                    checkNotNull(best), ready, status, active, model::startExam, { reviewing = true },
+                    { nickname -> model.collectCertificate(latest.id, nickname) },
                 )
             }
             latest != null -> key(latest.id) {
@@ -117,12 +117,12 @@ private enum class CertificateMode { COLLECT, VIEW }
 
 @Composable
 private fun ExamResult(
-    treeName: String, attempt: ExamAttempt, style: CertificateStyle, best: Int, ready: Boolean,
+    treeName: String, score: Int, style: CertificateStyle, certificate: ExamCertificateContext?, best: Int, ready: Boolean,
     status: AssessmentStatus, active: Boolean,
-    retake: () -> Unit, review: () -> Unit, collectCertificate: () -> Unit,
+    retake: () -> Unit, review: () -> Unit, collectCertificate: (String?) -> Unit,
 ) {
-    val score = checkNotNull(attempt.score)
     val passed = score >= EXAM_PASS_SCORE
+    val issued = certificate?.issued
     var certificateMode by rememberSaveable { mutableStateOf<CertificateMode?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -145,14 +145,10 @@ private fun ExamResult(
                 }
             }
         }
-        if (passed) item {
-            val collected = attempt.certificateCollected
+        if (passed && certificate != null) item {
             Action(
-                if (collected) "查看结业证书" else "获取结业证书", Glyph.DIAMOND,
-                {
-                    certificateMode = if (collected) CertificateMode.VIEW else CertificateMode.COLLECT
-                    if (collected && attempt.certificateStyle == null) collectCertificate()
-                },
+                if (issued == null) "获取结业证书" else "查看结业证书", Glyph.DIAMOND,
+                { certificateMode = if (issued == null) CertificateMode.COLLECT else CertificateMode.VIEW },
                 Modifier.fillMaxWidth(), primary = true, enabled = !status.busy,
             )
         }
@@ -164,10 +160,13 @@ private fun ExamResult(
         }
         item { AssessmentStatusText(status) }
     }
-    val mode = certificateMode
-    if (active && mode != null) {
-        ExamCertificateDialog(treeName, style, mode == CertificateMode.VIEW, attempt.certificateCollected,
-            status, collectCertificate) { certificateMode = null }
+    if (active && certificate != null) when (certificateMode) {
+        CertificateMode.COLLECT -> ExamCertificateDialog(
+            issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.nickname,
+            collected = issued != null, status = status, onCollect = collectCertificate,
+        ) { certificateMode = null }
+        CertificateMode.VIEW -> issued?.let { IssuedCertificateDialog(it) { certificateMode = null } }
+        null -> Unit
     }
 }
 

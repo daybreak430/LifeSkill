@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -31,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,6 +44,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -52,6 +58,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import com.lifeskill.app.model.CertificateStyle
+import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.validatedNickname
 
 private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
@@ -59,13 +68,21 @@ private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
 
 @Composable
+internal fun IssuedCertificateDialog(certificate: CollectedCertificate, onClose: () -> Unit) {
+    ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, onClose = onClose)
+}
+
+@Composable
 internal fun ExamCertificateDialog(
-    treeName: String, style: CertificateStyle, viewing: Boolean, collected: Boolean, status: AssessmentStatus,
-    onCollect: () -> Unit, onClose: () -> Unit,
+    treeName: String, style: CertificateStyle, recipient: String?, collected: Boolean = false,
+    status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null, onClose: () -> Unit,
 ) {
+    val viewing = onCollect == null
     var opened by rememberSaveable { mutableStateOf(viewing) }
     var closing by rememberSaveable { mutableStateOf(false) }
     var requested by rememberSaveable { mutableStateOf(false) }
+    var enteringNickname by rememberSaveable { mutableStateOf(false) }
+    var nickname by rememberSaveable { mutableStateOf("") }
     val exiting = closing || (!viewing && collected)
     var drag by remember { mutableFloatStateOf(0f) }
     val opening = remember { Animatable(if (opened) 1f else 0f) }
@@ -87,7 +104,11 @@ internal fun ExamCertificateDialog(
     }
 
     Dialog(
-        onDismissRequest = { if (!requested || !status.busy) closing = true },
+        onDismissRequest = {
+            if (!status.busy) {
+                if (enteringNickname && !exiting) enteringNickname = false else closing = true
+            }
+        },
         properties = DialogProperties(
             dismissOnClickOutside = false,
             usePlatformDefaultWidth = false,
@@ -108,7 +129,7 @@ internal fun ExamCertificateDialog(
         Box(
             Modifier.fillMaxSize().testTag("exam-certificate")
                 .drawBehind { drawRect(CertificateNight.copy(alpha = .90f * (1f - exit.value))) }
-                .safeDrawingPadding().padding(horizontal = 24.dp, vertical = 12.dp)
+                .safeDrawingPadding().imePadding().padding(horizontal = 24.dp, vertical = 12.dp)
                 .graphicsLayer {
                     alpha = 1f - exit.value
                     scaleX = 1f - .07f * exit.value
@@ -153,7 +174,12 @@ internal fun ExamCertificateDialog(
                     Text("上滑拆开", color = CertificatePaper, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            if (showCertificate) {
+            if (enteringNickname && !exiting) {
+                CertificateNicknameForm(nickname, { nickname = it }, status, cancel = { enteringNickname = false }) {
+                    requested = true
+                    onCollect?.invoke(it)
+                }
+            } else if (showCertificate) {
                 Column(
                     Modifier.widthIn(max = 360.dp).fillMaxWidth().graphicsLayer {
                         val reveal = motionPhase(opening.value, .32f, 1f)
@@ -164,21 +190,55 @@ internal fun ExamCertificateDialog(
                     }.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    CertificateCard(treeName, style)
+                    CertificateCard(treeName, style, recipient)
                     if (viewing) {
                         Action("关闭", Glyph.CLOSE, { closing = true }, Modifier.fillMaxWidth(),
                             primary = true, enabled = !exiting)
                     } else {
                         if (requested && status.error != null) AssessmentStatusText(status)
                         Action("收下", Glyph.CHECK, {
-                            requested = true
-                            onCollect()
+                            if (recipient == null) {
+                                enteringNickname = true
+                            } else {
+                                requested = true
+                                onCollect.invoke(null)
+                            }
                         }, Modifier.fillMaxWidth(), primary = true, enabled = canCollect && !exiting && !status.busy)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun CertificateNicknameForm(
+    nickname: String, change: (String) -> Unit, status: AssessmentStatus, cancel: () -> Unit, submit: (String) -> Unit,
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = remember { FocusRequester() }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    Surface(Modifier.widthIn(max = 360.dp).fillMaxWidth(), shape = DialogShape, color = Panel) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("填写证书署名", style = MaterialTheme.typography.titleLarge)
+            NicknameField(nickname, { change(it); validationError = null }, !status.busy,
+                Modifier.focusRequester(focus).testTag("certificate-nickname"))
+            AssessmentStatusText(AssessmentStatus(error = validationError ?: status.error))
+            Action("保存并收下", Glyph.CHECK, {
+                try {
+                    val valid = checkNotNull(validatedNickname(nickname, required = true))
+                    keyboard?.hide()
+                    submit(valid)
+                } catch (error: RuleViolation) {
+                    validationError = error.message
+                }
+            }, Modifier.fillMaxWidth(), primary = true, enabled = !status.busy)
+            TextButton({ keyboard?.hide(); cancel() }, Modifier.align(Alignment.CenterHorizontally), enabled = !status.busy) {
+                Text("取消")
+            }
+        }
+    }
+    LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
 @Composable

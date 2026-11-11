@@ -55,7 +55,7 @@ private fun CertificateTheme.palette() = when (this) {
 }
 
 @Composable
-internal fun CertificateCard(treeName: String, style: CertificateStyle) {
+internal fun CertificateCard(treeName: String, style: CertificateStyle, recipient: String?) {
     val palette = style.theme.palette()
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("certificate-paper-${style.theme.name.lowercase()}"),
@@ -79,7 +79,14 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle) {
                     fontWeight = FontWeight.Bold))
             Text("CERTIFICATE OF COMPLETION", color = palette.ink, textAlign = TextAlign.Center,
                 style = CertificateType.copy(fontSize = 10.sp, lineHeight = 15.sp, letterSpacing = 1.25.sp))
-            Spacer(Modifier.height(38.dp))
+            Spacer(Modifier.height(if (recipient == null) 38.dp else 24.dp))
+            recipient?.let { name ->
+                Text("颁发给", color = palette.ink, style = CertificateType.copy(fontSize = 13.sp))
+                Text(name, color = palette.ink, textAlign = TextAlign.Center,
+                    style = CertificateType.copy(fontSize = 29.sp, lineHeight = 38.sp,
+                        fontWeight = FontWeight.SemiBold, lineBreak = LineBreak.Heading))
+                Spacer(Modifier.height(15.dp))
+            }
             Text(treeName, color = palette.ink, textAlign = TextAlign.Center,
                 style = CertificateType.copy(fontSize = 27.sp, lineHeight = 38.sp,
                     fontWeight = FontWeight.SemiBold, lineBreak = LineBreak.Heading))
@@ -90,6 +97,14 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle) {
             Spacer(Modifier.height(25.dp))
             CertificateSeal(style, palette.ink)
         }
+    }
+}
+
+@Composable
+internal fun CertificateThumbnail(style: CertificateStyle) {
+    val palette = style.theme.palette()
+    Surface(Modifier.size(42.dp, 49.dp), color = palette.paperEdge, shape = ControlShape) {
+        Box(contentAlignment = Alignment.Center) { Mark(style.emblem.glyph, palette.ink) }
     }
 }
 

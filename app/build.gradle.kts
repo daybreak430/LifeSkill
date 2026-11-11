@@ -12,8 +12,8 @@ android {
         applicationId = "com.lifeskill.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 47
-        versionName = "0.12.5"
+        versionCode = 48
+        versionName = "0.13.0"
         testInstrumentationRunner = "com.lifeskill.app.LifeSkillTestRunner"
     }
 
@@ -25,6 +25,8 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets.getByName("androidTest").assets.directories.add("schemas")
 }
 
 ksp {

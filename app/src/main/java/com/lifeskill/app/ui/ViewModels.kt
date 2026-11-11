@@ -42,7 +42,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-internal enum class Page { HOME, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN }
+internal enum class Page {
+    HOME, ME, PROFILE_EDIT, CERTIFICATES, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN,
+}
 
 internal data class Route(val page: Page, val id: String? = null) {
     fun encode() = "${page.name}:${id.orEmpty()}"
@@ -116,6 +118,7 @@ internal class AppViewModel(
         viewModelScope.launch {
             try {
                 container.library.initialize()
+                container.certificates.importLegacy()
                 container.library.library.collect { current ->
                     val previous = _library.value
                     _library.value = current
@@ -134,6 +137,16 @@ internal class AppViewModel(
     fun open(route: Route) {
         val stack = routes.value
         if (stack.last() != route.encode()) state["routes"] = ArrayList(stack + route.encode())
+    }
+
+    fun selectTab(tab: Page) {
+        if (Route.decode(routes.value.last()).page !in setOf(Page.HOME, Page.ME)) return
+        val home = Route(Page.HOME).encode()
+        when (tab) {
+            Page.HOME -> state["routes"] = arrayListOf(home)
+            Page.ME -> state["routes"] = arrayListOf(home, Route(Page.ME).encode())
+            else -> Unit
+        }
     }
 
     fun back() {

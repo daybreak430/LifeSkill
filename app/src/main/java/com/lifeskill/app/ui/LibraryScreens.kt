@@ -78,14 +78,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = 6.dp, bottom = 20.dp),
     ) {
         item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("LifeSkill", Modifier.weight(1f), style = LibraryTitle)
-                GlyphButton(Glyph.SETTINGS, "设置", { app.open(Route(Page.SETTINGS)) })
-            }
+            Text("LifeSkill", Modifier.fillMaxWidth(), style = LibraryTitle)
         }
         item(key = "home-study", span = { GridItemSpan(maxLineSpan) }) {
             HomeStudyCard(study, Modifier.animateItem()) {

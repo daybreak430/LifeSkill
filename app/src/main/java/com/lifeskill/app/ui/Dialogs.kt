@@ -316,15 +316,16 @@ private fun EditorPickerRow(
 @Composable
 internal fun DeletionDialog(entry: Entry, library: Library, busy: Boolean, app: AppViewModel) {
     val affected = when (entry.kind) {
-        EntryKind.DIRECTION -> "该方向下的 ${library.childrenOf(entry.id).size} 棵技能树、${library.progress(entry.id).total} 个技能点及相关对话"
-        EntryKind.TREE -> "树内的 ${library.progress(entry.id).total} 个技能点及相关对话"
+        EntryKind.DIRECTION -> "该方向下的 ${library.childrenOf(entry.id).size} 棵技能树、${library.progress(entry.id).total} 个技能点及相关对话和考试记录"
+        EntryKind.TREE -> "树内的 ${library.progress(entry.id).total} 个技能点及相关对话和考试记录"
         EntryKind.SKILL -> "该技能点的连线、点亮记录和学习对话"
     }
+    val retention = if (entry.kind == EntryKind.SKILL) "" else "已收藏的证书会保留。"
     AlertDialog(
         onDismissRequest = app::cancelDelete,
         shape = DialogShape, containerColor = Panel,
         title = { Text("删除${entry.kind.label}") },
-        text = { Text("删除「${entry.name}」将一并移除$affected。此操作无法撤销。") },
+        text = { Text("删除「${entry.name}」将一并移除$affected。${retention}此操作无法撤销。") },
         confirmButton = {
             Button(
                 onClick = app::deleteEntry, enabled = !busy, shape = ControlShape,

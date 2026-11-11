@@ -6,7 +6,6 @@ import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.ai.TreeAssessmentProtocol
-import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.ChallengeExchange
 import com.lifeskill.app.model.ChallengeSession
 import com.lifeskill.app.model.DIAGNOSTIC_QUESTIONS
@@ -98,18 +97,6 @@ internal class TreeAssessmentRepository(
                 dao.update(row.copy(score = graded.score, content = graded.encode()))
             }
         }
-    }
-
-    suspend fun collectCertificate(treeId: String, attemptId: String) = database.withTransaction {
-        val row = dao.attempt(treeId, attemptId) ?: throw RuleViolation("本次考试已不存在。")
-        if ((row.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后可领取结业证书。")
-        val attempt = row.decode()
-        if (attempt.certificateCollected && attempt.certificateStyle != null) return@withTransaction
-        // 重考或修改图标时沿用同一棵树已签发的样式。旧领取记录首次查看时走同一条路径补齐。
-        val style = dao.passedAttempts(treeId, EXAM_PASS_SCORE).asSequence()
-            .filter { it.id != attemptId }.mapNotNull { it.decode().certificateStyle }.firstOrNull()
-            ?: CertificateStyle.forTree(library.entry(treeId) ?: throw RuleViolation("技能树已不存在。"))
-        dao.update(row.copy(content = attempt.copy(certificateCollected = true, certificateStyle = style).encode()))
     }
 
     suspend fun startChallenge(treeId: String, kind: TreeChallenge) {
