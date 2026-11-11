@@ -82,7 +82,11 @@ internal fun AddDraftDialog(
             Button(
                 onClick = { destination?.let(onConfirm) }, enabled = !working && destination != null,
                 shape = ControlShape,
-            ) { Text(if (working) "正在添加" else "确认添加") }
+            ) { Text(when {
+                    working -> "正在添加"
+                    preview.treeNames.isNotEmpty() -> "添加课程"
+                    else -> "确认添加"
+                }) }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("取消") } },
     )

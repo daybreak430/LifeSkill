@@ -109,23 +109,23 @@ class MvpFlowTest {
     }
 
     @Test fun chatKeepsComposerVisibleWithKeyboardAndBackClosesItFirst() {
-        await("AI 生成技能树")
-        ui.onNodeWithText("AI 生成技能树").performClick()
-        await("AI 生成")
+        await("AI 生成课程")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("AI 生成课程")
         ui.onNodeWithTag("chat-input").performTouchInput { click() }
         ui.waitUntil(8_000) { imeVisible() }
         ui.onNodeWithTag("chat-input").performTextInput("第一行\n第二行")
         ui.onNodeWithContentDescription("发送").assertIsDisplayed().assertIsEnabled()
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
-        ui.onNodeWithText("AI 生成").assertIsDisplayed()
+        ui.onNodeWithText("AI 生成课程").assertIsDisplayed()
     }
 
     @Test fun clearGenerationUsesConfirmationAndStartsFreshWhileReplyIsPending() {
-        await("AI 生成技能树")
+        await("AI 生成课程")
         ui.onNodeWithTag("tab-personal").assertIsDisplayed()
-        ui.onNodeWithText("AI 生成技能树").performClick()
-        await("AI 生成")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("AI 生成课程")
         ui.onNodeWithTag("tab-personal").assertDoesNotExist()
 
         fixture.ai.enqueue { awaitCancellation() }
@@ -142,14 +142,14 @@ class MvpFlowTest {
         ui.onNodeWithText("清空当前会话").performTouchInput { click() }
         await("清空当前会话？")
         ui.onNodeWithText("清空").performTouchInput { click() }
-        await("一起规划技能树")
+        await("一起规划课程")
         ui.onNodeWithText("清空前的学习请求").assertDoesNotExist()
 
         fixture.ai.reply("""{"kind":"message","reply":"新会话收到"}""")
         send("清空后的学习请求")
         await("新会话收到")
         ui.onNodeWithContentDescription("返回").performClick()
-        await("AI 生成技能树")
+        await("AI 生成课程")
         ui.onNodeWithTag("tab-personal").assertIsDisplayed()
     }
 
@@ -170,11 +170,11 @@ class MvpFlowTest {
             await("学习者")
             ui.onNodeWithText(directions.first().name).assertDoesNotExist()
             ui.onNodeWithContentDescription("设置").assertIsDisplayed()
-            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("证书展柜"))
+            ui.onNodeWithTag("personal-home").performScrollToNode(hasText("我的证书"))
             learning.performClick().assertIsSelected()
             ui.onNodeWithTag(lastDirection).assertIsDisplayed()
             personal.performClick()
-            ui.onNodeWithText("证书展柜").assertIsDisplayed()
+            ui.onNodeWithText("我的证书").assertIsDisplayed()
             ui.onNodeWithTag("personal-home").performScrollToNode(hasText("学习者"))
             ui.onNodeWithContentDescription("编辑资料").performClick()
             await("内置头像")
@@ -250,7 +250,7 @@ class MvpFlowTest {
             val question = (1..14).joinToString("\n\n") { "问题背景$it：观察图例和边框的位置，再判断数据如何分区。" }
             fixture.ai.reply(JSONObject().put("kind", "exercise").put("reply", question)
                 .put("choices", org.json.JSONArray(listOf("甲", "乙", "丙", "最后一个选项"))).toString())
-            ui.onNode(hasText("检验掌握") and hasClickAction()).performTouchInput { click() }
+            ui.onNode(hasText("做课后练习") and hasClickAction()).performTouchInput { click() }
             await("D. 最后一个选项")
             val lastOption = ui.onNode(hasText("D. 最后一个选项") and hasClickAction()).assertIsDisplayed()
             val messages = ui.onNodeWithTag("chat-messages")
@@ -284,7 +284,7 @@ class MvpFlowTest {
             }
             await("继续学习")
             ui.onNode(hasText("研习方向") and hasClickAction())
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "已学会 0 个技能点，共 1 个"))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "共 1 节课，已完成 0 节"))
             ui.onNodeWithText("0/1").assertIsDisplayed()
             ui.onNodeWithText("继续学习").performTouchInput { click() }
             await("先梳理已学的要点。")
@@ -315,7 +315,7 @@ class MvpFlowTest {
             ui.onNodeWithText("续学技能树").assertIsNotDisplayed()
             trees.performScrollToIndex(14)
             ui.onNodeWithText("技能树卡片 12").performTouchInput { click() }
-            await("新增技能点")
+            await("添加一节课")
             pressBack()
             ui.onNodeWithText("技能树卡片 12").assertIsDisplayed()
             pressBack()
@@ -323,9 +323,9 @@ class MvpFlowTest {
                 val prerequisite = library.save(EntryEdit(null, skill.parentId, EntryKind.SKILL, "新增前置", "掌握基础"))
                 library.save(EntryEdit(skill.id, skill.parentId, skill.kind, skill.name, skill.goal, setOf(prerequisite.id)))
             }
-            await("查看技能")
-            ui.onNodeWithText("查看技能").performTouchInput { click() }
-            ui.onNodeWithText("学习技能").assertIsNotEnabled()
+            await("查看本节课")
+            ui.onNodeWithText("查看本节课").performTouchInput { click() }
+            ui.onNodeWithText("开始学习").assertIsNotEnabled()
             pressBack()
             runBlocking { library.delete(skill.id) }
             ui.waitUntil(8_000) {
@@ -344,16 +344,16 @@ class MvpFlowTest {
         val library = fixture.container.library
         val direction = runBlocking { library.save(EntryEdit(null, null, EntryKind.DIRECTION, "首页练习方向")) }
         val grid = ui.onNodeWithTag("learning-directions")
-        val createTree = "为${direction.name}创建技能树"
+        val createTree = "为${direction.name}新建课程"
         try {
             await(direction.name)
             grid.performScrollToNode(hasContentDescription(createTree))
             ui.onNodeWithContentDescription(createTree).performTouchInput { click() }
-            await("新增技能树")
+            await("新建课程")
             ui.onNodeWithText("取消").performClick()
             grid.assertIsDisplayed()
             ui.onNodeWithContentDescription(createTree).performClick()
-            fill("名称", "首页续学路径")
+            fill("课程名称", "首页续学路径")
             ui.onNodeWithText("保存").performClick()
             await("首页续学路径")
             ui.onNodeWithTag("skill-tree-list").assertIsDisplayed()
@@ -367,23 +367,23 @@ class MvpFlowTest {
             pressBack()
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("learning-directions").fetchSemanticsNodes().isNotEmpty() }
             grid.performScrollToIndex(0)
-            await("下一步 · 首页续学路径")
+            await("建议下一课 · 首页续学路径")
             ui.onNodeWithText("综合练习").assertIsDisplayed()
             ui.onNodeWithText("开始学习").performTouchInput { click() }
             await("AI 老师")
             await(next.name)
             pressBack()
-            await("技能地图")
+            await("课程大纲")
             pressBack()
-            await("下一步 · 首页续学路径")
+            await("建议下一课 · 首页续学路径")
             runBlocking { passFixtureSkill(next.id) }
             await("已完成")
             val completedDirection = hasText(direction.name) and hasText("2/2")
             grid.performScrollToNode(completedDirection)
             ui.onNode(completedDirection).assertIsDisplayed()
             grid.performScrollToIndex(0)
-            ui.onNodeWithText("查看技能地图").performTouchInput { click() }
-            await("2 / 2 已点亮")
+            ui.onNodeWithText("查看课程").performTouchInput { click() }
+            await("已完成 2 / 2 节")
             ui.onNodeWithContentDescription(first.name).assertIsDisplayed()
         } finally {
             runBlocking { library.delete(direction.id) }
@@ -420,7 +420,7 @@ class MvpFlowTest {
             val tree = runBlocking {
                 library.save(EntryEdit(null, directions.first().id, EntryKind.TREE, "对齐测试树"))
             }
-            waitForCardText("暂无技能点")
+            waitForCardText("尚未添加课时")
             assertEquals(initial, cardHeight(changing), .5f)
             assertEquals(initialTitle, titleOffset())
             runBlocking { library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "测试技能", "掌握测试概念")) }
@@ -472,15 +472,15 @@ class MvpFlowTest {
         ui.onNodeWithText("本职工作").performClick()
         await("连线分支")
         ui.onNodeWithText("连线分支").performClick()
-        await("技能地图")
+        await("课程大纲")
         ui.onNodeWithText("关联", substring = true).assertDoesNotExist()
         val lastNode = ui.onNodeWithContentDescription("左下游").fetchSemanticsNode().boundsInRoot
-        val examNode = ui.onNodeWithText("验收考试").fetchSemanticsNode().boundsInRoot
+        val examNode = ui.onNodeWithText("结业考试").fetchSemanticsNode().boundsInRoot
         assertTrue(examNode.top >= lastNode.bottom)
         ui.onNodeWithContentDescription("左下游")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "需先修"))
             .performTouchInput { click() }
-        await("前置技能")
+        await("先修课")
         await("右起点")
         await("左起点")
     }
@@ -513,11 +513,11 @@ class MvpFlowTest {
             ui.onNodeWithTag(cardTag).performTouchInput { click() }
             await(direction.name)
             ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
-            await("1 / 3 已点亮")
+            await("已完成 1 / 3 节")
 
             val available = SemanticsMatcher("可学习状态") { node ->
                 runCatching {
-                    node.config[SemanticsProperties.StateDescription].startsWith("可点亮")
+                    node.config[SemanticsProperties.StateDescription].startsWith("可学习")
                 }.getOrDefault(false)
             }
             ui.onNodeWithContentDescription(left.name).assert(available)
@@ -548,17 +548,17 @@ class MvpFlowTest {
             await(tree.name)
             ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
             val map = ui.onNodeWithTag("skill-map")
-            map.performScrollToNode(hasText("验收考试"))
-            ui.onNodeWithText("自以为是检测").assertDoesNotExist()
-            ui.onNodeWithText("费曼复习").assertDoesNotExist()
-            ui.onNodeWithText("验收考试").performTouchInput { click() }
-            await("验收考试未解锁")
+            map.performScrollToNode(hasText("结业考试"))
+            ui.onNodeWithText("查漏补缺").assertDoesNotExist()
+            ui.onNodeWithText("费曼复述").assertDoesNotExist()
+            ui.onNodeWithText("结业考试").performTouchInput { click() }
+            await("完成全部课时后可参加考试")
             ui.onNodeWithText("开始考试").assertDoesNotExist()
             pressBack()
             runBlocking { library.lightFromAssessment(skill) }
-            await("1 / 1 已点亮")
-            map.performScrollToNode(hasText("验收考试"))
-            ui.onNodeWithText("验收考试").performTouchInput { click() }
+            await("已完成 1 / 1 节")
+            map.performScrollToNode(hasText("结业考试"))
+            ui.onNodeWithText("结业考试").performTouchInput { click() }
             await("开始考试")
             fixture.ai.reply(examFixture())
             ui.onNodeWithText("开始考试").performTouchInput { click() }
@@ -585,7 +585,7 @@ class MvpFlowTest {
             fixture.ai.reply(markFixture())
             ui.onNodeWithText("确认交卷").performTouchInput { click() }
             await("90 分")
-            ui.onNodeWithText("通过验收").assertIsDisplayed()
+            ui.onNodeWithText("考试通过").assertIsDisplayed()
             ui.onNodeWithText("再考一次").assertIsEnabled()
             collectExamCertificate(tree.name)
             ui.onNodeWithText("查看错题集").performTouchInput { click() }
@@ -598,22 +598,22 @@ class MvpFlowTest {
             ui.waitUntil(10_000) {
                 ui.onAllNodes(
                     hasTestTag("challenge-reveal") and
-                        SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "挑战节点已显现"),
+                        SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "课后复习可开始"),
                 ).fetchSemanticsNodes().isNotEmpty()
             }
-            map.performScrollToNode(hasText("费曼复习"))
+            map.performScrollToNode(hasText("费曼复述"))
             ui.onNodeWithText("最高 90 分").assertIsDisplayed()
-            ui.onNodeWithText("自以为是检测").assertIsDisplayed()
-            ui.onNodeWithText("费曼复习").performTouchInput { click() }
-            await("开始挑战")
-            ui.onNodeWithText("开始挑战").performTouchInput { click() }
+            ui.onNodeWithText("查漏补缺").assertIsDisplayed()
+            ui.onNodeWithText("费曼复述").performTouchInput { click() }
+            await("开始练习")
+            ui.onNodeWithText("开始练习").performTouchInput { click() }
             await("请选一个你刚学过的核心概念", substring = true)
             fixture.ai.reply(challengeFixture("讲清楚了核对的方法。", true, ""))
             send("把付的钱和收据上的数字比一比。")
-            await("挑战成功")
+            await("练习完成")
             pressBack()
-            map.performScrollToNode(hasText("挑战成功"))
-            ui.onNodeWithText("挑战成功").assertIsDisplayed()
+            map.performScrollToNode(hasText("练习完成"))
+            ui.onNodeWithText("练习完成").assertIsDisplayed()
 
             runBlocking {
                 val exams = fixture.container.assessments
@@ -623,10 +623,10 @@ class MvpFlowTest {
                 fixture.ai.reply(markFixture())
                 exams.submitExam(tree.id, retake.id, retake.answers)
             }
-            map.performScrollToNode(hasText("验收考试"))
-            ui.onNodeWithText("验收考试").performTouchInput { click() }
+            map.performScrollToNode(hasText("结业考试"))
+            ui.onNodeWithText("结业考试").performTouchInput { click() }
             await("未通过")
-            ui.onNodeWithText("获取结业证书").assertDoesNotExist()
+            ui.onNodeWithText("领取结业证书").assertDoesNotExist()
             ui.onNodeWithText("查看结业证书").assertDoesNotExist()
 
             runBlocking {
@@ -655,7 +655,7 @@ class MvpFlowTest {
     }
 
     private fun collectExamCertificate(treeName: String) {
-        val entry = ui.onNodeWithText("获取结业证书")
+        val entry = ui.onNodeWithText("领取结业证书")
         val envelope = ui.onNode(hasText("上滑拆开") and hasClickAction())
         entry.performTouchInput { click() }
         envelope.assertIsDisplayed()
@@ -667,14 +667,14 @@ class MvpFlowTest {
         envelope.performTouchInput { click() }
         envelope.performTouchInput { swipe(Offset(width * .15f, centerY), Offset(width * .85f, centerY)) }
         envelope.performTouchInput { swipe(Offset(centerX, height * .2f), Offset(centerX, height * .8f)) }
-        ui.onNodeWithText("收下").assertDoesNotExist()
+        ui.onNodeWithText("领取证书").assertDoesNotExist()
         envelope.performTouchInput { swipe(Offset(centerX, height * .85f), Offset(centerX, height * .15f)) }
 
         ui.onNodeWithText("结业证书").assertIsDisplayed()
         ui.onNode(hasText("90 分", substring = true) and hasAnyAncestor(hasTestTag("exam-certificate")))
             .assertDoesNotExist()
         ui.onNode(hasText(treeName) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
-        val collect = ui.onNodeWithText("收下").assertIsEnabled()
+        val collect = ui.onNodeWithText("领取证书").assertIsEnabled()
         collect.performScrollTo().performTouchInput { click() }
         await("填写证书署名")
         ui.onNodeWithText("取消").performScrollTo().performClick()
@@ -683,7 +683,7 @@ class MvpFlowTest {
         collect.performScrollTo().performTouchInput { click() }
         await("填写证书署名")
         ui.onNodeWithTag("certificate-nickname").performTextReplacement("  证书学员  ")
-        ui.onNodeWithText("保存并收下").performScrollTo().performTouchInput { click() }
+        ui.onNodeWithText("保存并领取").performScrollTo().performTouchInput { click() }
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
         ui.onNodeWithText("结业证书").assertDoesNotExist()
         ui.onNodeWithText("90 分").assertIsDisplayed()
@@ -698,7 +698,7 @@ class MvpFlowTest {
         ui.onNodeWithText("隐藏该证书").assertDoesNotExist()
         ui.onNodeWithText("更多").assertIsDisplayed()
         envelope.assertDoesNotExist()
-        ui.onNodeWithText("收下").assertDoesNotExist()
+        ui.onNodeWithText("领取证书").assertDoesNotExist()
         ui.onNodeWithText("关闭").performTouchInput { click() }
         ui.onNodeWithText("结业证书").assertDoesNotExist()
     }
@@ -741,8 +741,8 @@ class MvpFlowTest {
             examples.forEach { (theme, _, name) ->
                 ui.onNodeWithTag("skill-tree-list").performScrollToNode(hasText(name))
                 ui.onNode(hasText(name) and hasClickAction()).performClick()
-                ui.onNodeWithTag("skill-map").performScrollToNode(hasText("验收考试"))
-                ui.onNodeWithText("验收考试").performTouchInput { click() }
+                ui.onNodeWithTag("skill-map").performScrollToNode(hasText("结业考试"))
+                ui.onNodeWithText("结业考试").performTouchInput { click() }
                 await("100 分")
                 ui.onNodeWithText("查看结业证书").performTouchInput { click() }
 
@@ -752,10 +752,10 @@ class MvpFlowTest {
                 ui.onNodeWithText("林知远").assertIsDisplayed()
                 ui.onNodeWithTag("certificate-avatar").assertIsDisplayed()
                 ui.onNodeWithTag("certificate-collected-at").assertIsDisplayed()
-                ui.onNodeWithText("首次收下", substring = true).assertIsDisplayed()
+                ui.onNodeWithText("领取日期", substring = true).assertIsDisplayed()
                 ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
                 ui.onNodeWithText("更多").assertIsDisplayed()
-                ui.onNodeWithText("销毁证书").assertDoesNotExist()
+                ui.onNodeWithText("永久删除证书").assertDoesNotExist()
                 captureScreenshot("captureCertificateScreenshots", "${theme.name.lowercase()}.png")
                 ui.onNodeWithText("关闭").performTouchInput { click() }
                 ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
@@ -767,8 +767,8 @@ class MvpFlowTest {
             ui.onNodeWithContentDescription("返回").performClick()
             await("LifeSkill")
             ui.onNodeWithTag("tab-personal").performTouchInput { click() }
-            await("证书展柜")
-            ui.onNodeWithText("获取证书", substring = true).assertIsDisplayed()
+            await("我的证书")
+            ui.onNodeWithText("已领取证书", substring = true).assertIsDisplayed()
             ui.onNodeWithText("收藏证书", substring = true).assertDoesNotExist()
             ui.onNodeWithText("查看全部").assertDoesNotExist()
             val cabinet = ui.onNodeWithTag("personal-home")
@@ -809,17 +809,17 @@ class MvpFlowTest {
             captureScreenshot("capturePersonalScreenshots", "cabinet.png")
 
             val countBefore = runBlocking { fixture.container.certificates.certificates.first().count { !it.isSample } }
-            val countBeforeDestroy = hasText("获取证书") and hasText(countBefore.toString())
+            val countBeforeDestroy = hasText("已领取证书") and hasText(countBefore.toString())
             cabinet.performScrollToNode(countBeforeDestroy)
             ui.onNode(countBeforeDestroy).assertIsDisplayed()
             cabinet.performScrollToNode(certificate)
             ui.onNode(certificate).performTouchInput { click() }
             ui.onNodeWithText("更多").performScrollTo().performTouchInput { click() }
-            ui.onNodeWithText("销毁证书").performTouchInput { click() }
-            await("销毁证书？")
-            ui.onNodeWithText("确认销毁").performTouchInput { click() }
+            ui.onNodeWithText("永久删除证书").performTouchInput { click() }
+            await("永久删除证书？")
+            ui.onNodeWithText("永久删除").performTouchInput { click() }
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
-            val countAfterDestroy = hasText("获取证书") and hasText((countBefore - 1).toString())
+            val countAfterDestroy = hasText("已领取证书") and hasText((countBefore - 1).toString())
             cabinet.performScrollToNode(countAfterDestroy)
             ui.onNode(countAfterDestroy).assertIsDisplayed()
             ui.onNode(certificate).assertDoesNotExist()
@@ -835,10 +835,10 @@ class MvpFlowTest {
             ui.onNodeWithTag(directionTag).performClick()
             ui.onNodeWithTag("skill-tree-list").performScrollToNode(hasText(tree.name))
             ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
-            ui.onNodeWithTag("skill-map").performScrollToNode(hasText("验收考试"))
-            ui.onNodeWithText("验收考试").performClick()
+            ui.onNodeWithTag("skill-map").performScrollToNode(hasText("结业考试"))
+            ui.onNodeWithText("结业考试").performClick()
             await("100 分")
-            ui.onNodeWithText("获取结业证书").assertDoesNotExist()
+            ui.onNodeWithText("领取结业证书").assertDoesNotExist()
             ui.onNodeWithText("查看结业证书").assertDoesNotExist()
         } finally {
             runBlocking {
@@ -851,13 +851,13 @@ class MvpFlowTest {
     @Test fun sampleCertificateCanBeHiddenAndDestroyedWithoutAffectingStatistics() {
         await("LifeSkill")
         ui.onNodeWithTag("tab-personal").performTouchInput { click() }
-        await("证书展柜")
+        await("我的证书")
         val archive = fixture.container.certificates
         val certificates = runBlocking { archive.certificates.first() }
         val sample = certificates.single { it.isSample }
         val count = certificates.count { !it.isSample }
         val cabinet = ui.onNodeWithTag("personal-home")
-        val metric = hasText("获取证书") and hasText(count.toString())
+        val metric = hasText("已领取证书") and hasText(count.toString())
         cabinet.performScrollToNode(metric)
         ui.onNode(metric).assertIsDisplayed()
         val sampleTag = "collected-certificate-${sample.treeId}"
@@ -870,18 +870,18 @@ class MvpFlowTest {
             "展示日期  ${sampleDate.year}年${sampleDate.monthValue}月${sampleDate.dayOfMonth}日",
         ).assertIsDisplayed()
         ui.onNodeWithText("隐藏该证书").assertDoesNotExist()
-        ui.onNodeWithText("销毁证书").assertDoesNotExist()
+        ui.onNodeWithText("永久删除证书").assertDoesNotExist()
 
         ui.onNodeWithText("更多").performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("隐藏该证书").assertIsDisplayed()
-        ui.onNodeWithText("销毁证书").assertIsDisplayed()
-        ui.onNodeWithText("销毁证书").performTouchInput { click() }
-        await("销毁证书？")
+        ui.onNodeWithText("永久删除证书").assertIsDisplayed()
+        ui.onNodeWithText("永久删除证书").performTouchInput { click() }
+        await("永久删除证书？")
         pressBack()
-        ui.onNodeWithText("确认销毁").assertDoesNotExist()
+        ui.onNodeWithText("永久删除").assertDoesNotExist()
         ui.onNodeWithText("示例证书").assertIsDisplayed()
         ui.onNodeWithText("更多").performScrollTo().performTouchInput { click() }
-        ui.onNodeWithText("销毁证书").performTouchInput { click() }
+        ui.onNodeWithText("永久删除证书").performTouchInput { click() }
         ui.onNodeWithText("取消").performTouchInput { click() }
         ui.onNodeWithText("示例证书").assertIsDisplayed()
         ui.onNodeWithText("更多").performScrollTo().performTouchInput { click() }
@@ -898,8 +898,8 @@ class MvpFlowTest {
         ui.onNodeWithText("已隐藏（1）").performTouchInput { click() }
         ui.onNodeWithTag("hidden-certificate-${sample.treeId}").performTouchInput { click() }
         ui.onNodeWithText("更多").performScrollTo().performTouchInput { click() }
-        ui.onNodeWithText("销毁证书").performTouchInput { click() }
-        ui.onNodeWithText("确认销毁").performTouchInput { click() }
+        ui.onNodeWithText("永久删除证书").performTouchInput { click() }
+        ui.onNodeWithText("永久删除").performTouchInput { click() }
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
         ui.onNodeWithText("已隐藏的证书").assertDoesNotExist()
         ui.onNodeWithText("已隐藏（1）").assertDoesNotExist()
@@ -989,15 +989,15 @@ class MvpFlowTest {
         ui.onNodeWithText("本职工作").performClick()
         await("本地保存长地图")
         ui.onNodeWithText("本地保存长地图").performClick()
-        ui.onNodeWithText("新增技能点").performClick()
-        val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
+        ui.onNodeWithText("添加一节课").performClick()
+        val nameInput = ui.onNode(hasSetTextAction() and hasText("课时名称"))
         nameInput.performTextInput("练习节点 1")
-        fill("技能说明", "新增技能说明")
+        fill("学习目标", "新增技能说明")
         ui.onNodeWithText("保存").performClick()
         await("这一层已有同名项目", substring = true)
         nameInput.assertIsDisplayed().performTextReplacement("新增可见节点")
         ui.onNodeWithText("保存").performClick()
-        await("0 / 33 已点亮")
+        await("已完成 0 / 33 节")
         ui.onNodeWithContentDescription("新增可见节点").assertIsDisplayed().performTouchInput { click() }
         await("新增技能说明")
     }
@@ -1016,10 +1016,10 @@ class MvpFlowTest {
             ui.onNodeWithText("本职工作").performClick()
             await(tree.name)
             ui.onNodeWithText(tree.name).performClick()
-            ui.onNodeWithText("新增技能点").performClick()
-            fill("名称", "应用层")
-            fill("技能说明", "完成综合练习")
-            ui.onNodeWithText("前置节点").performScrollTo().performTouchInput { click() }
+            ui.onNodeWithText("添加一节课").performClick()
+            fill("课时名称", "应用层")
+            fill("学习目标", "完成综合练习")
+            ui.onNodeWithText("先修课").performScrollTo().performTouchInput { click() }
             val rootChoice = ui.onNode(hasText("基础层") and isToggleable())
             val middleChoice = ui.onNode(hasText("进阶层") and isToggleable())
             rootChoice.assertIsEnabled()
@@ -1029,7 +1029,7 @@ class MvpFlowTest {
             rootChoice.assertIsEnabled()
             middleChoice.performScrollTo().performTouchInput { click() }
             ui.onNodeWithText("保存").performClick()
-            await("0 / 3 已点亮")
+            await("已完成 0 / 3 节")
             runBlocking {
                 val saved = library.snapshot()
                 val added = saved.childrenOf(tree.id).single { it.name == "应用层" }
@@ -1056,7 +1056,7 @@ class MvpFlowTest {
         ui.onNodeWithTag("tab-learning").performClick()
         await("本职工作")
         ui.onNodeWithText("新增方向").performClick()
-        val nameInput = ui.onNode(hasSetTextAction() and hasText("名称"))
+        val nameInput = ui.onNode(hasSetTextAction() and hasText("方向名称"))
         nameInput.performTouchInput { click() }
         nameInput.performTextInput("测".repeat(49))
         await("名称最多 48 个字符")
@@ -1070,8 +1070,8 @@ class MvpFlowTest {
         await("模拟器验证")
         assertEquals(EntryIcon.BOOK, iconOf("模拟器验证"))
         ui.onNodeWithText("模拟器验证").performClick()
-        ui.onNodeWithText("新增技能树").performClick()
-        fill("名称", "手动技能树")
+        ui.onNodeWithText("新建课程").performClick()
+        fill("课程名称", "手动技能树")
         fixture.ai.reply("""{"icon":"CODE"}""")
         ui.onNodeWithText("AI 推荐图标").performClick()
         await("编程")
@@ -1079,61 +1079,61 @@ class MvpFlowTest {
         await("手动技能树")
         assertEquals(EntryIcon.CODE, iconOf("手动技能树"))
         ui.onNodeWithText("手动技能树").performClick()
-        ui.onNodeWithText("新增技能点").performClick()
-        fill("名称", "手动技能点")
-        fill("技能说明", "能解释一个基本概念")
-        fill("节点简称（选填）", "基础课")
+        ui.onNodeWithText("添加一节课").performClick()
+        fill("课时名称", "手动技能点")
+        fill("学习目标", "能解释一个基本概念")
+        fill("大纲简称（选填）", "基础课")
         ui.onNodeWithText("保存").performClick()
         await("基础课")
         ui.onNodeWithContentDescription("手动技能点").performTouchInput { click() }
-        ui.onNodeWithText("学习技能").assertIsEnabled()
+        ui.onNodeWithText("开始学习").assertIsEnabled()
         ui.onNodeWithText("手动点亮").assertDoesNotExist()
         ui.onNodeWithText("取消点亮").assertDoesNotExist()
         ui.onNodeWithContentDescription("更多操作").performClick()
-        ui.onNodeWithText("编辑技能点").performClick()
-        ui.onNode(hasSetTextAction() and hasText("名称")).performTextReplacement("已编辑技能点")
+        ui.onNodeWithText("编辑课时").performClick()
+        ui.onNode(hasSetTextAction() and hasText("课时名称")).performTextReplacement("已编辑技能点")
         ui.onNodeWithText("保存").performClick()
         await("已编辑技能点")
-        ui.onNodeWithContentDescription("关闭技能详情").performClick()
-        await("0 / 1 已点亮")
-        ui.onNodeWithText("新增技能点").performClick()
-        fill("名称", "练习依赖")
-        val goalInput = ui.onNode(hasSetTextAction() and hasText("技能说明"))
+        ui.onNodeWithContentDescription("关闭课时详情").performClick()
+        await("已完成 0 / 1 节")
+        ui.onNodeWithText("添加一节课").performClick()
+        fill("课时名称", "练习依赖")
+        val goalInput = ui.onNode(hasSetTextAction() and hasText("学习目标"))
         goalInput.performTextInput("练".repeat(321))
-        await("技能说明最多 320 个字符")
+        await("学习目标最多 320 个字符")
         ui.onNodeWithText("保存").assertIsNotEnabled()
         goalInput.performTextReplacement("使用前置概念完成一项练习")
-        ui.onNodeWithText("前置节点").performScrollTo().performTouchInput { click() }
+        ui.onNodeWithText("先修课").performScrollTo().performTouchInput { click() }
         ui.onNode(hasText("已编辑技能点") and isToggleable()).performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("保存").performClick()
-        await("0 / 2 已点亮")
+        await("已完成 0 / 2 节")
         ui.onNodeWithContentDescription("练习依赖").performTouchInput { click() }
-        await("前置技能")
+        await("先修课")
         ui.onNodeWithContentDescription("更多操作").performClick()
-        ui.onNodeWithText("删除技能点").performClick()
+        ui.onNodeWithText("删除课时").performClick()
         ui.onNodeWithText("取消").performClick()
-        await("前置技能")
+        await("先修课")
         ui.onNodeWithContentDescription("更多操作").performClick()
-        ui.onNodeWithText("删除技能点").performClick()
+        ui.onNodeWithText("删除课时").performClick()
         ui.onNodeWithText("删除").performClick()
-        await("0 / 1 已点亮")
+        await("已完成 0 / 1 节")
         pressBack()
-        await("新增技能树")
+        await("新建课程")
         pressBack()
-        await("AI 生成技能树")
+        await("AI 生成课程")
 
         fixture.ai.enqueue { throw RuleViolation("模型服务请求过于频繁，请稍后重试。") }
         fixture.ai.reply("""{"kind":"message","reply":"你想用什么主题？"}""")
         fixture.ai.reply(RepositoryTest.TREE_OFFER)
         fixture.ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("按每个技能点的名称和学习目标选择 icon"))
-            assertTrue(messages.first().text.contains("树的 icon 应代表树名及整棵树的学习主题"))
+            assertTrue(messages.first().text.contains("按每个课时的名称和学习目标选择 icon"))
+            assertTrue(messages.first().text.contains("课程的 icon 应代表课程名称和学习主题"))
             assertTrue(messages.first().text.contains("本次掌握程度为「进阶」"))
             assertTrue(messages.first().text.contains("精确生成 2 节"))
             RepositoryTest.CREATED
         }
-        ui.onNodeWithText("AI 生成技能树").performClick()
-        await("AI 生成")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("AI 生成课程")
         ui.onNodeWithTag("chat-input").performTextInput("测".repeat(4001))
         await("每条消息最多 4000 个字符")
         ui.onNodeWithContentDescription("发送").assertIsNotEnabled()
@@ -1143,14 +1143,14 @@ class MvpFlowTest {
         ui.onNodeWithText("重试").performClick()
         await("你想用什么主题？")
         ui.onNodeWithText("重试").assertDoesNotExist()
-        ui.onNodeWithText("撤回编辑").assertDoesNotExist()
+        ui.onNodeWithText("撤回并编辑").assertDoesNotExist()
         send("请生成一个数据质量方向的技能树")
-        await("当前掌握程度")
+        await("你的基础")
         ui.onNodeWithText("通用").assertDoesNotExist()
         ui.onNodeWithText("确认生成").assertIsNotEnabled()
         pressBack()
         await("生成设置")
-        ui.onNodeWithText("当前掌握程度").assertDoesNotExist()
+        ui.onNodeWithText("你的基础").assertDoesNotExist()
         assertEquals(TurnKind.TREE_OFFER, runBlocking {
             fixture.container.conversations.watch(ChatScope(ChatMode.GENERATE)).first().last().kind
         })
@@ -1166,48 +1166,48 @@ class MvpFlowTest {
         await("请输入 1–33 的整数")
         ui.onNodeWithText("确认生成").assertIsNotEnabled()
         pressBack()
-        await("当前掌握程度")
+        await("你的基础")
         count.performTextReplacement("2")
         ui.onNodeWithText("确认生成").assertIsDisplayed().assertIsEnabled().performTouchInput { click() }
         await("选择学习方向")
         ui.onNodeWithText("选择方向").assertDoesNotExist()
-        ui.onNodeWithText("确认添加").assertIsNotEnabled()
+        ui.onNodeWithText("添加课程").assertIsNotEnabled()
         ui.onNodeWithText("数据质量").assertDoesNotExist()
         pressBack()
         ui.onNodeWithText("选择学习方向").assertDoesNotExist()
         assertTrue(runBlocking { fixture.container.library.snapshot().entries.none { it.name == "数据质量" } })
-        val draftBubble = ui.onNode(hasText("已生成 1 棵技能树") and hasClickAction())
+        val draftBubble = ui.onNode(hasText("已生成课程草稿") and hasClickAction())
         draftBubble.performTouchInput { click() }
         await("选择学习方向")
         ui.activityRule.scenario.recreate()
         await("选择学习方向")
         ui.onNodeWithText("新建 · 数据能力").performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("方向名称").assertDoesNotExist()
-        ui.onNodeWithText("确认添加").assertIsEnabled().performTouchInput { click() }
-        await("已新增")
-        ui.onNodeWithText("技能点").assertIsDisplayed()
-        ui.onNodeWithContentDescription("打开技能树 · 数据质量").performClick()
-        await("技能地图")
+        ui.onNodeWithText("添加课程").assertIsEnabled().performTouchInput { click() }
+        await("已添加")
+        ui.onNodeWithText("课时").assertIsDisplayed()
+        ui.onNodeWithContentDescription("查看课程 · 数据质量").performClick()
+        await("课程大纲")
         assertEquals(EntryIcon.TARGET, iconOf("数据质量"))
         assertEquals(EntryIcon.CHART, iconOf("基础"))
         assertEquals(EntryIcon.TOOLS, iconOf("实践"))
 
         val practiceNode = ui.onNodeWithContentDescription("实践")
-        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
+        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "需先修"))
         practiceNode.performTouchInput { click() }
-        await("点亮全部前置技能后解锁")
+        await("完成列出的先修课后即可学习本节")
         ui.onNodeWithText("手动点亮").assertDoesNotExist()
-        ui.onNodeWithText("学习技能").assertIsNotEnabled().performTouchInput { click() }
+        ui.onNodeWithText("开始学习").assertIsNotEnabled().performTouchInput { click() }
         ui.onNodeWithText("AI 老师").assertDoesNotExist()
-        val masteryCheck = ui.onNode(hasText("检验掌握") and hasClickAction())
-        ui.onNodeWithContentDescription("关闭技能详情").performClick()
+        val masteryCheck = ui.onNode(hasText("做课后练习") and hasClickAction())
+        ui.onNodeWithContentDescription("关闭课时详情").performClick()
         ui.onNodeWithContentDescription("基础").performTouchInput { click() }
-        await("可点亮")
-        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("可学习")
+        ui.onNodeWithText("开始学习").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("开始学习")
         fixture.ai.reply("""{"kind":"offer_check","reply":"基础知识已讲完。"}""")
         ui.onNodeWithText("开始学习").performClick()
-        await("可以试试「检验掌握」")
+        await("做课后练习")
         fixture.ai.reply("""{"kind":"exercise","reply":"先做哪一步？","choices":["核对数据","提交结果"]}""")
         masteryCheck.performTouchInput { click() }
         await("先做哪一步？")
@@ -1217,22 +1217,22 @@ class MvpFlowTest {
             RepositoryTest.verdict("passed", "掌握基础知识。", id)
         }
         ui.onNodeWithText("A. 核对数据").performTouchInput { click() }
-        await("已点亮技能点", substring = true)
+        await("练习通过", substring = true)
         val closeCelebration = ui.onNodeWithContentDescription("关闭庆祝")
         closeCelebration.assertIsDisplayed().performTouchInput { click() }
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
         ui.onNodeWithContentDescription("返回").performClick()
-        await("技能地图")
+        await("课程大纲")
         ui.onNodeWithText("取消点亮").assertDoesNotExist()
-        ui.onNodeWithContentDescription("关闭技能详情").assertDoesNotExist()
-        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可点亮，下一步"))
+        ui.onNodeWithContentDescription("关闭课时详情").assertDoesNotExist()
+        practiceNode.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "可学习，建议下一课"))
         practiceNode.performTouchInput { click() }
-        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        ui.onNodeWithText("开始学习").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("开始学习")
         masteryCheck.assertDoesNotExist()
         val fence = "```"
         val lesson = "## 数据核对 💡\n\n| 对象 | 特点 |\n| --- | --- |\n| 文本 | 原样 |\n\n" +
-            "${fence}text\nA{读取} --> B[核对]\nB -->|继续迭代| A\n$fence"
+            "${fence}mermaid\nflowchart TD\nA{读取} --> B[核对]\nB -->|继续迭代| A\n$fence"
         fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", lesson).toString())
         ui.onNodeWithText("开始学习").performClick()
         await("数据核对 💡")
@@ -1254,9 +1254,8 @@ class MvpFlowTest {
         val examReply = ui.onNode(hasText(TutorRules.EXAM_REPLY) and hasClickAction())
         examReply.assertDoesNotExist()
         continueReply.assertIsEnabled().performTouchInput { click() }
-        await("可以试试「检验掌握」")
+        await("做课后练习")
         masteryCheck.assertIsEnabled()
-        examReply.assertDoesNotExist()
         listOf("先核对记录来源。", "再确认字段类型。").forEach { reply ->
             fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", reply).toString())
             continueReply.performTouchInput { click() }
@@ -1269,7 +1268,7 @@ class MvpFlowTest {
         continueReply.assertIsDisplayed()
         fixture.ai.enqueue { throw RuleViolation("考试请求暂时失败，请重试。") }
         fixture.ai.enqueue { messages ->
-            assertTrue(messages.last().text.contains("App 发起检验掌握"))
+            assertTrue(messages.last().text.contains("App 发起课后练习"))
             """{"kind":"exercise","reply":"怎样识别异常记录？","choices":["直接删除","核对必填字段","全部保留"]}"""
         }
         examReply.assertIsEnabled().performTouchInput { click() }
@@ -1277,7 +1276,7 @@ class MvpFlowTest {
         ui.onNodeWithText("重试").performClick()
         await("怎样识别异常记录？")
         ui.onNodeWithText("重试").assertDoesNotExist()
-        ui.onNodeWithText("撤回检验").assertDoesNotExist()
+        ui.onNodeWithText("取消练习请求").assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
         examReply.assertDoesNotExist()
         continueReply.assertDoesNotExist()
@@ -1295,7 +1294,7 @@ class MvpFlowTest {
         continueReply.assertDoesNotExist()
         fixture.ai.enqueue { messages ->
             assertEquals("B. 核对必填字段", messages.last().text)
-            assertTrue(messages.first().text.contains("A. 直接删除"))
+            assertTrue(messages.dropLast(1).any { it.role == "user" && it.text == "A. 直接删除" })
             RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId)
         }
         ui.mainClock.autoAdvance = false
@@ -1303,7 +1302,7 @@ class MvpFlowTest {
             ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { it() }
             ui.waitUntil(8_000) {
                 ui.mainClock.advanceTimeByFrame()
-                ui.onAllNodesWithText("已点亮技能点", substring = true).fetchSemanticsNodes().isNotEmpty()
+                ui.onAllNodesWithText("练习通过", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             ui.onNodeWithTag("skill-celebration").assertIsDisplayed()
             ui.mainClock.advanceTimeBy(2_000)
@@ -1319,19 +1318,19 @@ class MvpFlowTest {
         ui.onNodeWithTag("skill-celebration").performTouchInput { click(Offset(20f, 40f)) }
         closeCelebration.assertIsDisplayed()
         ui.activityRule.scenario.recreate()
-        await("已点亮技能点", substring = true)
+        await("练习通过", substring = true)
         ui.onNodeWithTag("celebration-fireworks").assertDoesNotExist()
         closeCelebration.assertIsDisplayed().performClick()
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
         pressBack()
-        await("2 / 2 已点亮")
-        ui.onNodeWithContentDescription("关闭技能详情").assertDoesNotExist()
+        await("已完成 2 / 2 节")
+        ui.onNodeWithContentDescription("关闭课时详情").assertDoesNotExist()
         practiceNode.performTouchInput { click() }
-        await("已点亮 · AI 检验通过")
+        await("已完成 · 练习通过")
         ui.onNodeWithText("重新学习").assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").assertDoesNotExist()
-        ui.onNodeWithText("学习技能").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
-        await("已点亮技能点", substring = true)
+        ui.onNodeWithText("开始学习").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        await("练习通过", substring = true)
         ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
         fixture.ai.enqueue { messages ->
             assertEquals(2, messages.size)
@@ -1340,14 +1339,14 @@ class MvpFlowTest {
         }
         ui.onNodeWithContentDescription("重新学习").performTouchInput { click() }
         await("开始新一轮")
-        await("开始后将清空此技能的旧对话，且无法恢复。点亮进度会保留。")
+        await("将删除本节的旧学习对话，无法恢复。已完成的进度会保留。")
         ui.onNodeWithTag("restart-requirements").performTextInput("改用账单举例")
         ui.onNodeWithText("开始新一轮").performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("新一轮学习")
         await("从核对账单开始讲。")
         continueReply.assertIsDisplayed()
         examReply.assertDoesNotExist()
-        ui.onNodeWithText("已点亮技能点", substring = true).assertDoesNotExist()
+        ui.onNodeWithText("练习通过", substring = true).assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
         ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
         await("开始新一轮")
@@ -1356,7 +1355,7 @@ class MvpFlowTest {
         // 底层消息在弹窗关闭前也可读，系统返回要等窗口焦点回到对话页。
         ui.waitUntil(8_000) { ui.runOnUiThread { ui.activity.hasWindowFocus() } && !imeVisible() }
         pressBack()
-        await("2 / 2 已点亮")
+        await("已完成 2 / 2 节")
     }
 
     private fun iconOf(name: String): EntryIcon? = runBlocking {

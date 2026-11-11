@@ -20,9 +20,9 @@ enum class TurnKind {
 }
 
 enum class GenerationLevel(val label: String) {
-    BEGINNER("初学者"),
+    BEGINNER("入门"),
     INTERMEDIATE("进阶"),
-    EXPERT("专家"),
+    EXPERT("熟练"),
 }
 
 data class GenerationOptions(val level: GenerationLevel, val courseCount: IntRange) {
@@ -76,7 +76,9 @@ fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
     const val CONTINUE_REPLY = "好的，继续"
-    const val EXAM_REPLY = "感觉已经会了，来考试吧"
+    const val EXAM_REPLY = "做课后练习"
+    // 保留旧版快捷回复的识别，历史记录仍按原文显示。
+    private const val LEGACY_EXAM_REPLY = "感觉已经会了，来考试吧"
     internal const val EXAM_TEACHING_ROUNDS = 5
     internal val teachingReplyKinds = setOf(TurnKind.MESSAGE, TurnKind.CHECK_OFFER)
 
@@ -103,7 +105,7 @@ object TutorRules {
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
         if (reply != TurnKind.PASSED && reply != TurnKind.RETRY) return
         if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
-            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == EXAM_REPLY
+            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == EXAM_REPLY || input.text == LEGACY_EXAM_REPLY
         ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")
         }

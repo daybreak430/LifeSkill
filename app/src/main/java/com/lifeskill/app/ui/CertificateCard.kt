@@ -109,7 +109,7 @@ internal fun CertificateCard(
             CertificateSeal(style, palette.ink)
             if (collectedAt != null) {
                 Spacer(Modifier.height(10.dp))
-                val dateLabel = if (isSample) "展示日期" else "首次收下"
+                val dateLabel = if (isSample) "展示日期" else "领取日期"
                 Text("$dateLabel  ${CertificateDateFormat.format(collectedAt)}",
                     Modifier.testTag("certificate-collected-at"),
                     color = palette.ink, textAlign = TextAlign.Center, style = CertificateType.copy(fontSize = 12.sp))

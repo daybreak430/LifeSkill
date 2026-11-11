@@ -48,17 +48,17 @@ internal class ConversationRepository(
         scope: ChatScope, text: String, check: Boolean = false, onRequestQueued: (String) -> Unit = {},
     ) {
         val input = text.trim()
-        if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内检验掌握。")
+        if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面做课后练习。")
         if (!check && input.length !in 1..INPUT_LIMIT) throw RuleViolation("请输入 1–${INPUT_LIMIT} 个字符。")
         val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
         queueAndRespond(
-            scope, kind, if (check && input != TutorRules.EXAM_REPLY) "检验掌握" else input,
+            scope, kind, if (check && input != TutorRules.EXAM_REPLY) "开始课后练习" else input,
             onRequestQueued = onRequestQueued,
         )
     }
 
     suspend fun restartLesson(scope: ChatScope, requirements: String, onRequestQueued: (String) -> Unit = {}) {
-        if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在技能点内重新学习。")
+        if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面重新学习。")
         val input = requirements.trim()
         if (input.length > INPUT_LIMIT) throw RuleViolation("本次学习要求最多 ${INPUT_LIMIT} 个字符。")
         queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued)
@@ -105,10 +105,10 @@ internal class ConversationRepository(
                         val rounds = dao.teachingReplies(scope.id, owner.contentVersion,
                             TutorRules.teachingReplyKinds.map { it.name }, TutorRules.EXAM_TEACHING_ROUNDS)
                         if (!TutorRules.canStartExam(lastReply, rounds)) {
-                            throw RuleViolation("请先完成 ${TutorRules.EXAM_TEACHING_ROUNDS} 轮讲解，或答完当前练习后再发起考试。")
+                            throw RuleViolation("请先完成 ${TutorRules.EXAM_TEACHING_ROUNDS} 轮讲解，或答完当前练习后再开始课后练习。")
                         }
                     } else if (lastReply != TurnKind.CHECK_OFFER) {
-                        throw RuleViolation("等 AI 老师提示后再检验掌握。")
+                        throw RuleViolation("等 AI 老师提示后再做课后练习。")
                     }
                 }
             }
@@ -244,24 +244,24 @@ internal class ConversationRepository(
             } catch (error: SkippedPrerequisiteTier) {
                 throw RecoverableReply(
                     checkNotNull(error.message),
-                    "上一版追加方案包含跨层前置。为每个新技能选择同一逻辑层的直接前置，并重新输出完整 JSON。",
+                    "上一版追加方案包含跨阶段的先修关系。为每节新课选择同一学习阶段的先修课，并重新输出完整 JSON。",
                 )
             }
             return Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, version, resultId = result.entry.id)
         }
         if (options == null && draft.trees.isNotEmpty()) {
             throw RecoverableReply(
-                "请先确认技能树的生成设置。",
-                "用户还未确认掌握程度和课程数量。主题清楚时仅返回 offer_tree，主题不清楚时用 clarify_tree 追问。",
+                "请先确认课程的生成设置。",
+                "用户还未确认学习基础和课时数量。主题清楚时仅返回 offer_tree，主题不清楚时用 clarify_tree 追问。",
             )
         }
         if (options != null) {
             val courseCount = draft.trees.singleOrNull()?.skills?.size ?: 0
             if (courseCount !in options.courseCount) {
-                val expected = "1 棵技能树，包含 ${options.courseCountLabel}"
+                val expected = "1 门课程，包含 ${options.courseCountLabel}课"
                 throw RecoverableReply(
                     "请生成$expected。",
-                    "上一版没有满足用户确认的树数或课数。请重新生成$expected，并输出完整 JSON。",
+                    "上一版没有满足用户确认的课程数量或课时数量。请重新生成$expected，并输出完整 JSON。",
                 )
             }
         }
@@ -274,8 +274,8 @@ internal class ConversationRepository(
             library.validateNewTrees(draft.prepareNewTrees().draft.trees)
         } catch (error: RuleViolation) {
             throw RecoverableReply(
-                error.message ?: "生成的技能树存在冲突，请重试。",
-                "上一版技能树没有通过校验。${error.message.orEmpty()} 请重新生成，核对名称和每棵树的前置关系后输出完整 JSON。",
+                error.message ?: "生成的课程存在冲突，请重试。",
+                "上一版课程没有通过校验。${error.message.orEmpty()} 请重新生成，核对名称和各门课程的先修关系后输出完整 JSON。",
             )
         }
         return Turn(id, Speaker.ASSISTANT, TurnKind.DRAFT, raw, version, resultId = owner?.id)
@@ -285,7 +285,7 @@ internal class ConversationRepository(
         val reply = AiProtocol.tutor(raw)
         TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
         if (context.input.kind == TurnKind.CHECK && reply.kind != TurnKind.EXERCISE) {
-            throw RuleViolation("AI 暂未给出检验题，请重试。")
+            throw RuleViolation("AI 暂未给出练习题，请重试。")
         }
         var text = if (reply.kind == TurnKind.OFF_TOPIC) {
             "我们先回到「${context.owner?.name}」。你想继续哪个知识点，或试试一个小练习？"
@@ -293,10 +293,10 @@ internal class ConversationRepository(
         var kind = reply.kind
         if (kind == TurnKind.PASSED) {
             when (library.lightFromAssessment(checkNotNull(context.owner))) {
-                AssessmentLight.LIT -> text = "已点亮技能点\n$text"
+                AssessmentLight.LIT -> text = "练习通过\n$text"
                 AssessmentLight.LOCKED -> {
                     kind = TurnKind.MESSAGE
-                    text = "练习通过。点亮前置技能后，可重新检验以点亮此技能。\n\n$text"
+                    text = "练习已通过。完成先修课后，需重新通过本节练习才能标记为已完成。\n\n$text"
                 }
                 AssessmentLight.UNCHANGED -> kind = TurnKind.MESSAGE
             }
@@ -320,7 +320,7 @@ internal class ConversationRepository(
 
     private suspend fun requireUnlockedLesson(scope: ChatScope, owner: Entry?) {
         if (scope.mode == ChatMode.TUTOR && library.snapshot().skillState(checkNotNull(owner).id) == SkillState.LOCKED) {
-            throw RuleViolation("点亮全部前置技能后才能学习。")
+            throw RuleViolation("完成全部先修课后才能学习本节。")
         }
     }
 
@@ -345,8 +345,8 @@ internal class ConversationRepository(
             val text = when {
                 mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
                 mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
-                it.kind == TurnKind.CHECK -> "【App 发起检验掌握】请出一道当前技能练习。"
-                it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按当前技能说明重新组织这节课。" +
+                it.kind == TurnKind.CHECK -> "【App 发起课后练习】请出一道本节练习题。"
+                it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按本节学习目标重新组织这节课。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
                 else -> it.modelText
             }
@@ -372,7 +372,7 @@ internal class ConversationRepository(
         if (turnKind == TurnKind.DRAFT) {
             val draft = checkNotNull(AiProtocol.generation(body, savedDraft = true).draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
-            val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成 ${draft.trees.size} 棵技能树"
+            val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成课程草稿"
             return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.prepareNewTrees().notice,
                 contentVersion, preview = preview)
         }

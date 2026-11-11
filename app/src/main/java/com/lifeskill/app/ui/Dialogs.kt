@@ -78,7 +78,12 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
         Surface(Modifier.fillMaxWidth(), shape = DialogShape, color = Panel) {
             Column {
                 Text(
-                    (if (initial.id == null) "新增" else "编辑") + initial.kind.label,
+                    when {
+                        initial.id != null -> "编辑${initial.kind.label}"
+                        initial.kind == EntryKind.TREE -> "新建课程"
+                        skill -> "添加一节课"
+                        else -> "新增方向"
+                    },
                     Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
@@ -90,23 +95,23 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     EditorField(
-                        name, { name = it }, "名称", !editor.saving,
+                        name, { name = it }, "${initial.kind.label}名称", !editor.saving,
                         error = if (nameTooLong) "名称最多 ${LibraryRules.NAME_LIMIT} 个字符" else null,
                         imeAction = if (skill) ImeAction.Next else ImeAction.Done,
                     )
                     if (skill) {
                         EditorField(
-                            goal, { goal = it }, "技能说明", !editor.saving, minLines = 2, maxLines = 5,
-                            error = if (goalTooLong) "技能说明最多 ${LibraryRules.GOAL_LIMIT} 个字符" else null,
+                            goal, { goal = it }, "学习目标", !editor.saving, minLines = 2, maxLines = 5,
+                            error = if (goalTooLong) "学习目标最多 ${LibraryRules.GOAL_LIMIT} 个字符" else null,
                         )
                         EditorField(
-                            shortName, { shortName = it }, "节点简称（选填）", !editor.saving,
+                            shortName, { shortName = it }, "大纲简称（选填）", !editor.saving,
                             placeholder = "2–5 个字", error = if (invalidShortName) "请输入 2–5 个字" else null,
                             imeAction = ImeAction.Done,
                         )
                         if (siblings.isNotEmpty()) {
                             EditorPickerRow(
-                                title = "前置节点", value = if (selected.isEmpty()) "未选择" else "已选 ${selected.size}",
+                                title = "先修课", value = if (selected.isEmpty()) "未选择" else "已选 ${selected.size} 节",
                                 expanded = showPrerequisites, enabled = !editor.saving,
                                 onClick = {
                                     focus.clearFocus()
@@ -137,7 +142,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                     if (!canSelect) {
                                         val reason = if (entry.id !in initial.prerequisites &&
                                             library.remainingBranches(entry.id) == 0
-                                        ) "分支已满" else "不可选"
+                                        ) "后续课时已达上限" else "不可选"
                                         Text(reason, color = Muted, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
@@ -248,12 +253,12 @@ internal fun TreeGenerationDialog(onDismiss: () -> Unit, onConfirm: (GenerationO
 
     AlertDialog(
         onDismissRequest = onDismiss, shape = DialogShape, containerColor = Panel,
-        title = { Text("生成技能树") },
+        title = { Text("生成课程") },
         text = {
             val focus = LocalFocusManager.current
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("当前掌握程度", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+                    Text("你的基础", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     GenerationLevel.entries.forEach { choice ->
                         DialogRadioChoice(choice.label, level == choice) {
                             focus.clearFocus()
@@ -262,7 +267,7 @@ internal fun TreeGenerationDialog(onDismiss: () -> Unit, onConfirm: (GenerationO
                     }
                 }
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("课程数量", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+                    Text("课时数量", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     CourseCountOption.entries.forEach { choice ->
                         DialogRadioChoice(choice.label, countOption == choice) {
                             focus.clearFocus()
@@ -316,11 +321,11 @@ private fun EditorPickerRow(
 @Composable
 internal fun DeletionDialog(entry: Entry, library: Library, busy: Boolean, app: AppViewModel) {
     val affected = when (entry.kind) {
-        EntryKind.DIRECTION -> "该方向下的 ${library.childrenOf(entry.id).size} 棵技能树、${library.progress(entry.id).total} 个技能点及相关对话和考试记录"
-        EntryKind.TREE -> "树内的 ${library.progress(entry.id).total} 个技能点及相关对话和考试记录"
-        EntryKind.SKILL -> "该技能点的连线、点亮记录和学习对话"
+        EntryKind.DIRECTION -> "该方向下的 ${library.childrenOf(entry.id).size} 门课程、${library.progress(entry.id).total} 节课及相关对话和考试记录"
+        EntryKind.TREE -> "课程内的 ${library.progress(entry.id).total} 节课及相关对话和考试记录"
+        EntryKind.SKILL -> "本节的先修关系、完成记录和学习对话"
     }
-    val retention = if (entry.kind == EntryKind.SKILL) "" else "已收藏的证书会保留。"
+    val retention = if (entry.kind == EntryKind.SKILL) "" else "已领取的证书会保留。"
     AlertDialog(
         onDismissRequest = app::cancelDelete,
         shape = DialogShape, containerColor = Panel,
@@ -345,7 +350,7 @@ internal fun ClearConversationDialog(onDismiss: () -> Unit, onConfirm: () -> Uni
         onDismissRequest = onDismiss,
         shape = DialogShape, containerColor = Panel,
         title = { Text("清空当前会话？") },
-        text = { Text("聊天记录和未添加的草稿将被永久删除。已添加的技能树和学习进度会保留。") },
+        text = { Text("聊天记录和未添加的草稿将被永久删除。已添加的课程和学习进度会保留。") },
         confirmButton = {
             Button(
                 onClick = onConfirm, shape = ControlShape,
@@ -367,7 +372,7 @@ internal fun RestartLessonDialog(onDismiss: () -> Unit, onStart: (String) -> Uni
         title = { Text("重新学习") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("开始后将清空此技能的旧对话，且无法恢复。点亮进度会保留。")
+                Text("将删除本节的旧学习对话，无法恢复。已完成的进度会保留。")
                 OutlinedTextField(
                     requirements, { requirements = it }, Modifier.fillMaxWidth().testTag("restart-requirements"),
                     label = { Text("本次学习要求（选填）") },

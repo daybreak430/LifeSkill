@@ -106,7 +106,7 @@ internal fun PersonalScreen(
                 }
                 item(key = "certificate-heading", span = { GridItemSpan(maxLineSpan) }) {
                     Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("证书展柜", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+                        Text("我的证书", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
                         if (hidden.isNotEmpty()) {
                             TextButton({ browsingHidden = true }) { Text("已隐藏（${hidden.size}）") }
                         }
@@ -116,7 +116,7 @@ internal fun PersonalScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Surface(Modifier.fillMaxWidth(), shape = PanelShape, color = Panel) {
                             if (hidden.isEmpty()) {
-                                EmptyState("暂无结业证书", "通过验收并收下证书后，会在这里展示。") { Emblem(Glyph.DIAMOND) }
+                                EmptyState("暂无结业证书", "通过结业考试并领取证书后，会在这里显示。") { Emblem(Glyph.DIAMOND) }
                             } else {
                                 EmptyState("暂无展示的证书") { Emblem(Glyph.DIAMOND) }
                             }
@@ -211,7 +211,7 @@ private fun StudyStatisticsCard(statistics: LearningStatistics, certificateCount
                         Text("/ ${progress.total}", Modifier.alignByBaseline(), color = StatisticsMint,
                             style = MaterialTheme.typography.titleMedium)
                     }
-                    Text("已掌握技能", color = StatisticsMint, style = MaterialTheme.typography.labelLarge)
+                    Text("已完成课时", color = StatisticsMint, style = MaterialTheme.typography.labelLarge)
                 }
                 Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
@@ -224,8 +224,8 @@ private fun StudyStatisticsCard(statistics: LearningStatistics, certificateCount
             }
             HorizontalDivider(color = StatisticsDivider)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                StudyMetric(statistics.passedTrees.toString(), "通过验收", Modifier.weight(1f))
-                StudyMetric(certificateCount.toString(), "获取证书", Modifier.weight(1f))
+                StudyMetric(statistics.passedTrees.toString(), "通过结业考试", Modifier.weight(1f))
+                StudyMetric(certificateCount.toString(), "已领取证书", Modifier.weight(1f))
             }
         }
     }

@@ -46,8 +46,8 @@ internal data class ExamAttempt(
 }
 
 internal enum class TreeChallenge(val title: String) {
-    DIAGNOSTIC("自以为是检测"),
-    FEYNMAN("费曼复习"),
+    DIAGNOSTIC("查漏补缺"),
+    FEYNMAN("费曼复述"),
 }
 
 internal data class ChallengeExchange(val prompt: String, val answer: String, val feedback: String, val accepted: Boolean)

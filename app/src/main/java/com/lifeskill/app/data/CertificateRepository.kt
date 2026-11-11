@@ -39,7 +39,7 @@ internal class CertificateRepository(
     suspend fun setHidden(treeId: String, hidden: Boolean) = database.withTransaction {
         val row = dao.certificate(treeId) ?: throw RuleViolation("这张证书已不存在。")
         val payload = row.payload()
-        if (payload.optBoolean("destroyed")) throw RuleViolation("这张证书已销毁。")
+        if (payload.optBoolean("destroyed")) throw RuleViolation("这张证书已永久删除。")
         if (payload.optBoolean("hidden") != hidden) savePayload(row, payload.put("hidden", hidden))
     }
 
@@ -52,12 +52,12 @@ internal class CertificateRepository(
     suspend fun issue(treeId: String, attemptId: String, enteredNickname: String? = null) = database.withTransaction {
         prepareArchiveInTransaction()
         val attempt = assessments.attempt(treeId, attemptId) ?: throw RuleViolation("本次考试已不存在。")
-        if ((attempt.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后可领取结业证书。")
+        if ((attempt.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过结业考试后可领取结业证书。")
         dao.certificate(treeId)?.let { existing ->
-            if (existing.payload().optBoolean("destroyed")) throw RuleViolation("这张证书已销毁。")
+            if (existing.payload().optBoolean("destroyed")) throw RuleViolation("这张证书已永久删除。")
             return@withTransaction
         }
-        val tree = library.entry(treeId) ?: throw RuleViolation("技能树已不存在。")
+        val tree = library.entry(treeId) ?: throw RuleViolation("课程已不存在。")
         val profile = profiles.current()
         val recipient = if (enteredNickname == null) profile.nickname ?: throw RuleViolation("请填写证书署名。")
             else checkNotNull(validatedNickname(enteredNickname, required = true))

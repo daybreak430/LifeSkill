@@ -35,7 +35,7 @@ internal class TreeAssessmentViewModel(
     val examDraft = _examDraft.asStateFlow()
     val attempts = repository.watchAttempts(treeId)
         .catch { error ->
-            if (error is Exception) _examStatus.value = AssessmentStatus(error = readable(error, "无法读取验收考试。"))
+            if (error is Exception) _examStatus.value = AssessmentStatus(error = readable(error, "无法读取结业考试。"))
             else throw error
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -51,7 +51,7 @@ internal class TreeAssessmentViewModel(
         repository.watchChallenge(treeId, kind)
             .catch { error ->
                 if (error is Exception) challengeOperations.getValue(kind).value =
-                    AssessmentStatus(error = readable(error, "无法读取挑战。"))
+                    AssessmentStatus(error = readable(error, "无法读取课后复习。"))
                 else throw error
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

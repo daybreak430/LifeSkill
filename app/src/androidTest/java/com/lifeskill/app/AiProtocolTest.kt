@@ -141,7 +141,7 @@ class AiProtocolTest {
             assertTrue(prompt.contains("本次掌握程度为「${options.level.label}」"))
             assertTrue(prompt.contains(depth))
             assertTrue(prompt.contains(quantity))
-            assertTrue(prompt.contains("恰好包含 1 棵技能树"))
+            assertTrue(prompt.contains("恰好包含 1 门课程"))
         }
     }
 }

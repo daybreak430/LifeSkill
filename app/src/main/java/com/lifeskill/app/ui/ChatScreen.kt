@@ -72,7 +72,7 @@ import kotlinx.coroutines.flow.first
 private val ReplyInset = 42.dp
 private const val CHAT_END = "chat-end"
 private const val CHAT_STATUS = "chat-status"
-private val creationCount = Regex("""([0-9]+) [个棵](方向|技能树|技能点)""")
+private val creationCount = Regex("""([0-9]+) (?:个(方向|技能点)|棵(技能树)|门(课程)|节(课))""")
 
 @Composable
 internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean) {
@@ -181,7 +181,11 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
 
     Column(Modifier.fillMaxSize()) {
         AiChatHeader(
-            if (tutor) "AI 老师" else "AI 生成", owner?.name, app::back,
+            when {
+                tutor -> "AI 老师"
+                owner?.kind == EntryKind.TREE -> "AI 补充课时"
+                else -> "AI 生成课程"
+            }, owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
             restartEnabled = !status.working,
             onClearConversation = if (!tutor) ({
@@ -197,17 +201,17 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             if (history.isEmpty()) {
                 item {
                     EmptyState(
-                        owner?.name ?: "一起规划技能树",
-                        if (tutor) owner?.goal.orEmpty() else if (owner != null) {
-                            "告诉 AI 你想在这里新增什么。"
-                        } else {
-                            "描述你想学的主题和目标。"
+                        owner?.name ?: "一起规划课程",
+                        when {
+                            tutor -> owner?.goal.orEmpty()
+                            owner?.kind == EntryKind.TREE -> "告诉 AI 你想补充哪些内容"
+                            else -> "描述你想学的主题和目标"
                         },
                     ) { AiCrystal(54.dp, forAction = !tutor) }
                     if (tutor && !status.working) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             ChatPill("开始学习", {
-                                submit("请引导我开始学习这个技能点。")
+                                submit("请带我开始学习本节课。")
                             }, glyph = Glyph.SPARK)
                         }
                     }
@@ -242,12 +246,6 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         )
                     }
                     if (turn.id == latestReply?.id) {
-                        if (checkOffered) {
-                            Text(
-                                "可以试试「检验掌握」", Modifier.padding(start = ReplyInset, top = 8.dp),
-                                style = MaterialTheme.typography.bodySmall, color = Muted,
-                            )
-                        }
                         if (choices.isEmpty()) {
                             FlowRow(
                                 Modifier.padding(start = ReplyInset, top = 4.dp),
@@ -258,7 +256,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                                     onClick = { submit(TutorRules.CONTINUE_REPLY) },
                                     enabled = canSend,
                                 )
-                                if (examAvailable) {
+                                if (examAvailable && !checkOffered) {
                                     ChatPill(
                                         TutorRules.EXAM_REPLY,
                                         onClick = { submit(TutorRules.EXAM_REPLY, check = true) },
@@ -289,12 +287,12 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         ) {
             if (locked) {
                 Text(
-                    "点亮前置技能后可检验掌握", Modifier.padding(vertical = 6.dp),
+                    "完成先修课后可做本节练习", Modifier.padding(vertical = 6.dp),
                     style = MaterialTheme.typography.labelMedium, color = Muted,
                 )
             } else if (checkOffered) {
                 ChatPill(
-                    "检验掌握",
+                    "做课后练习",
                     onClick = { submit("", check = true) },
                     enabled = canSend, glyph = Glyph.TARGET,
                 )
@@ -431,7 +429,7 @@ private fun ChatBubble(
             val backdrop = if (user) Modifier.background(Brush.linearGradient(colors.outgoing)) else Modifier
             Column(backdrop.padding(horizontal = 15.dp, vertical = 12.dp)) {
                 val badge = when (turn.kind) {
-                    TurnKind.EXERCISE -> "掌握检查"
+                    TurnKind.EXERCISE -> "课后练习"
                     TurnKind.RETRY -> "再试一次"
                     else -> null
                 }
@@ -468,7 +466,7 @@ private fun ChatBubble(
                 }
                 if (result != null) {
                     TextButton(onClick = { open(result) }) {
-                        Text("打开${result.kind.label} · ${result.name}", Modifier.weight(1f, fill = false), color = colors.accent)
+                        Text(result.openLabel(), Modifier.weight(1f, fill = false), color = colors.accent)
                         Mark(Glyph.NEXT, colors.accent, Modifier.padding(start = 4.dp).size(15.dp))
                     }
                 }
@@ -477,17 +475,25 @@ private fun ChatBubble(
     }
 }
 
+private fun Entry.openLabel(): String = when (kind) {
+    EntryKind.DIRECTION -> "查看方向"
+    EntryKind.TREE -> "查看课程"
+    EntryKind.SKILL -> "查看本节课"
+} + " · $name"
+
 @Composable
 private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit) {
     val colors = aiColors
     val summary = text.substringBefore('\n')
     val counts = remember(summary) {
         // 旧消息存的是应用生成的计数文本。逐项匹配，保留无法识别的历史格式。
-        if (!summary.startsWith("已新增 ")) emptyList()
-        else summary.removePrefix("已新增 ").split('、').map { creationCount.matchEntire(it) }
+        val countsText = summary.removePrefix("已新增 ").removePrefix("已添加 ")
+        if (countsText == summary) emptyList()
+        else countsText.split('、').map { creationCount.matchEntire(it) }
             .takeIf { parts -> parts.all { it != null } }.orEmpty().filterNotNull()
     }
-    val note = if (counts.isEmpty()) text.removePrefix("已新增 ").trim() else text.substringAfter('\n', "").trim()
+    val note = if (counts.isEmpty()) text.removePrefix("已新增 ").removePrefix("已添加 ").trim()
+        else text.substringAfter('\n', "").trim().replace("前置关系", "先修关系")
     Column(
         Modifier.background(Brush.verticalGradient(listOf(lerp(colors.panel, colors.chip, .32f), colors.panel)))
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -495,7 +501,7 @@ private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Emblem(Glyph.CHECK, colors.accent, colors.chip, diameter = 24.dp)
-            Text("已新增", color = Ink, style = MaterialTheme.typography.titleSmall)
+            Text("已添加", color = Ink, style = MaterialTheme.typography.titleSmall)
         }
         if (counts.isNotEmpty()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -503,7 +509,11 @@ private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit)
                     Column(Modifier.weight(1f)) {
                         Text(count.groupValues[1], color = colors.accent,
                             style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                        Text(count.groupValues[2], color = Muted, style = MaterialTheme.typography.labelMedium)
+                        Text(when (val unit = count.groupValues.drop(2).first { it.isNotEmpty() }) {
+                            "技能树" -> "课程"
+                            "技能点", "课" -> "课时"
+                            else -> unit
+                        }, color = Muted, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -513,7 +523,7 @@ private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit)
             Surface(
                 onClick = { open(result) }, shape = ControlShape, color = colors.chip,
                 modifier = Modifier.fillMaxWidth().semantics {
-                    contentDescription = "打开${result.kind.label} · ${result.name}"
+                    contentDescription = result.openLabel()
                 },
             ) {
                 Row(
@@ -545,7 +555,7 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Loading(Modifier.size(25.dp))
                     Text(
-                        if (pending?.kind == TurnKind.GENERATE_TREE) "正在生成技能树" else "正在等待 AI 回复",
+                        if (pending?.kind == TurnKind.GENERATE_TREE) "正在生成课程" else "正在等待 AI 回复",
                         style = MaterialTheme.typography.labelMedium, color = Muted,
                     )
                 }
@@ -560,10 +570,10 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit
                         ChatPill("重试", { retry(pending) })
                         TextButton(onClick = { discard(pending) }) {
                             Text(when (pending.kind) {
-                                TurnKind.CHECK -> "撤回检验"
+                                TurnKind.CHECK -> "取消练习请求"
                                 TurnKind.RESTART -> "取消请求"
                                 TurnKind.GENERATE_TREE -> "取消生成"
-                                else -> "撤回编辑"
+                                else -> "撤回并编辑"
                             }, color = aiColors.accent)
                         }
                     }

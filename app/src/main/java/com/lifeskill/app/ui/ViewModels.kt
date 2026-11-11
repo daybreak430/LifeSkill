@@ -135,7 +135,7 @@ internal class AppViewModel(
                     discardMissingRoutes(current)
                 }
             } catch (error: Exception) {
-                _loadError.value = readable(error, "无法读取本机技能库。")
+                _loadError.value = readable(error, "无法读取课程。")
             }
         }
     }

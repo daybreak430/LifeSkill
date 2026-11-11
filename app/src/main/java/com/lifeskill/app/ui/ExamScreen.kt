@@ -65,7 +65,7 @@ internal fun ExamScreen(
 
     BackHandler(enabled = active && reviewing) { reviewing = false }
     Column(Modifier.fillMaxSize().imePadding()) {
-        PageHeader(if (reviewing) "错题集" else "验收考试", close, subtitle = tree.name) {
+        PageHeader(if (reviewing) "错题集" else "结业考试", close, subtitle = tree.name) {
             if (!reviewing && latest != null && latest.score == null && best != null) {
                 GlyphButton(Glyph.BOOK, "查看错题集", { reviewing = true })
             }
@@ -101,8 +101,8 @@ private fun ExamIntro(ready: Boolean, status: AssessmentStatus, start: () -> Uni
     ) {
         item {
             EmptyState(
-                if (ready) "准备验收" else "验收考试未解锁",
-                if (ready) "10 道题 · 满分 $EXAM_MAX_SCORE · $EXAM_PASS_SCORE 分通过" else "点亮全部课程后开始考试。",
+                if (ready) "10 道题 · 满分 $EXAM_MAX_SCORE · $EXAM_PASS_SCORE 分通过"
+                else "完成全部课时后可参加考试",
             ) {
                 AssessmentMedallion(EntryIcon.BOOK, 76.dp, if (ready) SkillState.AVAILABLE else SkillState.LOCKED)
             }
@@ -144,7 +144,7 @@ private fun ExamResult(
                     Text("$score 分", style = MaterialTheme.typography.headlineLarge)
                     Text(when (score) {
                         EXAM_MAX_SCORE -> "满分"
-                        in EXAM_PASS_SCORE until EXAM_MAX_SCORE -> "通过验收"
+                        in EXAM_PASS_SCORE until EXAM_MAX_SCORE -> "考试通过"
                         else -> "未通过"
                     }, style = MaterialTheme.typography.titleMedium)
                     if (score != best) Text("最高 $best 分", color = Muted, style = MaterialTheme.typography.bodyMedium)
@@ -153,7 +153,7 @@ private fun ExamResult(
         }
         if (passed && certificate != null && !destroyed) item {
             Action(
-                if (issued == null) "获取结业证书" else "查看结业证书", Glyph.DIAMOND,
+                if (issued == null) "领取结业证书" else "查看结业证书", Glyph.DIAMOND,
                 { certificateMode = if (issued == null) CertificateMode.COLLECT else CertificateMode.VIEW },
                 Modifier.fillMaxWidth(), primary = true, enabled = !status.busy,
             )
@@ -162,7 +162,7 @@ private fun ExamResult(
         if (best < EXAM_MAX_SCORE) item {
             Action(if (status.busy) "正在出题" else "再考一次", Glyph.RESTART, retake, Modifier.fillMaxWidth(),
                 primary = !passed, enabled = ready && !status.busy)
-            if (!ready) Text("点亮全部课程后可再考。", color = Muted, style = MaterialTheme.typography.bodyMedium)
+            if (!ready) Text("完成全部课时后可再考。", color = Muted, style = MaterialTheme.typography.bodyMedium)
         }
         item { AssessmentStatusText(status) }
     }
@@ -202,7 +202,7 @@ private fun ExamPaper(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("已答 $completed / ${answers.size}", Modifier.weight(1f), color = Muted,
                         style = MaterialTheme.typography.labelLarge)
-                    Action(if (status.busy) "正在判卷" else "交卷", Glyph.CHECK, {
+                    Action(if (status.busy) "正在批阅" else "交卷", Glyph.CHECK, {
                         keyboard?.hide()
                         confirm = true
                     }, primary = true, enabled = !status.busy)
@@ -291,7 +291,7 @@ private fun ExamReview(attempts: List<ExamAttempt>, modifier: Modifier) {
                     Text(question.prompt, style = MaterialTheme.typography.titleSmall)
                     ReviewText("你的答案", selected.ifBlank { answer.text.ifBlank { "未作答" } })
                     ReviewText("参考答案", listOf(referenceChoices, question.reference).filter { it.isNotBlank() }.joinToString("\n"))
-                    ReviewText("判卷反馈", mark.feedback)
+                    ReviewText("答题反馈", mark.feedback)
                 }
             }
         }

@@ -154,7 +154,7 @@ private fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
                     CelebrationBadge(skill.displayIcon) { clock.value }
-                    Text("技能已点亮", style = MaterialTheme.typography.headlineSmall,
+                    Text("本节已完成", style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold, color = CelebrationInk, textAlign = TextAlign.Center)
                     Text(skill.name, style = MaterialTheme.typography.bodyMedium,
                         color = CelebrationMint, textAlign = TextAlign.Center)

@@ -165,7 +165,7 @@ class RepositoryTest {
             check.await()
             assertEquals(SkillState.LOCKED, library.snapshot().skillState(child.id))
             assertEquals(Mastery.UNLIT, library.entry(child.id)?.mastery)
-            assertTrue(conversations.watch(scope).first().last().text.contains("点亮前置技能后"))
+            assertTrue(conversations.watch(scope).first().last().text.contains("完成先修课后"))
 
             val history = conversations.watch(scope).first()
             expectRule { conversations.restartLesson(scope, "") }
@@ -212,7 +212,7 @@ class RepositoryTest {
             response(listOf(root, middle))
         }
         ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("追加方案包含跨层前置"))
+            assertTrue(messages.first().text.contains("跨阶段的先修关系"))
             assertEquals(original, library.snapshot())
             response(listOf(middle))
         }
@@ -249,7 +249,7 @@ class RepositoryTest {
         ai.reply(singleTree.toString())
         container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 3..3))
         val secondDraft = container.conversations.watch(scope).first().last()
-        assertTrue(secondDraft.text.contains("略过 1 条不符合规则的前置关系"))
+        assertTrue(secondDraft.text.contains("略过 1 条不符合规则的先修关系"))
         container.conversations.confirmDraft(scope, secondDraft.id, GenerationDestination.New("数据能力"))
         val history = container.conversations.watch(scope).first()
         assertEquals(secondDraft.id, history.last().id)
@@ -260,7 +260,7 @@ class RepositoryTest {
         val (base, next, last) = library.childrenOf(treeId)
         assertEquals(setOf(base.id), library.prerequisitesOf(next.id))
         assertEquals(setOf(next.id), library.prerequisitesOf(last.id))
-        assertTrue(history.last().text.contains("略过 1 条不符合规则的前置关系"))
+        assertTrue(history.last().text.contains("略过 1 条不符合规则的先修关系"))
     }
 
     @Test fun confirmingLegacyDraftKeepsLocalPrerequisitesAndIgnoresForeignReferences() = runBlocking {
@@ -278,7 +278,7 @@ class RepositoryTest {
         """.trimIndent())
         val draft = container.conversations.watch(scope).first().single()
         assertTrue(draft.text.contains("略过 2 条"))
-        assertTrue(draft.text.contains("略过 1 条不符合规则的前置关系"))
+        assertTrue(draft.text.contains("略过 1 条不符合规则的先修关系"))
         assertTrue(container.library.snapshot().childrenOf(direction.id).isEmpty())
 
         container.conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
@@ -394,7 +394,7 @@ class RepositoryTest {
         val request = "生成用于数据审计的技能树，重点是异常诊断"
         ai.reply(CREATED)
         ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("用户还未确认掌握程度和课程数量"))
+            assertTrue(messages.first().text.contains("用户还未确认学习基础和课时数量"))
             TREE_OFFER
         }
         conversations.send(scope, request)
@@ -421,7 +421,7 @@ class RepositoryTest {
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("失效模式和方案权衡"))
             assertTrue(messages.first().text.contains("精确生成 33 节"))
-            assertEquals("确认生成 · 专家 · 33 节", messages.last().text)
+            assertEquals("确认生成 · 熟练 · 33 节", messages.last().text)
             newTreeBatch(33)
         }
         conversations.retry(scope, pending.id)
@@ -449,7 +449,7 @@ class RepositoryTest {
             invalid.toString()
         }
         ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("必须只有一个起点"))
+            assertTrue(messages.first().text.contains("必须有一节起始课"))
             // 第三条分支会被裁剪，再次产生一个无前置节点。
             lastSkill.put("requires", JSONArray().put("skill_0"))
             invalid.toString()
@@ -563,7 +563,7 @@ class RepositoryTest {
 
         ai.reply("可以继续规划这棵技能树。")
         ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("本轮尚未收到 App 的建树确认"))
+            assertTrue(messages.first().text.contains("本轮尚未收到 App 的课程生成确认"))
             assertTrue(messages.first().text.contains("上一次回复未通过格式校验"))
             assertEquals(topic, messages.last().text)
             assertTrue(messages.none { it.role == "assistant" })

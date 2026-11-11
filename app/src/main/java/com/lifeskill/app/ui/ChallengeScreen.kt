@@ -61,20 +61,20 @@ internal fun ChallengeScreen(
                     current == null -> {
                         EmptyState(
                             when {
-                                !passedExam -> "通过验收考试后解锁。"
+                                !passedExam -> "通过结业考试后可开始复习。"
                                 kind == TreeChallenge.DIAGNOSTIC -> "回答 3 道看似简单的问题，找出理解上的漏洞。"
                                 else -> "用自己的话，把刚学到的概念讲给 10 岁的孩子听。"
                             },
                         ) { ChallengeSigilMedallion(kind, 70.dp) }
-                        if (passedExam) Action(if (status.busy) "正在准备" else "开始挑战", Glyph.SPARK,
+                        if (passedExam) Action(if (status.busy) "正在准备" else "开始练习", Glyph.SPARK,
                             { model.startChallenge(kind) }, Modifier.fillMaxWidth(), primary = true, enabled = !status.busy)
                     }
-                    current.passed -> EmptyState("挑战成功") {
+                    current.passed -> EmptyState("练习完成") {
                         ChallengeSigilMedallion(kind, 86.dp, completed = true)
                     }
                     current.finished -> {
-                        EmptyState("挑战未通过", "可以根据反馈再挑战一次。") { ChallengeSigilMedallion(kind, 70.dp) }
-                        Action(if (status.busy) "正在准备" else "再挑战一次", Glyph.RESTART, { model.startChallenge(kind) },
+                        EmptyState("本次练习未通过", "可以根据反馈再练一次。") { ChallengeSigilMedallion(kind, 70.dp) }
+                        Action(if (status.busy) "正在准备" else "再练一次", Glyph.RESTART, { model.startChallenge(kind) },
                             Modifier.fillMaxWidth(), primary = true, enabled = !status.busy)
                     }
                     else -> ChallengeMessage(
@@ -86,7 +86,7 @@ internal fun ChallengeScreen(
         }
         if (current != null && !current.finished) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-                if (status.busy) Text("正在评议", Modifier.align(Alignment.CenterHorizontally),
+                if (status.busy) Text("正在生成反馈", Modifier.align(Alignment.CenterHorizontally),
                     style = MaterialTheme.typography.labelMedium, color = Muted)
                 AiComposer(input, { model.updateChallengeDraft(kind, it) },
                     if (kind == TreeChallenge.FEYNMAN) "输入你的复述" else "输入你的回答",

@@ -43,7 +43,7 @@ internal class PersonalViewModel(private val container: AppContainer) : ViewMode
         container.certificates.setHidden(treeId, hidden)
     }
 
-    fun destroyCertificate(treeId: String) = updateCertificate("无法销毁证书，请重试。") {
+    fun destroyCertificate(treeId: String) = updateCertificate("无法删除证书，请重试。") {
         container.certificates.destroy(treeId)
     }
 

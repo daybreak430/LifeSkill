@@ -5,7 +5,7 @@ import java.text.BreakIterator
 import java.util.Locale
 
 enum class EntryKind(val label: String) {
-    DIRECTION("方向"), TREE("技能树"), SKILL("技能点");
+    DIRECTION("方向"), TREE("课程"), SKILL("课时");
 
     val childKind: EntryKind?
         get() = when (this) {
@@ -19,7 +19,7 @@ enum class EntryKind(val label: String) {
 enum class Mastery { UNLIT, MANUAL, AI }
 
 enum class SkillState(val label: String) {
-    LOCKED("未解锁"), AVAILABLE("可点亮"), LIT("已点亮"),
+    LOCKED("需先修"), AVAILABLE("可学习"), LIT("已完成"),
 }
 
 data class Entry(
@@ -102,7 +102,7 @@ data class Library(val entries: List<Entry> = emptyList(), val edges: List<Edge>
 
 open class RuleViolation(message: String) : IllegalArgumentException(message)
 
-internal class SkippedPrerequisiteTier : RuleViolation("前置节点只能选紧邻的上一层技能。")
+internal class SkippedPrerequisiteTier : RuleViolation("只能选择上一学习阶段的课时作为先修课。")
 
 object LibraryRules {
     const val NAME_LIMIT = 48
@@ -142,7 +142,7 @@ object LibraryRules {
 
     fun goal(value: String): String = value.trim().also {
         if (it.isBlank() || it.length > GOAL_LIMIT) {
-            throw RuleViolation("技能说明需要 1–${GOAL_LIMIT} 个字符。")
+            throw RuleViolation("学习目标需要 1–${GOAL_LIMIT} 个字符。")
         }
     }
 
@@ -184,10 +184,10 @@ object SkillGraph {
 
     fun validate(skillIds: Set<String>, edges: List<Edge>, previousEdges: List<Edge> = emptyList()) {
         if (edges.any { it.skillId !in skillIds || it.prerequisiteId !in skillIds }) {
-            throw RuleViolation("前置节点必须与当前节点属于同一棵技能树。")
+            throw RuleViolation("先修课必须属于同一门课程。")
         }
         if (edges.any { it.skillId == it.prerequisiteId }) {
-            throw RuleViolation("技能点不能把自己设为前置节点。")
+            throw RuleViolation("不能将本节设为自己的先修课。")
         }
         val levels = levels(skillIds, edges)
         val skipped = edges.filterNot { isAdjacent(it, levels) }
@@ -201,7 +201,7 @@ object SkillGraph {
         for ((parent, outgoing) in edges.distinct().groupBy(Edge::prerequisiteId)) {
             // 旧树允许逐步减少超额分支，保存名称或说明时也不丢弃原有关系。
             if (outgoing.size > BRANCH_LIMIT && !previousChildren[parent].orEmpty().containsAll(outgoing)) {
-                throw RuleViolation("每个技能点最多通往 $BRANCH_LIMIT 个后续技能点，请选择还有空位的前置节点。")
+                throw RuleViolation("每节课最多可作为 $BRANCH_LIMIT 节课的先修课，请选择还有空位的课时。")
             }
         }
     }
@@ -231,7 +231,7 @@ object SkillGraph {
                 if (remaining == 0) ready.addLast(nextId)
             }
         }
-        if (visited != skillIds.size) throw RuleViolation("这些前置关系会形成循环。")
+        if (visited != skillIds.size) throw RuleViolation("这些先修课相互依赖，请调整选择。")
         return depths
     }
 }

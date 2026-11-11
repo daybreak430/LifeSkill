@@ -105,10 +105,10 @@ internal fun SkillTreeScreen(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("技能地图", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Text("课程大纲", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             Surface(shape = CircleShape, color = GoldGround) {
                 Text(
-                    "${progress.lit} / ${progress.total} 已点亮", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    "已完成 ${progress.lit} / ${progress.total} 节", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
@@ -117,8 +117,8 @@ internal fun SkillTreeScreen(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            LibraryAction("新增技能点", Glyph.ADD, { app.add(EntryKind.SKILL, tree.id) }, Modifier.weight(1f))
-            AiAction("AI 追加", { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
+            LibraryAction("添加一节课", Glyph.ADD, { app.add(EntryKind.SKILL, tree.id) }, Modifier.weight(1f))
+            AiAction("AI 补充课时", { app.open(Route(Page.GENERATE, tree.id)) }, Modifier.weight(1f))
         }
         Surface(
             modifier = Modifier.weight(1f, fill = false).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -126,7 +126,7 @@ internal fun SkillTreeScreen(
         ) {
             Box(Modifier.fillMaxWidth().skillMapBackdrop(), contentAlignment = Alignment.Center) {
                 if (skills.isEmpty()) {
-                    LibraryEmpty("技能地图还是空的", Glyph.TREE)
+                    LibraryEmpty("还没有课时", Glyph.TREE)
                 } else {
                     SkillMap(
                         skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
@@ -371,7 +371,7 @@ private fun MapNode(
         onClick = onOpen, shape = ControlShape,
         modifier = modifier.semantics {
             contentDescription = skill.name
-            stateDescription = if (focused) "${state.label}，下一步" else state.label
+            stateDescription = if (focused) "${state.label}，建议下一课" else state.label
         },
         color = Color.Transparent,
     ) {

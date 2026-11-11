@@ -133,7 +133,7 @@ internal fun ExamMapNodes(
     val route = if (ready || summary.bestScore != null) studyColors.route else Line
     val revealModifier = if (summary.passed) {
         Modifier.testTag("challenge-reveal").semantics {
-            stateDescription = if (revealed) "挑战节点已显现" else "挑战节点正在蓄力"
+            stateDescription = if (revealed) "课后复习可开始" else "正在显示课后复习"
         }
     } else Modifier
     Column(
@@ -143,7 +143,7 @@ internal fun ExamMapNodes(
         Canvas(Modifier.fillMaxWidth().height(26.dp)) {
             drawLine(route, Offset(center.x, 0f), Offset(center.x, size.height), 2.dp.toPx(), StrokeCap.Round)
         }
-        AssessmentMapNode("验收考试", EntryIcon.BOOK, diameter, state, onExam,
+        AssessmentMapNode("结业考试", EntryIcon.BOOK, diameter, state, onExam,
             score = summary.bestScore, detail = summary.bestScore?.let { "最高 $it 分" })
         if (summary.passed) {
             ChallengeRevealConnector(route, progress = { reveal.value })
@@ -240,7 +240,7 @@ private fun ChallengeMapNode(
 ) {
     Surface(
         onClick = open,
-        modifier = modifier.semantics { stateDescription = if (completed) "挑战成功" else "隐藏挑战" },
+        modifier = modifier.semantics { stateDescription = if (completed) "练习完成" else "课后复习" },
         shape = ControlShape, color = Color.Transparent,
     ) {
         Column(
@@ -249,7 +249,7 @@ private fun ChallengeMapNode(
         ) {
             ChallengeSigilMedallion(kind, diameter, completed, progress)
             Text(kind.title, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
-            if (completed) Text("挑战成功", style = MaterialTheme.typography.labelMedium, color = Gold)
+            if (completed) Text("练习完成", style = MaterialTheme.typography.labelMedium, color = Gold)
         }
     }
 }

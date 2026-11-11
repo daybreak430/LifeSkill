@@ -34,9 +34,9 @@ internal data class EntryEdit(
 internal data class Creation(val entry: Entry, val directions: Int, val trees: Int, val skills: Int) {
     val summary get() = listOfNotNull(
         directions.takeIf { it > 0 }?.let { "${it} 个方向" },
-        trees.takeIf { it > 0 }?.let { "${it} 棵技能树" },
-        skills.takeIf { it > 0 }?.let { "${it} 个技能点" },
-    ).joinToString("、", prefix = "已新增 ")
+        trees.takeIf { it > 0 }?.let { "${it} 门课程" },
+        skills.takeIf { it > 0 }?.let { "${it} 节课" },
+    ).joinToString("、", prefix = "已添加 ")
 }
 
 internal enum class AssessmentLight { LIT, LOCKED, UNCHANGED }
@@ -116,7 +116,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             val previousEdges = dao.edgesInTree(checkNotNull(saved.parentId)).map { Edge(it.skillId, it.prerequisiteId) }
             SkillGraph.validate(ids, previousEdges.filterNot { it.skillId == saved.id } + newEdges, previousEdges)
         } else if (newEdges.isNotEmpty()) {
-            throw RuleViolation("只有技能点可以设置前置关系。")
+            throw RuleViolation("只有课时可以设置先修课。")
         }
         if (previousRow == null) {
             dao.insertEntry(saved.row(dao.nextPosition()))
@@ -213,7 +213,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
     private fun requireSingleRoot(tree: TreeDraft) {
         // 这里读取整理后的前置关系。配合无环校验，唯一的无前置节点保证所有节点都能追溯到它。
         if (tree.skills.count { it.requires.isEmpty() } != 1) {
-            throw RuleViolation("生成的技能树必须只有一个起点，其余技能点都需要前置。请重新生成。")
+            throw RuleViolation("生成的课程必须有一节起始课，其余课时都需要先修课。请重新生成。")
         }
     }
 
@@ -235,7 +235,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             .groupingBy { it }.eachCount().toMutableMap()
         val additions = drafts.map { draft ->
             if (!REF.matches(draft.ref) || draft.ref in refIds) {
-                throw RuleViolation("AI 返回了重复或无效的技能点标识，请重试。")
+                throw RuleViolation("AI 返回了重复或无效的课时标识，请重试。")
             }
             val name = LibraryRules.name(draft.name)
             LibraryRules.checkUnique(name, names)
@@ -252,7 +252,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
                     ref.removePrefix(EXISTING).takeIf { it in existingIds }
                 } else {
                     refIds[ref]
-                } ?: throw RuleViolation("AI 返回的前置节点不存在或属于另一棵技能树，请重试。")
+                } ?: throw RuleViolation("AI 返回的先修课不存在或属于另一门课程，请重试。")
                 Edge(refIds.getValue(draft.ref), prerequisite)
             }
         }

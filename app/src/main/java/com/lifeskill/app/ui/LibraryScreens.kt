@@ -92,7 +92,7 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         if (study != null) {
             item(key = "home-ai", span = { GridItemSpan(maxLineSpan) }) {
                 AiAction(
-                    label = "AI 生成技能树",
+                    label = "AI 生成课程",
                     onClick = { app.open(Route(Page.GENERATE)) },
                     modifier = Modifier.fillMaxWidth().animateItem(),
                     wide = true,
@@ -162,14 +162,14 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
             }
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LibraryAction("新增技能树", Glyph.ADD, { app.add(EntryKind.TREE, direction.id) }, Modifier.weight(1f))
+                    LibraryAction("新建课程", Glyph.ADD, { app.add(EntryKind.TREE, direction.id) }, Modifier.weight(1f))
                     AiAction(
-                        "AI 生成", { app.open(Route(Page.GENERATE, direction.id)) }, Modifier.weight(1f),
+                        "AI 生成课程", { app.open(Route(Page.GENERATE, direction.id)) }, Modifier.weight(1f),
                     )
                 }
             }
-            item { LibrarySection("技能树", Modifier.padding(top = 12.dp, bottom = 2.dp)) }
-            if (trees.isEmpty()) item { LibraryEmpty("还没有技能树", Glyph.TREE) }
+            item { LibrarySection("课程", Modifier.padding(top = 12.dp, bottom = 2.dp)) }
+            if (trees.isEmpty()) item { LibraryEmpty("暂无课程", Glyph.TREE) }
             items(trees, key = Entry::id) { tree ->
                 SkillTreeCard(tree, library.progress(tree.id), tree.id == latestTreeId, Modifier.animateItem()) {
                     app.open(Route.entry(tree))

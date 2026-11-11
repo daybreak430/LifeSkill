@@ -122,7 +122,7 @@ internal class TreeAssessmentRepository(
         if (answer.length !in 1..EXAM_ANSWER_LIMIT) throw RuleViolation("请输入 1–${EXAM_ANSWER_LIMIT} 个字符。")
         val (row, session, learning) = database.withTransaction {
             val current = requirePassedTree(treeId)
-            val row = dao.challenge(treeId, kind.name) ?: throw RuleViolation("请先开始挑战。")
+            val row = dao.challenge(treeId, kind.name) ?: throw RuleViolation("请先开始练习。")
             val session = row.decode()
             if (session.finished) return@withTransaction null
             Triple(row, session, learningContext(current, treeId))
@@ -131,7 +131,7 @@ internal class TreeAssessmentRepository(
         val reply = request(TreeAssessmentProtocol.challengeRequest(kind, learning, session, answer)) {
             TreeAssessmentProtocol.challenge(it, needsFeedback = true, needsQuestion = needsQuestion).also { reply ->
                 if (needsQuestion == true && (reply.next == session.prompt || session.exchanges.any { it.prompt == reply.next })) {
-                    throw RecoverableReply("AI 返回了重复的挑战题，请重试。", "保留对本题的反馈，next 改为未问过的新题。")
+                    throw RecoverableReply("AI 返回了重复的练习题，请重试。", "保留对本题的反馈，next 改为未问过的新题。")
                 }
             }
         }
@@ -154,13 +154,13 @@ internal class TreeAssessmentRepository(
     }
 
     private suspend fun requireReadyTree(treeId: String) = library.snapshot().also {
-        if (it.byId[treeId]?.kind != EntryKind.TREE) throw RuleViolation("技能树已不存在。")
-        if (!it.examAvailable(treeId)) throw RuleViolation("点亮全部课程后解锁验收考试。")
+        if (it.byId[treeId]?.kind != EntryKind.TREE) throw RuleViolation("课程已不存在。")
+        if (!it.examAvailable(treeId)) throw RuleViolation("完成全部课时后可参加结业考试。")
     }
 
     private suspend fun requirePassedTree(treeId: String) = library.snapshot().also {
-        if (it.byId[treeId]?.kind != EntryKind.TREE) throw RuleViolation("技能树已不存在。")
-        if ((dao.bestScore(treeId) ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后解锁挑战。")
+        if (it.byId[treeId]?.kind != EntryKind.TREE) throw RuleViolation("课程已不存在。")
+        if ((dao.bestScore(treeId) ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过结业考试后可开始复习。")
     }
 
     private fun curriculum(current: Library, treeId: String) =

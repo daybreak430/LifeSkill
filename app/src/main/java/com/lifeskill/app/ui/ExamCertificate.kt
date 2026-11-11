@@ -223,7 +223,7 @@ internal fun ExamCertificateDialog(
                         CertificateViewerActions(controls, exiting, { confirmingDestruction = true }) { closing = true }
                     } else if (onCollect != null) {
                         if (requested && status.error != null) AssessmentStatusText(status)
-                        Action("收下", Glyph.CHECK, {
+                        Action("领取证书", Glyph.CHECK, {
                             if (recipient == null) {
                                 enteringNickname = true
                             } else {
@@ -266,7 +266,7 @@ private fun CertificateViewerActions(
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text("销毁证书", color = MaterialTheme.colorScheme.error) },
+                    text = { Text("永久删除证书", color = MaterialTheme.colorScheme.error) },
                     onClick = {
                         secondaryExpanded = false
                         confirmDestruction()
@@ -288,10 +288,10 @@ private fun CertificateDestructionConfirmation(
             Modifier.verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("销毁证书？", style = MaterialTheme.typography.titleLarge)
+            Text("永久删除证书？", style = MaterialTheme.typography.titleLarge)
             Text(
-                if (isSample) "示例证书将从证书展柜中移除，此操作无法撤销。"
-                else "证书将从证书展柜和获取证书统计中移除，无法恢复或重新领取。",
+                if (isSample) "示例证书将从我的证书中移除，此操作无法撤销。"
+                else "证书将从我的证书和已领取证书统计中移除，无法恢复或重新领取。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (submitted) AssessmentStatusText(status)
@@ -306,7 +306,7 @@ private fun CertificateDestructionConfirmation(
                     enabled = !status.busy,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError),
-                ) { Text("确认销毁") }
+                ) { Text("永久删除") }
             }
         }
     }
@@ -325,7 +325,7 @@ private fun CertificateNicknameForm(
             NicknameField(nickname, { change(it); validationError = null }, !status.busy,
                 Modifier.focusRequester(focus).testTag("certificate-nickname"))
             AssessmentStatusText(AssessmentStatus(error = validationError ?: status.error))
-            Action("保存并收下", Glyph.CHECK, {
+            Action("保存并领取", Glyph.CHECK, {
                 try {
                     val valid = checkNotNull(validatedNickname(nickname, required = true))
                     keyboard?.hide()

@@ -35,7 +35,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
     val halo = state.tint()
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
     val mastery = when {
-        state == SkillState.LIT && skill.mastery == Mastery.AI -> "已点亮 · AI 检验通过"
+        state == SkillState.LIT && skill.mastery == Mastery.AI -> "已完成 · 练习通过"
         else -> state.label
     }
     Column(Modifier.fillMaxSize()) {
@@ -49,7 +49,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             EntryMenu(skill, app)
-            GlyphButton(Glyph.CLOSE, "关闭技能详情", app::back)
+            GlyphButton(Glyph.CLOSE, "关闭课时详情", app::back)
         }
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -81,12 +81,12 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
                 modifier = Modifier.fillMaxWidth().panelShadow(),
             ) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("技能说明", style = MaterialTheme.typography.titleMedium)
+                    Text("学习目标", style = MaterialTheme.typography.titleMedium)
                     LessonMarkdown(skill.goal)
                 }
             }
             if (prerequisites.isNotEmpty()) {
-                Text("前置技能", Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium)
+                Text("先修课", Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium)
                 prerequisites.forEach { entry ->
                     EntryTile(entry, library.skillState(entry.id), { app.open(Route.entry(entry)) })
                 }
@@ -97,8 +97,8 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val restriction = when {
-                state == SkillState.LOCKED && skill.lit -> "补齐前置技能后恢复原点亮记录"
-                state == SkillState.LOCKED -> "点亮全部前置技能后解锁"
+                state == SkillState.LOCKED && skill.lit -> "完成先修课后，将恢复本节的完成状态"
+                state == SkillState.LOCKED -> "完成列出的先修课后即可学习本节"
                 else -> null
             }
             restriction?.let {
@@ -108,7 +108,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
                 )
             }
             Action(
-                "学习技能", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
+                "开始学习", Glyph.SPARK, { app.open(Route(Page.TUTOR, skill.id)) },
                 Modifier.fillMaxWidth(), primary = true, enabled = state != SkillState.LOCKED,
             )
         }

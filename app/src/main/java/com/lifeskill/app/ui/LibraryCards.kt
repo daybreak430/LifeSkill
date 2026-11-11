@@ -100,15 +100,15 @@ internal fun HomeStudyCard(
     }
     val context = when (study?.state) {
         null -> null
-        HomeStudyState.NEXT -> "下一步 · ${study.tree.name}"
+        HomeStudyState.NEXT -> "建议下一课 · ${study.tree.name}"
         HomeStudyState.COMPLETED -> "已完成"
         else -> study.tree.name
     }
     val action = when (study?.state) {
-        null -> "AI 生成技能树"
+        null -> "AI 生成课程"
         HomeStudyState.NEXT -> "开始学习"
-        HomeStudyState.LOCKED -> "查看技能"
-        HomeStudyState.COMPLETED -> "查看技能地图"
+        HomeStudyState.LOCKED -> "查看本节课"
+        HomeStudyState.COMPLETED -> "查看课程"
         HomeStudyState.RESUME -> "继续学习"
     }
     Box(modifier.fillMaxWidth().clipToBounds()) {
@@ -234,7 +234,7 @@ internal fun DirectionCard(
     val tint = entryTint(entry)
     val open = Modifier.clickable(role = Role.Button, onClick = onClick)
     val status = if (progress.total > 0) Modifier.semantics {
-        stateDescription = "已学会 ${progress.lit} 个技能点，共 ${progress.total} 个"
+        stateDescription = "共 ${progress.total} 节课，已完成 ${progress.lit} 节"
     } else Modifier
     Surface(modifier.fillMaxWidth().panelShadow(), color = Panel, contentColor = Ink, shape = PanelShape) {
         Column(
@@ -257,14 +257,14 @@ internal fun DirectionCard(
                     createTree != null -> TextButton(onClick = createTree, contentPadding = PaddingValues(horizontal = 4.dp)) {
                         Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
                         Text(
-                            "创建技能树",
-                            Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}创建技能树" },
+                            "新建课程",
+                            Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}新建课程" },
                             style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }
                     progress.total > 0 -> DirectionProgress(progress, tint)
                     else -> Text(
-                        "暂无技能点", Modifier.padding(start = 41.dp),
+                        "尚未添加课时", Modifier.padding(start = 41.dp),
                         color = Muted, style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -322,7 +322,7 @@ internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, mod
                 Text(tree.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (progress.total > 0) SegmentedProgress(progress)
                 Text(
-                    if (progress.total > 0) progress.label else "暂无技能点",
+                    if (progress.total > 0) progress.label else "尚未添加课时",
                     style = MaterialTheme.typography.labelMedium, color = Muted,
                 )
             }
@@ -338,7 +338,7 @@ internal fun LibraryEmpty(title: String, glyph: Glyph) {
     }
 }
 
-private val Progress.label get() = "$lit / $total 已点亮"
+private val Progress.label get() = "已完成 $lit / $total 节"
 
 @Composable
 private fun StudyBookmark() {
