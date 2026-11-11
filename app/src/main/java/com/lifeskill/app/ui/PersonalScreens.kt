@@ -233,7 +233,7 @@ private fun StudyStatisticsCard(
                 StudyMetric(certificateCount.toString(), "已领取证书", Modifier.weight(1f))
             }
             HorizontalDivider(color = StatisticsDivider)
-            AiUsageSummary(usage, color = StatisticsWhite, label = "DeepSeek 累计用量")
+            AiUsageSummary(usage, color = StatisticsWhite, label = "AI 累计用量")
         }
     }
 }

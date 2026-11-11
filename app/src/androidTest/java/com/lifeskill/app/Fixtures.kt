@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.test.runner.AndroidJUnitRunner
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.DeepSeekBalance
-import com.lifeskill.app.ai.DeepSeekUsage
+import com.lifeskill.app.ai.ModelUsage
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
@@ -32,11 +32,11 @@ internal fun fixture(database: LifeSkillDatabase, ai: AiGateway): AppContainer =
     AppContainer(database, SecretBox("lifeskill-tests"), FixtureSettings(), ai)
 
 internal class ScriptedGateway : AiGateway {
-    private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: DeepSeekUsage? = null)
+    private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: ModelUsage? = null)
     private val script = ConcurrentLinkedQueue<Reply>()
     private val balanceScript = ConcurrentLinkedQueue<suspend () -> DeepSeekBalance>()
 
-    fun reply(json: String, usage: DeepSeekUsage? = null) {
+    fun reply(json: String, usage: ModelUsage? = null) {
         script.add(Reply({ json }, usage))
     }
 
@@ -53,7 +53,7 @@ internal class ScriptedGateway : AiGateway {
 
     override suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean,
-        onUsage: (suspend (DeepSeekUsage) -> Unit)?,
+        onUsage: (suspend (ModelUsage) -> Unit)?,
     ): String {
         val reply = checkNotNull(script.poll()) { "测试缺少预设 AI 响应。" }
         if (onUsage != null && reply.usage != null) onUsage(reply.usage)

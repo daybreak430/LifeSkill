@@ -9,7 +9,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.lifeskill.app.ai.AiGateway
-import com.lifeskill.app.ai.DeepSeekPricing
+import com.lifeskill.app.ai.ModelPricing
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import kotlinx.coroutines.NonCancellable
@@ -31,6 +31,7 @@ internal data class AiUsageRow(
     val outputTokens: Long,
     val cachedInputTokens: Long?,
     val estimatedCostNanos: Long?,
+    val reportedTotalTokens: Long?,
 )
 
 internal data class UsageGroup(
@@ -51,7 +52,7 @@ internal interface AiUsageDao {
     suspend fun attachDraft(draftId: String, courseId: String)
 
     @Query("""
-        SELECT courseId, lessonId, generation, SUM(inputTokens + outputTokens) AS tokens,
+        SELECT courseId, lessonId, generation, SUM(COALESCE(reportedTotalTokens, inputTokens + outputTokens)) AS tokens,
             SUM(estimatedCostNanos) AS costNanos, COUNT(*) - COUNT(estimatedCostNanos) AS unpriced
         FROM ai_usage GROUP BY courseId, lessonId, generation
     """)
@@ -106,8 +107,9 @@ internal class AiUsageRepository(private val dao: AiUsageDao, private val gatewa
                 dao.insert(AiUsageRow(
                     courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
                     generation = target.generation, model = usage.model, createdAt = usage.timestamp.epochSecond,
-                    inputTokens = usage.inputTokens, outputTokens = usage.outputTokens,
-                    cachedInputTokens = usage.cachedInputTokens, estimatedCostNanos = DeepSeekPricing.estimateNanos(usage),
+                    inputTokens = usage.inputTokens ?: 0, outputTokens = usage.outputTokens ?: 0,
+                    cachedInputTokens = usage.cachedInputTokens, estimatedCostNanos = ModelPricing.estimateNanos(usage),
+                    reportedTotalTokens = usage.reportedTotalTokens,
                 ))
             } catch (_: SQLiteException) {
                 Log.w("AiUsage", "无法保存本次用量")

@@ -50,7 +50,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.ai.DeepSeekBalance
 import com.lifeskill.app.ai.DeepSeekBalanceInfo
-import com.lifeskill.app.ai.DeepSeekUsage
+import com.lifeskill.app.ai.ModelUsage
+import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.CertificateTheme
@@ -538,7 +539,8 @@ class MvpFlowTest {
         await("LifeSkill")
         val library = fixture.container.library
         val profiles = fixture.container.profiles
-        val receipt = DeepSeekUsage("deepseek-flash", Instant.parse("2026-11-11T02:00:00Z"), 1_000, 200, 100)
+        val receipt = ModelUsage(Provider.DEEPSEEK, "deepseek-flash", Instant.parse("2026-11-11T02:00:00Z"), 1_000, 200, 100)
+        val miniMaxReceipt = receipt.copy(provider = Provider.MINIMAX, model = "MiniMax-M3.1-Flash")
         val original = runBlocking { profiles.current().also { profiles.save(PersonalProfile()) } }
         val (direction, tree, skill) = runBlocking {
             val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "验收考试导航"))
@@ -556,6 +558,7 @@ class MvpFlowTest {
             await(tree.name)
             ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
             await("1,200 Token · 预估 ¥0.0034")
+            ui.onNodeWithText("AI 用量").assertIsDisplayed()
             ui.onNodeWithContentDescription(skill.name).performTouchInput { click() }
             await("学习目标")
             ui.onNodeWithText("1,200 Token · 预估 ¥0.0034").assertIsDisplayed()
@@ -574,7 +577,7 @@ class MvpFlowTest {
             map.performScrollToNode(hasText("结业考试"))
             ui.onNodeWithText("结业考试").performTouchInput { click() }
             await("开始考试")
-            fixture.ai.reply(examFixture(), receipt)
+            fixture.ai.reply(examFixture(), miniMaxReceipt)
             ui.onNodeWithText("开始考试").performTouchInput { click() }
             await("验收单选1")
 
@@ -601,7 +604,7 @@ class MvpFlowTest {
             await("90 分")
             ui.onNodeWithText("考试通过").assertIsDisplayed()
             ui.onNodeWithText("再考一次").assertIsEnabled()
-            collectExamCertificate(tree.name, "3,600 Token · 预估 ¥0.0102")
+            collectExamCertificate(tree.name, "3,600 Token · 预估 ¥0.0085")
             ui.onNodeWithText("查看错题集").performTouchInput { click() }
             await("验收填空3")
             ui.onAllNodesWithText("未作答")[0].assertIsDisplayed()
@@ -650,13 +653,14 @@ class MvpFlowTest {
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("tab-personal").fetchSemanticsNodes().isNotEmpty() }
             ui.onNodeWithTag("tab-personal").performClick()
             await("更名后的学员")
-            ui.onNodeWithText("3,600 Token · 预估 ¥0.0102").assertIsDisplayed()
+            ui.onNodeWithText("AI 累计用量").assertIsDisplayed()
+            ui.onNodeWithText("3,600 Token · 预估 ¥0.0085").assertIsDisplayed()
             ui.onNodeWithText("查看全部").assertDoesNotExist()
             ui.onNodeWithTag("personal-home").performScrollToNode(hasTestTag("collected-certificate-${tree.id}"))
             ui.onNodeWithTag("collected-certificate-${tree.id}").performTouchInput { click() }
             ui.onNodeWithText("证书学员").assertIsDisplayed()
             ui.onNode(hasText(tree.name) and hasAnyAncestor(hasTestTag("exam-certificate"))).assertIsDisplayed()
-            ui.onNode(hasText("3,600 Token · 预估 ¥0.0102") and hasAnyAncestor(hasTestTag("certificate-ai-usage")))
+            ui.onNode(hasText("3,600 Token · 预估 ¥0.0085") and hasAnyAncestor(hasTestTag("certificate-ai-usage")))
                 .performScrollTo().assertIsDisplayed()
             pressBack()
             ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }

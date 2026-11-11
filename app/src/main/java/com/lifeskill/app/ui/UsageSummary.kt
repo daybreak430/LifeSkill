@@ -19,7 +19,7 @@ internal fun AiUsageSummary(
     modifier: Modifier = Modifier,
     color: Color = Muted,
     generation: UsageTotal? = null,
-    label: String = "DeepSeek 用量",
+    label: String = "AI 用量",
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = color, style = MaterialTheme.typography.labelMedium)

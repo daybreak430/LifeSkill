@@ -8,6 +8,7 @@ import com.lifeskill.app.ai.OpenAiGateway
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.UsageTarget
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.GenerationDestination
@@ -78,6 +79,40 @@ class AiGatewayTest {
         expectError(Response(failure = SocketTimeoutException()), "超时")
         expectError(Response(failure = UnknownHostException()), "网络")
         expectError(Response(failure = SSLHandshakeException("模拟证书错误")), "HTTPS")
+    }
+
+    @Test fun combinesOfficialProviderReceiptsAndLeavesSubscriptionFeesUnpriced() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        try {
+            val deepSeek = ModelSettings(Provider.DEEPSEEK, apiKey = "test-key")
+            val miniMax = ModelSettings(Provider.MINIMAX, apiKey = "test-pay-as-you-go")
+            val response = """{"created":1794362400,"choices":[{"message":{"content":"完成"}}],
+                "usage":{"prompt_tokens":1000,"completion_tokens":200,"total_tokens":1200,
+                "prompt_tokens_details":{"cached_tokens":100}}}"""
+            val totalOnly = """{"choices":[{"message":{"content":"完成"}}],"usage":{"total_tokens":50}}"""
+            val replies = ArrayDeque(listOf(response, response, response, totalOnly, response))
+            val gateway = OpenAiGateway { Response(body = replies.removeFirst()) }
+            val app = fixture(database, gateway)
+            val target = UsageTarget(courseId = "course", lessonId = "lesson")
+            app.usage.complete(deepSeek, messages, structured = false, target = target)
+            app.usage.complete(miniMax, messages, structured = false, target = target)
+            app.usage.complete(miniMax.copy(apiKey = "sk-cp-fixture"), messages, structured = false, target = target)
+            app.usage.complete(miniMax, messages, structured = false, target = target)
+            app.usage.complete(
+                ModelSettings(Provider.CUSTOM, miniMax.baseUrl, miniMax.model, "test-custom"),
+                messages, structured = false, target = target,
+            )
+            val summary = app.usage.summary.first()
+            val total = checkNotNull(summary.total)
+            assertEquals(3_650L, total.tokens)
+            assertEquals(5_114_000L, total.costNanos)
+            assertEquals(2, total.unpriced)
+            assertEquals(total, summary.courses["course"])
+            assertEquals(total, summary.lessons["lesson"])
+        } finally {
+            database.close()
+        }
     }
 
     @Test fun assignsEveryBilledGenerationAttemptToTheConfirmedCourse() = runBlocking {

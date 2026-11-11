@@ -33,7 +33,7 @@ internal class RecoverableReply(
 internal interface AiGateway {
     suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean = true,
-        onUsage: (suspend (DeepSeekUsage) -> Unit)? = null,
+        onUsage: (suspend (ModelUsage) -> Unit)? = null,
     ): String
 
     suspend fun balance(settings: ModelSettings): DeepSeekBalance =
@@ -48,7 +48,7 @@ internal class OpenAiGateway(
         messages: List<ModelMessage>,
         structured: Boolean,
         useJsonMode: Boolean,
-        onUsage: (suspend (DeepSeekUsage) -> Unit)?,
+        onUsage: (suspend (ModelUsage) -> Unit)?,
     ): String = withContext(Dispatchers.IO) {
         val valid = settings.validated()
         val jsonMode = valid.provider == Provider.DEEPSEEK && structured && useJsonMode
@@ -71,10 +71,10 @@ internal class OpenAiGateway(
             val raw = readBody(connection, "AI 响应过长，请缩小本次请求。")
             val response = AiJson.objectOrNull(raw)
             // 正文可能触发补试，先记录服务商返回的用量，避免漏掉已计费的尝试。
-            if (response != null && onUsage != null && valid.provider == Provider.DEEPSEEK &&
-                valid.baseUrl == Provider.DEEPSEEK.baseUrl
+            if (response != null && onUsage != null && valid.provider != Provider.CUSTOM &&
+                valid.baseUrl == valid.provider.baseUrl
             ) {
-                DeepSeekUsage.from(response, valid.model, startedAt)?.let { onUsage(it) }
+                ModelUsage.from(response, valid, startedAt)?.let { onUsage(it) }
             }
             readCompletion(response, jsonMode)
         } catch (_: SocketTimeoutException) {

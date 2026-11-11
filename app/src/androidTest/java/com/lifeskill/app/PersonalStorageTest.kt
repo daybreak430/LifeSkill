@@ -55,7 +55,7 @@ class PersonalStorageTest {
         val frozenStyle = CertificateStyle.forTree(old.copy(icon = EntryIcon.CODE))
         val profile = PersonalProfile("现在的昵称", ProfileAvatar.Preset(AvatarPreset.CAT))
         try {
-            createVersionThree(name).use { database ->
+            createOldDatabase(name, 3).use { database ->
                 database.execSQL("INSERT INTO bootstrap (id) VALUES (1)")
                 listOf(direction, old, second, waiting, lit, unlit).forEachIndexed { index, entry ->
                     database.execSQL(
@@ -251,14 +251,37 @@ class PersonalStorageTest {
         }
     }
 
-    private fun createVersionThree(name: String): SQLiteDatabase {
+    @Test fun preservesExistingUsageWhenAddingProviderTotals() = runBlocking {
+        val name = "usage-upgrade-${UUID.randomUUID()}"
+        try {
+            createOldDatabase(name, 5).use { database ->
+                database.execSQL("""
+                    INSERT INTO ai_usage (courseId, lessonId, generation, model, createdAt,
+                        inputTokens, outputTokens, cachedInputTokens, estimatedCostNanos)
+                    VALUES ('course', 'lesson', 0, 'deepseek-flash', 1794362400, 1000, 200, 100, 3404000)
+                """.trimIndent())
+            }
+            withDatabase(name) { database ->
+                val summary = fixture(database, ScriptedGateway()).usage.summary.first()
+                val total = checkNotNull(summary.total)
+                assertEquals(1_200L, total.tokens)
+                assertEquals(3_404_000L, total.costNanos)
+                assertEquals(total, summary.courses["course"])
+                assertEquals(total, summary.lessons["lesson"])
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
+
+    private fun createOldDatabase(name: String, schemaVersion: Int): SQLiteDatabase {
         val path = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
-        val asset = "${LifeSkillDatabase::class.java.name}/3.json"
+        val asset = "${LifeSkillDatabase::class.java.name}/$schemaVersion.json"
         val schema = instrumentation.context.assets.open(asset).bufferedReader().use {
             JSONObject(it.readText()).getJSONObject("database")
         }
         return SQLiteDatabase.openOrCreateDatabase(path, null).apply {
-            // 使用已提交的 v3 导出结构创建实际旧库，由 Room 在下次打开时执行升级。
+            // 使用已提交的导出结构创建实际旧库，由 Room 在下次打开时执行升级。
             val entities = schema.getJSONArray("entities")
             for (index in 0 until entities.length()) {
                 val table = entities.getJSONObject(index)
@@ -271,7 +294,7 @@ class PersonalStorageTest {
             }
             val setup = schema.getJSONArray("setupQueries")
             for (index in 0 until setup.length()) execSQL(setup.getString(index))
-            version = 3
+            version = schemaVersion
         }
     }
 }

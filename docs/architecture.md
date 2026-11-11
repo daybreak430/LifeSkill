@@ -25,7 +25,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 | 课程、先修关系和课程大纲 | [LibraryRepository.kt](../app/src/main/java/com/lifeskill/app/data/LibraryRepository.kt)、[Library.kt](../app/src/main/java/com/lifeskill/app/model/Library.kt)、[SkillMapLayout.kt](../app/src/main/java/com/lifeskill/app/model/SkillMapLayout.kt)、[SkillTreeScreen.kt](../app/src/main/java/com/lifeskill/app/ui/SkillTreeScreen.kt) |
 | AI 生成、草稿确认和课时教学 | [ConversationRepository.kt](../app/src/main/java/com/lifeskill/app/data/ConversationRepository.kt)、[AiProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/AiProtocol.kt)、[ChatScreen.kt](../app/src/main/java/com/lifeskill/app/ui/ChatScreen.kt) |
 | 模型设置和网络请求 | [ModelSettings.kt](../app/src/main/java/com/lifeskill/app/ai/ModelSettings.kt)、[AiGateway.kt](../app/src/main/java/com/lifeskill/app/ai/AiGateway.kt)、[LocalSettings.kt](../app/src/main/java/com/lifeskill/app/data/LocalSettings.kt) |
-| DeepSeek 用量与费用 | [DeepSeekUsage.kt](../app/src/main/java/com/lifeskill/app/ai/DeepSeekUsage.kt)、[AiUsageRepository.kt](../app/src/main/java/com/lifeskill/app/data/AiUsageRepository.kt) |
+| AI 用量与费用 | [ModelUsage.kt](../app/src/main/java/com/lifeskill/app/ai/ModelUsage.kt)、[AiUsageRepository.kt](../app/src/main/java/com/lifeskill/app/data/AiUsageRepository.kt) |
 | 结业考试和课后复习 | [TreeAssessment.kt](../app/src/main/java/com/lifeskill/app/model/TreeAssessment.kt)、[TreeAssessmentProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TreeAssessmentProtocol.kt)、[TreeAssessmentRepository.kt](../app/src/main/java/com/lifeskill/app/data/TreeAssessmentRepository.kt)、[ExamScreen.kt](../app/src/main/java/com/lifeskill/app/ui/ExamScreen.kt) |
 | 个人资料、学习统计和证书展柜 | [PersonalScreens.kt](../app/src/main/java/com/lifeskill/app/ui/PersonalScreens.kt)、[PersonalViewModel.kt](../app/src/main/java/com/lifeskill/app/ui/PersonalViewModel.kt)、[ProfileRepository.kt](../app/src/main/java/com/lifeskill/app/data/ProfileRepository.kt)、[CertificateRepository.kt](../app/src/main/java/com/lifeskill/app/data/CertificateRepository.kt) |
 
@@ -35,7 +35,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 **AI 与本地写入。** 模型生成的课程先作为草稿保存，用户确认后才写入课程库。记录课时完成状态时需要匹配当前练习，写入事务还会复核前置。清空会话或删除归属后，迟到的回复不能重建已删除记录。考试由应用核算选择题和总分，模型负责填空判断和反馈。
 
-**用量。** Room v5 新增独立的请求用量表，保存模型、时间、Token 分项、归属及当次费用估算。先存用量再解析回复正文，避免漏计带回执的补试。课程生成请求先关联草稿，确认添加时在同一事务内转入课程。用量与对话和证书快照分离，删除课程或清空会话后仍可统计支出。
+**用量。** DeepSeek 和 MiniMax 的官方回执转换为统一格式，写入请求用量表。表内保存模型、时间、Token 分项、归属及当次费用估算。Room v6 增加回执总数，兼容仅有总数的回执，旧记录继续按分项求和。先存用量再解析回复正文，避免漏计带回执的补试。课程生成请求先关联草稿，确认添加时在同一事务内转入课程。用量与对话和证书快照分离，删除课程或清空会话后仍可统计支出。
 
 **数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v4，保留 v1 到 v4 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
 
