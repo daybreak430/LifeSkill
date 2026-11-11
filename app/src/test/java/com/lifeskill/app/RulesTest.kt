@@ -21,6 +21,7 @@ import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.homeStudy
 import com.lifeskill.app.model.unlocksSince
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -169,6 +170,11 @@ class RulesTest {
             TutorRules.validateVerdict(TurnKind.PASSED, exercise.id, exercise, input.copy(text = TutorRules.EXAM_REPLY))
         }
         TutorRules.validateVerdict(TurnKind.PASSED, exercise.id, exercise, input)
+        assertNotNull(TutorRules.assessmentCorrection(TurnKind.PASSED, exercise))
+        assertNull(TutorRules.assessmentCorrection(TurnKind.PASSED, exercise.copy(number = 2)))
+        assertNull(TutorRules.assessmentCorrection(TurnKind.NEXT_EXERCISE, exercise.copy(number = 2)))
+        assertNotNull(TutorRules.assessmentCorrection(TurnKind.NEXT_EXERCISE, exercise.copy(number = 3)))
+        assertNull(TutorRules.assessmentCorrection(TurnKind.PASSED, exercise.copy(number = 3)))
     }
 
     @Test fun anOffTopicReplyDoesNotConsumeThePendingExercise() {

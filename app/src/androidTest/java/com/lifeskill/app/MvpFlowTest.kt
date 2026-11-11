@@ -219,7 +219,7 @@ class MvpFlowTest {
         }
     }
 
-    @Test fun chatAlignsCharacterDiagramsAndScrollsLongRepliesToTheLastOption() {
+    @Test fun chatAlignsCharacterDiagramsAndKeepsPositionWhenALongReplyArrives() {
         await("本职工作")
         val library = fixture.container.library
         val tree = runBlocking {
@@ -239,7 +239,11 @@ class MvpFlowTest {
             await("继续学习")
             ui.onNodeWithText("继续学习").performTouchInput { click() }
             await("阅读示意图")
-            val unicode = ui.onNode(hasTestTag("lesson-diagram") and hasText(diagram))
+            val messages = ui.onNodeWithTag("chat-messages")
+            val diagramNode = hasTestTag("lesson-diagram") and hasText(diagram)
+            await(diagram)
+            messages.performScrollToNode(diagramNode)
+            val unicode = ui.onNode(diagramNode)
             unicode.assertIsDisplayed()
             ui.onNode(hasTestTag("lesson-diagram") and hasText(ascii)).assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
@@ -254,17 +258,27 @@ class MvpFlowTest {
             assertTrue(unicode.fetchSemanticsNode().config[horizontal].value() > 0)
 
             val question = (1..14).joinToString("\n\n") { "问题背景$it：观察图例和边框的位置，再判断数据如何分区。" }
-            fixture.ai.reply(JSONObject().put("kind", "exercise").put("reply", question)
-                .put("choices", org.json.JSONArray(listOf("甲", "乙", "丙", "最后一个选项"))).toString())
-            ui.onNode(hasText("做课后练习") and hasClickAction()).performTouchInput { click() }
-            await("D. 最后一个选项")
-            val lastOption = ui.onNode(hasText("D. 最后一个选项") and hasClickAction()).assertIsDisplayed()
-            val messages = ui.onNodeWithTag("chat-messages")
-            assertTrue(lastOption.getUnclippedBoundsInRoot().bottom < messages.getUnclippedBoundsInRoot().bottom - 16.dp)
-            messages.performTouchInput {
-                swipe(Offset(width * .52f, height * .18f), Offset(width * .52f, height * .88f))
+            val releaseReply = CompletableDeferred<Unit>()
+            fixture.ai.enqueue {
+                releaseReply.await()
+                JSONObject().put("kind", "exercise").put("reply", question)
+                    .put("choices", org.json.JSONArray(listOf("甲", "乙", "丙", "最后一个选项"))).toString()
             }
+            ui.onNode(hasText("做课后练习") and hasClickAction()).performTouchInput { click() }
+            await("正在等待 AI 回复")
+            messages.performScrollToNode(hasText("开始课后练习"))
+            val anchor = ui.onNodeWithText("开始课后练习").assertIsDisplayed()
+            val topBeforeReply = anchor.getUnclippedBoundsInRoot().top
+            releaseReply.complete(Unit)
+            await("问题背景1：", substring = true)
+            anchor.assertIsDisplayed()
+            assertEquals(topBeforeReply, anchor.getUnclippedBoundsInRoot().top)
+
+            val option = hasText("D. 最后一个选项") and hasClickAction()
+            val lastOption = ui.onNode(option)
             lastOption.assertIsNotDisplayed()
+            messages.performScrollToNode(option)
+            lastOption.assertIsDisplayed()
         } finally {
             runBlocking { library.delete(tree.id) }
         }
@@ -459,8 +473,11 @@ class MvpFlowTest {
         fixture.ai.reply("""{"kind":"exercise","reply":"该怎么做？","choices":["先核对","直接跳过"]}""")
         conversations.send(scope, "", check = true)
         val exerciseId = conversations.watch(scope).first().last().id
-        fixture.ai.reply(RepositoryTest.verdict("passed", "已经掌握。", exerciseId))
+        fixture.ai.reply(RepositoryTest.verdict("next_exercise", "核对之后做什么？", exerciseId))
         conversations.send(scope, "A. 先核对")
+        val secondId = conversations.watch(scope).first().last().id
+        fixture.ai.reply(RepositoryTest.verdict("passed", "已经掌握。", secondId))
+        conversations.send(scope, "记录核对结果")
     }
 
     @Test fun conflictingDependenciesStayInSkillDetailsWithoutMapReferences() {
@@ -1305,9 +1322,18 @@ class MvpFlowTest {
         fixture.ai.enqueue { messages ->
             assertEquals("A. 核对数据", messages.last().text)
             val id = JSONObject(messages.first().text.substringAfter("当前待答练习：").lineSequence().first()).getString("id")
-            RepositoryTest.verdict("passed", "掌握基础知识。", id)
+            nextQuiz(id, "核对之后做什么？", "记录结果", "删除数据")
         }
         ui.onNodeWithText("A. 核对数据").performTouchInput { click() }
+        showChatReply("A. 记录结果")
+        ui.onNodeWithText("课后练习 · 第 2 题").assertIsDisplayed()
+        ui.onNodeWithTag("skill-celebration").assertDoesNotExist()
+        fixture.ai.enqueue { messages ->
+            assertEquals("A. 记录结果", messages.last().text)
+            val id = JSONObject(messages.first().text.substringAfter("当前待答练习：").lineSequence().first()).getString("id")
+            RepositoryTest.verdict("passed", "掌握基础知识。", id)
+        }
+        ui.onNodeWithText("A. 记录结果").performTouchInput { click() }
         await("练习通过", substring = true)
         val closeCelebration = ui.onNodeWithContentDescription("关闭庆祝")
         closeCelebration.assertIsDisplayed().performTouchInput { click() }
@@ -1345,17 +1371,19 @@ class MvpFlowTest {
         val examReply = ui.onNode(hasText(TutorRules.EXAM_REPLY) and hasClickAction())
         examReply.assertDoesNotExist()
         continueReply.assertIsEnabled().performTouchInput { click() }
+        showChatReply("现在已经讲完核对步骤。")
         await("做课后练习")
         masteryCheck.assertIsEnabled()
         listOf("先核对记录来源。", "再确认字段类型。").forEach { reply ->
             fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", reply).toString())
             continueReply.performTouchInput { click() }
-            await(reply)
+            showChatReply(reply)
+            ui.onNodeWithTag("chat-messages").performScrollToNode(hasText("好的，继续") and hasClickAction())
             examReply.assertDoesNotExist()
         }
         fixture.ai.reply("""{"kind":"teach","reply":"核对必填字段是最后一步。"}""")
         continueReply.performTouchInput { click() }
-        await(TutorRules.EXAM_REPLY)
+        showChatReply(TutorRules.EXAM_REPLY)
         continueReply.assertIsDisplayed()
         fixture.ai.enqueue { throw RuleViolation("考试请求暂时失败，请重试。") }
         fixture.ai.enqueue { messages ->
@@ -1365,7 +1393,7 @@ class MvpFlowTest {
         examReply.assertIsEnabled().performTouchInput { click() }
         await("考试请求暂时失败，请重试。")
         ui.onNodeWithText("重试").performClick()
-        await("怎样识别异常记录？")
+        showChatReply("B. 核对必填字段")
         ui.onNodeWithText("重试").assertDoesNotExist()
         ui.onNodeWithText("取消练习请求").assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
@@ -1380,20 +1408,27 @@ class MvpFlowTest {
             RepositoryTest.verdict("retry", "先判断记录缺少什么。", exerciseId)
         }
         ui.onNode(hasText("A. 直接删除") and hasClickAction()).performTouchInput { click() }
-        await("先判断记录缺少什么。")
+        showChatReply("先判断记录缺少什么。")
         examReply.assertDoesNotExist()
         continueReply.assertDoesNotExist()
         fixture.ai.enqueue { messages ->
             assertEquals("B. 核对必填字段", messages.last().text)
             assertTrue(messages.dropLast(1).any { it.role == "user" && it.text == "A. 直接删除" })
-            RepositoryTest.verdict("passed", "你给出了可核验的标准。", exerciseId)
+            nextQuiz(exerciseId, "怎样保存核对过程？", "记录依据", "丢弃原始记录")
+        }
+        ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performTouchInput { click() }
+        showChatReply("A. 记录依据")
+        fixture.ai.enqueue { messages ->
+            assertEquals("A. 记录依据", messages.last().text)
+            val id = JSONObject(messages.first().text.substringAfter("当前待答练习：").lineSequence().first()).getString("id")
+            RepositoryTest.verdict("passed", "你给出了可核验的标准。", id)
         }
         ui.mainClock.autoAdvance = false
         try {
-            ui.onNode(hasText("B. 核对必填字段") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+            ui.onNode(hasText("A. 记录依据") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { it() }
             ui.waitUntil(8_000) {
                 ui.mainClock.advanceTimeByFrame()
-                ui.onAllNodesWithText("练习通过", substring = true).fetchSemanticsNodes().isNotEmpty()
+                ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isNotEmpty()
             }
             ui.onNodeWithTag("skill-celebration").assertIsDisplayed()
             ui.mainClock.advanceTimeBy(2_000)
@@ -1466,6 +1501,23 @@ class MvpFlowTest {
 
     private fun fill(label: String, value: String) {
         ui.onNode(hasSetTextAction() and hasText(label)).performTextInput(value)
+    }
+
+    private fun nextQuiz(id: String, question: String, vararg choices: String) =
+        JSONObject(RepositoryTest.verdict("next_exercise", question, id))
+            .put("choices", org.json.JSONArray(choices.toList())).toString()
+
+    private fun showChatReply(text: String) {
+        val messages = ui.onNodeWithTag("chat-messages")
+        ui.waitUntil(8_000) {
+            try {
+                messages.performScrollToNode(hasText(text))
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+        ui.onNodeWithText(text).assertIsDisplayed()
     }
 
     private fun await(text: String, substring: Boolean = false) {

@@ -85,6 +85,7 @@ internal data class TurnRow(
     val exerciseId: String?,
     val resultId: String?,
     val choices: String?,
+    val exerciseNumber: Int? = null,
 )
 
 internal data class LibraryRows(val entries: List<EntryRow>, val edges: List<EdgeRow>)
@@ -202,11 +203,11 @@ internal abstract class SkillDao {
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
         ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class,
         AiUsageRow::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
-        AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7),
     ],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {

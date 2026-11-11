@@ -16,7 +16,7 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 enum class Speaker { USER, ASSISTANT }
 enum class TurnKind {
     MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART,
-    TREE_QUESTION, TREE_OFFER, GENERATE_TREE,
+    TREE_QUESTION, TREE_OFFER, GENERATE_TREE, NEXT_EXERCISE,
 }
 
 enum class GenerationLevel(val label: String) {
@@ -65,12 +65,18 @@ data class Turn(
     val choices: List<String> = emptyList(),
     val preview: GenerationPreview? = null,
     val generationOptions: GenerationOptions? = null,
+    val exerciseNumber: Int? = null,
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")
 }
 
-data class Exercise(val id: String, val question: String, val choices: List<String> = emptyList())
+data class Exercise(
+    val id: String,
+    val question: String,
+    val choices: List<String> = emptyList(),
+    val number: Int = 1,
+)
 
 fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
@@ -80,6 +86,8 @@ object TutorRules {
     // 保留旧版快捷回复的识别，历史记录仍按原文显示。
     private const val LEGACY_EXAM_REPLY = "感觉已经会了，来考试吧"
     internal const val EXAM_TEACHING_ROUNDS = 5
+    internal const val MIN_EXERCISES = 2
+    internal const val MAX_EXERCISES = 3
     internal val teachingReplyKinds = setOf(TurnKind.MESSAGE, TurnKind.CHECK_OFFER)
 
     fun currentLesson(history: List<Turn>): List<Turn> =
@@ -99,15 +107,23 @@ object TutorRules {
         if (last?.kind != TurnKind.EXERCISE && last?.kind != TurnKind.RETRY) return null
         val id = last.exerciseId ?: return null
         val question = history.firstOrNull { it.kind == TurnKind.EXERCISE && it.exerciseId == id } ?: return null
-        return Exercise(id, question.modelText, question.choices)
+        return Exercise(id, question.modelText, question.choices, question.exerciseNumber ?: 1)
     }
 
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
-        if (reply != TurnKind.PASSED && reply != TurnKind.RETRY) return
+        if (reply != TurnKind.PASSED && reply != TurnKind.RETRY && reply != TurnKind.NEXT_EXERCISE) return
         if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
             input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == EXAM_REPLY || input.text == LEGACY_EXAM_REPLY
         ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")
         }
+    }
+
+    internal fun assessmentCorrection(reply: TurnKind, pending: Exercise?): String? = when {
+        pending == null -> null
+        reply == TurnKind.EXERCISE -> "当前已有待答题，不能重新开始出题。"
+        reply == TurnKind.PASSED && pending.number < MIN_EXERCISES -> "第 1 题答对后必须返回 next_exercise 出第 2 题。"
+        reply == TurnKind.NEXT_EXERCISE && pending.number >= MAX_EXERCISES -> "第 3 题后不得再出题，请判定 passed 或 retry。"
+        else -> null
     }
 }

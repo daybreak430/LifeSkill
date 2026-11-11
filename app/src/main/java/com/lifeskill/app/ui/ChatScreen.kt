@@ -4,7 +4,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,8 +104,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
+    var historyPositionInitialized by rememberSaveable { mutableStateOf(false) }
     var lastSeenMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var followReply by remember { mutableStateOf(false) }
     var lastCelebratedId by rememberSaveable { mutableStateOf<String?>(null) }
     var openCelebrationId by rememberSaveable { mutableStateOf<String?>(null) }
     val newCelebrationId = timeline.celebrationId?.takeIf { it != lastCelebratedId }
@@ -116,11 +115,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
     val footerVisible = !status.clearing && !settled &&
         (pending != null || statusMatches && (status.working || status.error != null))
-    val canSend = !status.working && pending == null
+    val canSend = timeline.loaded && !status.working && pending == null
 
     fun submit(text: String, check: Boolean = false) {
         keyboard?.hide()
-        followReply = true
         chat.send(text, check)
     }
 
@@ -154,26 +152,16 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         }
     }
 
-    LaunchedEffect(listState) {
-        listState.interactionSource.interactions.collect { interaction ->
-            if (interaction is DragInteraction.Start) followReply = false
-        }
-    }
-
-    LaunchedEffect(pageActive, history.lastOrNull()?.id) {
+    LaunchedEffect(pageActive, timeline.loaded, history.lastOrNull()?.id) {
+        if (!pageActive || !timeline.loaded) return@LaunchedEffect
+        val initial = !historyPositionInitialized
+        historyPositionInitialized = true
         val last = history.lastOrNull() ?: return@LaunchedEffect
-        if (!pageActive || lastSeenMessage == last.id) return@LaunchedEffect
-        val initial = lastSeenMessage == null
-        val layout = listState.layoutInfo
-        val lastVisibleKey = layout.visibleItemsInfo.lastOrNull()?.key
-        val nearEnd = lastVisibleKey == CHAT_END || lastVisibleKey == CHAT_STATUS
-        val sent = last.speaker == Speaker.USER
-        val following = followReply
-        if (!sent) followReply = false
+        if (lastSeenMessage == last.id) return@LaunchedEffect
         lastSeenMessage = last.id
-        // 阅读历史时保留锚点，仅发送消息或原本在末尾时跟随新回复。
-        if (!initial && !nearEnd && !sent && !following) return@LaunchedEffect
-        // 对齐列表末端，确保比视口还高的回复也能滚到末行及气泡底部留白。
+        val sent = last.speaker == Speaker.USER
+        // 仅初次打开历史或发送消息时定位。收到回复时由列表按消息键保留当前阅读锚点。
+        if (!initial && !sent) return@LaunchedEffect
         val destination = history.size + if (footerVisible && sent) 1 else 0
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > destination }
         if (initial) listState.scrollToItem(destination) else listState.animateScrollToItem(destination)
@@ -208,7 +196,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                             else -> "描述你想学的主题和目标"
                         },
                     ) { AiCrystal(54.dp, forAction = !tutor) }
-                    if (tutor && !status.working) {
+                    if (tutor && canSend) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             ChatPill("开始学习", {
                                 submit("请带我开始学习本节课。")
@@ -271,10 +259,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             if (footerVisible) {
                 item(key = CHAT_STATUS) {
                     // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
-                    ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = { turn ->
-                        followReply = true
-                        chat.retry(turn)
-                    }) { turn ->
+                    ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry) { turn ->
                         if (turn.kind == TurnKind.MESSAGE) draft = turn.text
                         chat.discard(turn)
                     }
@@ -322,7 +307,6 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             onStart = { requirements ->
                 showRestart = false
                 keyboard?.hide()
-                followReply = true
                 chat.restartLesson(requirements)
                 draft = ""
             },
@@ -347,7 +331,6 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             onDismiss = { selectedOfferId = null },
             onConfirm = { options ->
                 selectedOfferId = null
-                followReply = true
                 chat.generateTree(treeOffer.id, options)
             },
         )
@@ -429,7 +412,7 @@ private fun ChatBubble(
             val backdrop = if (user) Modifier.background(Brush.linearGradient(colors.outgoing)) else Modifier
             Column(backdrop.padding(horizontal = 15.dp, vertical = 12.dp)) {
                 val badge = when (turn.kind) {
-                    TurnKind.EXERCISE -> "课后练习"
+                    TurnKind.EXERCISE -> "课后练习 · 第 ${turn.exerciseNumber ?: 1} 题"
                     TurnKind.RETRY -> "再试一次"
                     else -> null
                 }

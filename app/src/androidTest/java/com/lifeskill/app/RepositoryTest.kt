@@ -28,6 +28,7 @@ import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
+import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import kotlinx.coroutines.CompletableDeferred
@@ -150,7 +151,7 @@ class RepositoryTest {
             offerCheck(scope)
             ai.reply("""{"kind":"exercise","reply":"请说出操作步骤。"}""")
             conversations.send(scope, "", check = true)
-            val exercise = conversations.watch(scope).first().last()
+            val exercise = advanceToSecondQuestion(scope, "先核对输入")
             val waiting = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
             ai.enqueue {
@@ -700,13 +701,62 @@ class RepositoryTest {
         ai.reply(verdict("retry", "想想可追溯性。", exercise.id))
         container.conversations.send(scope, "直接删掉")
         assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
-        ai.reply(verdict("passed", "你提到了隔离和追查。", exercise.id))
+        ai.reply(verdict("passed", "提前通过。", exercise.id))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("第 1 题答对后必须返回"))
+            verdict("next_exercise", "隔离后如何记录追查过程？", exercise.id)
+        }
         container.conversations.send(scope, "隔离并追查源记录，保留审计线索。")
+        assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+        val second = container.conversations.watch(scope).first().last()
+        assertEquals(2, second.exerciseNumber)
+        ai.reply(verdict("passed", "你提到了隔离和追查。", second.id))
+        container.conversations.send(scope, "记录来源、时间和核查结果。")
         assertEquals(Mastery.AI, container.library.entry(skill.id)?.mastery)
         assertEquals(Mastery.UNLIT, container.library.entry(other.id)?.mastery)
         assertEquals(TurnKind.PASSED, container.conversations.watch(scope).first().last().kind)
         assertNotEquals(skill.name, database.skills().entry(skill.id)?.name)
-        assertNotEquals("隔离并追查源记录，保留审计线索。", database.skills().recentTurns(scope.id, 2).last().text)
+        assertNotEquals("记录来源、时间和核查结果。", database.skills().recentTurns(scope.id, 2).last().text)
+    }
+
+    @Test fun tutorCanChooseAThirdQuestionButRejectsRepeatedQuestionsAndAFourth() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val tree = add(direction, EntryKind.TREE, "三题练习")
+        val skill = add(tree, EntryKind.SKILL, "核对有效数据")
+        val scope = ChatScope(ChatMode.TUTOR, skill.id)
+        val conversations = container.conversations
+        offerCheck(scope)
+        ai.reply("""{"kind":"exercise","reply":"怎样核对记录？"}""")
+        conversations.send(scope, "", check = true)
+        val first = conversations.watch(scope).first().last()
+        val dao = database.skills()
+        val firstRow = checkNotNull(dao.turn(scope.id, first.id))
+        dao.updateTurn(firstRow.copy(exerciseNumber = null))
+        val second = advanceToSecondQuestion(scope, "对照源记录。")
+        ai.reply(verdict("next_exercise", "怎样核对记录？", second.id))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("下一题的题干重复了"))
+            JSONObject(verdict("next_exercise", "如何确认复核结果？", second.id))
+                .put("choices", JSONArray(listOf("看复核记录", "删除原记录"))).toString()
+        }
+        conversations.send(scope, "保留处理依据。")
+        val third = conversations.watch(scope).first().last()
+        assertEquals(3, third.exerciseNumber)
+        assertEquals(listOf("看复核记录", "删除原记录"), third.choices)
+        assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+        ai.reply(verdict("retry", "先找复核证据。", third.id))
+        conversations.send(scope, "B. 删除原记录")
+        assertEquals(third.id, conversations.watch(scope).first().last().exerciseId)
+        assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+        ai.reply(verdict("next_exercise", "第四题", third.id))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("第 3 题后不得再出题"))
+            verdict("passed", "三个情境都判断正确。", third.id)
+        }
+        conversations.send(scope, "A. 看复核记录")
+        assertEquals(Mastery.AI, container.library.entry(skill.id)?.mastery)
+        assertEquals(listOf(null, 2, 3), conversations.watch(scope).first()
+            .filter { it.kind == TurnKind.EXERCISE }.map { it.exerciseNumber })
     }
 
     @Test fun closingAndReopeningDatabaseRestoresProgressAndConversation() = runBlocking {
@@ -923,7 +973,7 @@ class RepositoryTest {
             offerCheck(scope)
             ai.reply("""{"kind":"exercise","reply":"你如何核对结果？"}""")
             container.conversations.send(scope, "", check = true)
-            val exercise = container.conversations.watch(scope).first().last()
+            val exercise = advanceToSecondQuestion(scope, "先核对来源。")
             val waiting = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
             ai.enqueue {
@@ -1040,6 +1090,14 @@ class RepositoryTest {
         } catch (_: RuleViolation) {
             // 验证拒绝后保留原数据，由各测试检查最终状态。
         }
+    }
+
+    private suspend fun advanceToSecondQuestion(scope: ChatScope, answer: String): Turn {
+        val conversations = container.conversations
+        val first = conversations.watch(scope).first().last()
+        ai.reply(verdict("next_exercise", "如何保留处理依据？", first.id))
+        conversations.send(scope, answer)
+        return conversations.watch(scope).first().last()
     }
 
     companion object {

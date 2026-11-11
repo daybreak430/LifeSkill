@@ -297,7 +297,11 @@ internal data class ChatStatus(
     val clearing: Boolean = false,
 )
 
-internal data class ChatHistory(val turns: List<Turn> = emptyList(), val celebrationId: String? = null)
+internal data class ChatHistory(
+    val turns: List<Turn> = emptyList(),
+    val celebrationId: String? = null,
+    val loaded: Boolean = true,
+)
 
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
@@ -318,7 +322,7 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
             if (error is CancellationException) throw error
             _status.value = ChatStatus(error = "无法读取本机对话记录。")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory(loaded = false))
 
     fun send(text: String, check: Boolean = false) = runQueued { onQueued ->
         repository.send(scope, text, check, onQueued)

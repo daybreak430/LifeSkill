@@ -9,6 +9,7 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.Exercise
 import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
@@ -176,9 +177,14 @@ internal class ConversationRepository(
                 val original = last?.exerciseId?.let { dao.exercise(scope.id, it)?.toTurn() }
                 TutorRules.pendingExercise(listOfNotNull(original, last))
             } else null
+            // 练习题可能已超出近期对话窗口，按待答题序号读取本轮题干。
+            val askedQuestions = pending?.let {
+                dao.recentTeaching(scope.id, input.contentVersion, listOf(TurnKind.EXERCISE.name), it.number)
+                    .asReversed().map { row -> row.toTurn().text }
+            }.orEmpty()
             val prompt = if (scope.mode == ChatMode.TUTOR) {
                 checkNotNull(owner)
-                AiProtocol.tutorPrompt(owner, pending, canInviteCheck = pending == null)
+                AiProtocol.tutorPrompt(owner, pending, askedQuestions)
             } else {
                 val current = library.snapshot()
                 val candidates = current.childrenOf(owner?.id)
@@ -193,7 +199,8 @@ internal class ConversationRepository(
             val history = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
                 newTreeHistory(recent, input)
             } else recent
-            Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
+            Request(owner, input, pending, askedQuestions,
+                listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
@@ -294,13 +301,22 @@ internal class ConversationRepository(
     private suspend fun tutorTurn(raw: String, context: Request, id: String): Turn {
         val reply = AiProtocol.tutor(raw)
         TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
+        val correction = TutorRules.assessmentCorrection(reply.kind, context.pending)
+            ?: if (reply.kind == TurnKind.NEXT_EXERCISE &&
+                context.askedQuestions.any { it.filterNot(Char::isWhitespace).equals(
+                    reply.reply.filterNot(Char::isWhitespace), ignoreCase = true,
+                ) }
+            ) "下一题的题干重复了，请用不同知识点或情境出题。" else null
+        if (correction != null) {
+            throw RecoverableReply("AI 的练习题序或内容有误，请重试。", correction)
+        }
         if (context.input.kind == TurnKind.CHECK && reply.kind != TurnKind.EXERCISE) {
             throw RuleViolation("AI 暂未给出练习题，请重试。")
         }
         var text = if (reply.kind == TurnKind.OFF_TOPIC) {
             "我们先回到「${context.owner?.name}」。你想继续哪个知识点，或试试一个小练习？"
         } else reply.reply
-        var kind = reply.kind
+        var kind = if (reply.kind == TurnKind.NEXT_EXERCISE) TurnKind.EXERCISE else reply.kind
         if (kind == TurnKind.PASSED) {
             when (library.lightFromAssessment(checkNotNull(context.owner))) {
                 AssessmentLight.LIT -> text = "练习通过\n$text"
@@ -316,7 +332,13 @@ internal class ConversationRepository(
             TurnKind.RETRY, TurnKind.PASSED -> context.pending?.id
             else -> null
         }
-        return Turn(id, Speaker.ASSISTANT, kind, text, context.input.contentVersion, exerciseId, choices = reply.choices)
+        val exerciseNumber = when (reply.kind) {
+            TurnKind.EXERCISE -> 1
+            TurnKind.NEXT_EXERCISE -> checkNotNull(context.pending).number + 1
+            else -> null
+        }
+        return Turn(id, Speaker.ASSISTANT, kind, text, context.input.contentVersion, exerciseId,
+            choices = reply.choices, exerciseNumber = exerciseNumber)
     }
 
     private suspend fun requireOwner(scope: ChatScope): Entry? {
@@ -355,7 +377,7 @@ internal class ConversationRepository(
             val text = when {
                 mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
                 mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
-                it.kind == TurnKind.CHECK -> "【App 发起课后练习】请出一道本节练习题。"
+                it.kind == TurnKind.CHECK -> "【App 发起课后练习】请出本节课后练习的第 1 题。"
                 it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按本节学习目标重新组织这节课。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
                 else -> it.modelText
@@ -374,6 +396,7 @@ internal class ConversationRepository(
         text = secret.seal(text, "$id:turn"), contentVersion = contentVersion,
         exerciseId = exerciseId, resultId = resultId,
         choices = choices.takeIf(List<String>::isNotEmpty)?.let { secret.seal(JSONArray(it).toString(), "$id:choices") },
+        exerciseNumber = exerciseNumber,
     )
 
     private fun TurnRow.toTurn(): Turn {
@@ -396,13 +419,14 @@ internal class ConversationRepository(
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))
             List(values.length()) { index -> values.getString(index) }
-        }.orEmpty())
+        }.orEmpty(), exerciseNumber = exerciseNumber)
     }
 
     private data class Request(
         val owner: Entry?,
         val input: Turn,
-        val pending: com.lifeskill.app.model.Exercise?,
+        val pending: Exercise?,
+        val askedQuestions: List<String>,
         val messages: List<ModelMessage>,
     )
 
