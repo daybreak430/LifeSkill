@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,12 +65,19 @@ internal fun PersonalScreen(
     app: AppViewModel, model: PersonalViewModel, statistics: LearningStatistics, active: Boolean, dark: Boolean,
 ) {
     val result by model.personalData.collectAsStateWithLifecycle()
-    val visibility by model.certificateVisibility.collectAsStateWithLifecycle()
+    val certificateStatus by model.certificateStatus.collectAsStateWithLifecycle()
     val data = result?.getOrNull()
     val certificates = data?.certificates.orEmpty()
     val (hidden, visible) = remember(certificates) { certificates.partition { it.hidden } }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var browsingHidden by rememberSaveable { mutableStateOf(false) }
+    val selected = certificates.firstOrNull { it.treeId == selectedId }
+    LaunchedEffect(data != null, selectedId, selected, hidden.isEmpty()) {
+        if (data != null) {
+            if (selected == null) selectedId = null
+            if (hidden.isEmpty()) browsingHidden = false
+        }
+    }
     val columnWidth = 144.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
@@ -94,7 +102,7 @@ internal fun PersonalScreen(
                     PersonalProfileCard(data.profile) { app.open(Route(Page.PROFILE_EDIT)) }
                 }
                 item(key = "study-statistics", span = { GridItemSpan(maxLineSpan) }) {
-                    StudyStatisticsCard(statistics, data.certificates.size)
+                    StudyStatisticsCard(statistics, certificates.count { !it.isSample })
                 }
                 item(key = "certificate-heading", span = { GridItemSpan(maxLineSpan) }) {
                     Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -125,14 +133,14 @@ internal fun PersonalScreen(
         }
     }
     if (active) {
-        val selected = certificates.firstOrNull { it.treeId == selectedId }
         if (selected != null) {
-            val controls = CertificateVisibilityControl(selected.hidden, visibility) {
-                model.setCertificateHidden(selected.treeId, !selected.hidden)
-            }
+            val controls = CertificateViewerControls(
+                certificateStatus, destroy = { model.destroyCertificate(selected.treeId) },
+                toggleVisibility = { model.setCertificateHidden(selected.treeId, !selected.hidden) }, hidden = selected.hidden,
+            )
             IssuedCertificateDialog(selected, controls) {
                 selectedId = null
-                model.clearCertificateVisibility()
+                model.clearCertificateStatus()
             }
         } else if (browsingHidden && hidden.isNotEmpty()) {
             HiddenCertificatesDialog(hidden, { browsingHidden = false }) { selectedId = it }
@@ -155,7 +163,7 @@ private fun HiddenCertificatesDialog(certificates: List<CollectedCertificate>, c
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(certificate.treeName, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(certificate.displayTitle, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Mark(Glyph.NEXT, Muted)
                     }
                 }
@@ -255,8 +263,10 @@ private fun CertificateDisplay(certificate: CollectedCertificate, dark: Boolean,
             }
             Box(Modifier.fillMaxWidth().height(6.dp).background(Brush.verticalGradient(ledge), RoundedCornerShape(2.dp)))
         }
-        Text(certificate.treeName, Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+        Text(certificate.displayTitle, Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
             style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, maxLines = 2,
             overflow = TextOverflow.Ellipsis)
     }
 }
+
+private val CollectedCertificate.displayTitle get() = if (isSample) "示例 · $treeName" else treeName

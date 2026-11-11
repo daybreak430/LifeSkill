@@ -36,26 +36,34 @@ internal class PersonalViewModel(private val container: AppContainer) : ViewMode
 
     private val _editor = MutableStateFlow(ProfileEditorState())
     val editor = _editor.asStateFlow()
-    private val _certificateVisibility = MutableStateFlow(AssessmentStatus())
-    val certificateVisibility = _certificateVisibility.asStateFlow()
+    private val _certificateStatus = MutableStateFlow(AssessmentStatus())
+    val certificateStatus = _certificateStatus.asStateFlow()
 
-    fun setCertificateHidden(treeId: String, hidden: Boolean) {
-        if (_certificateVisibility.value.busy) return
-        _certificateVisibility.value = AssessmentStatus(busy = true)
+    fun setCertificateHidden(treeId: String, hidden: Boolean) = updateCertificate("无法更新证书的展示状态，请重试。") {
+        container.certificates.setHidden(treeId, hidden)
+    }
+
+    fun destroyCertificate(treeId: String) = updateCertificate("无法销毁证书，请重试。") {
+        container.certificates.destroy(treeId)
+    }
+
+    private fun updateCertificate(failureMessage: String, operation: suspend () -> Unit) {
+        if (_certificateStatus.value.busy) return
+        _certificateStatus.value = AssessmentStatus(busy = true)
         viewModelScope.launch {
             try {
-                container.certificates.setHidden(treeId, hidden)
-                _certificateVisibility.value = AssessmentStatus()
+                operation()
+                _certificateStatus.value = AssessmentStatus()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                _certificateVisibility.value = AssessmentStatus(error = readable(error, "无法更新证书的展示状态，请重试。"))
+                _certificateStatus.value = AssessmentStatus(error = readable(error, failureMessage))
             }
         }
     }
 
-    fun clearCertificateVisibility() {
-        if (!_certificateVisibility.value.busy) _certificateVisibility.value = AssessmentStatus()
+    fun clearCertificateStatus() {
+        if (!_certificateStatus.value.busy) _certificateStatus.value = AssessmentStatus()
     }
 
     fun beginEdit() {

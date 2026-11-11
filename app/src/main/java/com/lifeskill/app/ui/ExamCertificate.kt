@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,33 +72,40 @@ private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
 private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
+private val CertificateDanger = Color(0xFFFFB4AB)
 
-internal data class CertificateVisibilityControl(val hidden: Boolean, val status: AssessmentStatus, val toggle: () -> Unit)
+internal data class CertificateViewerControls(
+    val status: AssessmentStatus, val destroy: () -> Unit, val toggleVisibility: (() -> Unit)? = null,
+    val hidden: Boolean = false,
+)
 
 @Composable
 internal fun IssuedCertificateDialog(
-    certificate: CollectedCertificate, visibility: CertificateVisibilityControl? = null, onClose: () -> Unit,
+    certificate: CollectedCertificate, controls: CertificateViewerControls, onClose: () -> Unit,
 ) {
     ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, certificate.avatar,
-        visibility = visibility, collectedAt = certificate.collectedAt, onClose = onClose)
+        controls = controls, collectedAt = certificate.collectedAt, isSample = certificate.isSample, onClose = onClose)
 }
 
 @Composable
 internal fun ExamCertificateDialog(
     treeName: String, style: CertificateStyle, recipient: String?, avatar: ProfileAvatar, collected: Boolean = false,
     status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null,
-    visibility: CertificateVisibilityControl? = null, collectedAt: OffsetDateTime? = null, onClose: () -> Unit,
+    controls: CertificateViewerControls? = null, collectedAt: OffsetDateTime? = null, isSample: Boolean = false,
+    onClose: () -> Unit,
 ) {
     val viewing = onCollect == null
     var opened by rememberSaveable { mutableStateOf(viewing) }
     var closing by rememberSaveable { mutableStateOf(false) }
     var requested by rememberSaveable { mutableStateOf(false) }
     var enteringNickname by rememberSaveable { mutableStateOf(false) }
+    var confirmingDestruction by rememberSaveable { mutableStateOf(false) }
     var nickname by rememberSaveable { mutableStateOf("") }
     val exiting = closing || (!viewing && collected)
     var drag by remember { mutableFloatStateOf(0f) }
     val opening = remember { Animatable(if (opened) 1f else 0f) }
     val exit = remember { Animatable(0f) }
+    val certificateScroll = rememberScrollState()
     val close by rememberUpdatedState(onClose)
     val showEnvelope by remember { derivedStateOf { opening.value < .86f } }
     val showCertificate by remember { derivedStateOf { opening.value > .32f } }
@@ -115,8 +124,12 @@ internal fun ExamCertificateDialog(
 
     Dialog(
         onDismissRequest = {
-            if (!status.busy && visibility?.status?.busy != true) {
-                if (enteringNickname && !exiting) enteringNickname = false else closing = true
+            if (!status.busy && controls?.status?.busy != true && !exiting) {
+                when {
+                    confirmingDestruction -> confirmingDestruction = false
+                    enteringNickname -> enteringNickname = false
+                    else -> closing = true
+                }
             }
         },
         properties = DialogProperties(
@@ -189,6 +202,10 @@ internal fun ExamCertificateDialog(
                     requested = true
                     onCollect?.invoke(it)
                 }
+            } else if (confirmingDestruction && controls != null) {
+                CertificateDestructionConfirmation(isSample, controls.status, controls.destroy) {
+                    confirmingDestruction = false
+                }
             } else if (showCertificate) {
                 Column(
                     Modifier.widthIn(max = 360.dp).fillMaxWidth().graphicsLayer {
@@ -197,13 +214,13 @@ internal fun ExamCertificateDialog(
                         scaleX = .66f + .34f * reveal
                         scaleY = scaleX
                         translationY = 50.dp.toPx() * (1f - reveal)
-                    }.verticalScroll(rememberScrollState()),
+                    }.verticalScroll(certificateScroll),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar, collectedAt)
-                    if (viewing) {
-                        CertificateViewerActions(visibility, exiting) { closing = true }
-                    } else {
+                    CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar, collectedAt, isSample)
+                    if (controls != null) {
+                        CertificateViewerActions(controls, exiting, { confirmingDestruction = true }) { closing = true }
+                    } else if (onCollect != null) {
                         if (requested && status.error != null) AssessmentStatusText(status)
                         Action("收下", Glyph.CHECK, {
                             if (recipient == null) {
@@ -221,17 +238,56 @@ internal fun ExamCertificateDialog(
 }
 
 @Composable
-private fun CertificateViewerActions(visibility: CertificateVisibilityControl?, exiting: Boolean, close: () -> Unit) {
-    val enabled = !exiting && visibility?.status?.busy != true
-    visibility?.status?.error?.let { Text(it, color = CertificatePaper, style = MaterialTheme.typography.bodySmall) }
+private fun CertificateViewerActions(
+    controls: CertificateViewerControls, exiting: Boolean, confirmDestruction: () -> Unit, close: () -> Unit,
+) {
+    val enabled = !exiting && !controls.status.busy
+    controls.status.error?.let { Text(it, color = CertificatePaper, style = MaterialTheme.typography.bodySmall) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        if (visibility != null) {
-            TextButton(onClick = visibility.toggle, modifier = Modifier.weight(1f), enabled = enabled) {
-                Text(if (visibility.hidden) "取消隐藏" else "隐藏该证书", color = CertificatePaper)
+        if (controls.toggleVisibility != null) {
+            TextButton(onClick = controls.toggleVisibility, modifier = Modifier.weight(1f), enabled = enabled) {
+                Text(if (controls.hidden) "取消隐藏" else "隐藏该证书", color = CertificatePaper)
             }
         }
         Action("关闭", Glyph.CLOSE, close, Modifier.weight(1f), primary = true, enabled = enabled)
+    }
+    TextButton(onClick = confirmDestruction, modifier = Modifier.fillMaxWidth(), enabled = enabled) {
+        Text("销毁证书", color = CertificateDanger)
+    }
+}
+
+@Composable
+private fun CertificateDestructionConfirmation(
+    isSample: Boolean, status: AssessmentStatus, destroy: () -> Unit, cancel: () -> Unit,
+) {
+    var submitted by rememberSaveable { mutableStateOf(false) }
+    Surface(Modifier.widthIn(max = 360.dp).fillMaxWidth(), shape = DialogShape, color = Panel) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("销毁证书？", style = MaterialTheme.typography.titleLarge)
+            Text(
+                if (isSample) "示例证书将从证书展柜中移除，此操作无法撤销。"
+                else "证书将从证书展柜和获取证书统计中移除，无法恢复或重新领取。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (submitted) AssessmentStatusText(status)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = cancel, enabled = !status.busy) { Text("取消") }
+                Button(
+                    onClick = {
+                        submitted = true
+                        destroy()
+                    },
+                    enabled = !status.busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError),
+                ) { Text("确认销毁") }
+            }
+        }
     }
 }
 

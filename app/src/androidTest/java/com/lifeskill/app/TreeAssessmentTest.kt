@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.ai.TreeAssessmentProtocol
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.AvatarPreset
@@ -120,24 +121,24 @@ class TreeAssessmentTest {
         val passedAttempt = exams.watchAttempts(tree.id).first().first()
         assertEquals(60, passedAttempt.score)
         assertFalse(passedAttempt.certificateCollected)
-        assertTrue(archive.certificates.first().isEmpty())
+        assertTrue(archive.certificates.first().none { !it.isSample })
         expectRule { archive.issue(tree.id, second.id) }
         expectRule { archive.issue(tree.id, second.id, "字".repeat(25)) }
         assertNull(container.profiles.current().nickname)
-        assertTrue(archive.certificates.first().isEmpty())
+        assertTrue(archive.certificates.first().none { !it.isSample })
         val certificateStyle = CertificateStyle.forTree(tree)
         val portrait = ProfileAvatar.Preset(AvatarPreset.CAT)
         container.profiles.save(PersonalProfile(avatar = portrait))
         val beforeCollection = OffsetDateTime.now()
         archive.issue(tree.id, second.id, "  学习伙伴  ")
-        val issued = archive.certificates.first().single()
+        val issued = archive.certificates.first().single { !it.isSample }
         val collectedAt = checkNotNull(issued.collectedAt)
         assertFalse(collectedAt.isBefore(beforeCollection))
         assertFalse(collectedAt.isAfter(OffsetDateTime.now()))
         assertEquals(CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴", portrait,
             collectedAt = collectedAt), issued)
         archive.issue(tree.id, second.id, "重复提交")
-        assertEquals(issued, archive.certificates.first().single())
+        assertEquals(issued, archive.certificates.first().single { !it.isSample })
         assertEquals("学习伙伴", container.profiles.current().nickname)
         assertTrue(exams.summaries.first().getValue(tree.id).passed)
 
@@ -167,12 +168,18 @@ class TreeAssessmentTest {
         assertFalse(saved.content.contains("以凭证核对金额"))
 
         archive.issue(tree.id, third.id)
-        assertEquals(issued, archive.certificates.first().single())
+        assertEquals(issued, archive.certificates.first().single { !it.isSample })
         val savedCertificate = checkNotNull(database.personal().certificate(tree.id))
         assertFalse(savedCertificate.content.contains("学习伙伴"))
         container.library.delete(tree.id)
         assertTrue(exams.watchAttempts(tree.id).first().isEmpty())
-        assertEquals(issued, archive.watchCertificate(tree.id).first())
+        assertEquals(issued, archive.watchCertificate(tree.id).first().issued)
+        archive.destroy(tree.id)
+        assertTrue(archive.watchCertificate(tree.id).first().destroyed)
+        assertTrue(archive.certificates.first().none { !it.isSample })
+        val destroyed = checkNotNull(database.personal().certificate(tree.id))
+        val payload = SecretBox("lifeskill-tests").open(destroyed.content, "${tree.id}:certificate")
+        assertEquals("""{"destroyed":true}""", payload)
     }
 
     @Test fun challengesRequireThreeDiagnosticAnswersAndAcceptRevisedFeynmanExplanation() = runBlocking {

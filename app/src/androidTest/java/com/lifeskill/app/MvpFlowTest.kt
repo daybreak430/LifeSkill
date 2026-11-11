@@ -708,6 +708,7 @@ class MvpFlowTest {
                 ui.onNodeWithTag("certificate-avatar").assertIsDisplayed()
                 ui.onNodeWithTag("certificate-collected-at").assertIsDisplayed()
                 ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
+                ui.onNodeWithText("销毁证书").assertExists()
                 captureScreenshot("captureCertificateScreenshots", "${theme.name.lowercase()}.png")
                 ui.onNodeWithText("关闭").performTouchInput { click() }
                 ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
@@ -746,12 +747,89 @@ class MvpFlowTest {
             ui.onNodeWithText("已隐藏（1）").assertDoesNotExist()
             cabinet.performScrollToIndex(0)
             captureScreenshot("capturePersonalScreenshots", "cabinet.png")
+
+            val countBefore = runBlocking { fixture.container.certificates.certificates.first().count { !it.isSample } }
+            val countBeforeDestroy = hasText("获取证书") and hasText(countBefore.toString())
+            cabinet.performScrollToNode(countBeforeDestroy)
+            ui.onNode(countBeforeDestroy).assertIsDisplayed()
+            cabinet.performScrollToNode(certificate)
+            ui.onNode(certificate).performTouchInput { click() }
+            ui.onNodeWithText("销毁证书").performScrollTo().performTouchInput { click() }
+            await("销毁证书？")
+            ui.onNodeWithText("确认销毁").performTouchInput { click() }
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+            val countAfterDestroy = hasText("获取证书") and hasText((countBefore - 1).toString())
+            cabinet.performScrollToNode(countAfterDestroy)
+            ui.onNode(countAfterDestroy).assertIsDisplayed()
+            ui.onNode(certificate).assertDoesNotExist()
+
+            val tree = runBlocking { library.snapshot().childrenOf(direction.id).single { it.name == examples.last().third } }
+            runBlocking {
+                val attempt = exams.watchAttempts(tree.id).first().single()
+                val failure = runCatching { fixture.container.certificates.issue(tree.id, attempt.id) }.exceptionOrNull()
+                assertTrue(failure is RuleViolation && failure.message == "这张证书已销毁。")
+            }
+            pressBack()
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(directionTag))
+            ui.onNodeWithTag(directionTag).performClick()
+            ui.onNodeWithTag("skill-tree-list").performScrollToNode(hasText(tree.name))
+            ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
+            ui.onNodeWithTag("skill-map").performScrollToNode(hasText("验收考试"))
+            ui.onNodeWithText("验收考试").performClick()
+            await("100 分")
+            ui.onNodeWithText("获取结业证书").assertDoesNotExist()
+            ui.onNodeWithText("查看结业证书").assertDoesNotExist()
         } finally {
             runBlocking {
                 library.delete(direction.id)
                 profiles.save(originalProfile)
             }
         }
+    }
+
+    @Test fun sampleCertificateCanBeHiddenAndDestroyedWithoutAffectingStatistics() {
+        await("LifeSkill")
+        ui.onNodeWithTag("tab-personal").performTouchInput { click() }
+        await("证书展柜")
+        val archive = fixture.container.certificates
+        val certificates = runBlocking { archive.certificates.first() }
+        val sample = certificates.single { it.isSample }
+        val count = certificates.count { !it.isSample }
+        val cabinet = ui.onNodeWithTag("personal-home")
+        val metric = hasText("获取证书") and hasText(count.toString())
+        cabinet.performScrollToNode(metric)
+        ui.onNode(metric).assertIsDisplayed()
+        val sampleTag = "collected-certificate-${sample.treeId}"
+        cabinet.performScrollToNode(hasTestTag(sampleTag))
+        ui.onNodeWithTag(sampleTag).assert(hasText("示例 · ${sample.treeName}")).performTouchInput { click() }
+        ui.onNodeWithText("示例证书").assertIsDisplayed()
+        ui.onNodeWithTag("certificate-collected-at").assertDoesNotExist()
+
+        val destroy = ui.onNodeWithText("销毁证书")
+        destroy.performScrollTo().performTouchInput { click() }
+        await("销毁证书？")
+        pressBack()
+        ui.onNodeWithText("确认销毁").assertDoesNotExist()
+        ui.onNodeWithText("示例证书").assertIsDisplayed()
+        destroy.performScrollTo().performTouchInput { click() }
+        ui.onNodeWithText("取消").performTouchInput { click() }
+        ui.onNodeWithText("示例证书").assertIsDisplayed()
+        ui.onNodeWithText("隐藏该证书").performScrollTo().performTouchInput { click() }
+        await("取消隐藏")
+        pressBack()
+        ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+        ui.onNodeWithTag(sampleTag).assertDoesNotExist()
+        cabinet.performScrollToNode(hasText("已隐藏（1）"))
+        ui.onNodeWithText("已隐藏（1）").performTouchInput { click() }
+        ui.onNodeWithTag("hidden-certificate-${sample.treeId}").performTouchInput { click() }
+        destroy.performScrollTo().performTouchInput { click() }
+        ui.onNodeWithText("确认销毁").performTouchInput { click() }
+        ui.waitUntil(8_000) { ui.onAllNodesWithTag("exam-certificate").fetchSemanticsNodes().isEmpty() }
+        ui.onNodeWithText("已隐藏的证书").assertDoesNotExist()
+        ui.onNodeWithText("已隐藏（1）").assertDoesNotExist()
+        ui.onNodeWithTag(sampleTag).assertDoesNotExist()
+        cabinet.performScrollToNode(metric)
+        ui.onNode(metric).assertIsDisplayed()
     }
 
     private fun captureScreenshot(argument: String, filename: String) {

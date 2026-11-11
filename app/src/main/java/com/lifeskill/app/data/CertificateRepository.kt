@@ -2,9 +2,14 @@ package com.lifeskill.app.data
 
 import androidx.room.withTransaction
 import com.lifeskill.app.ai.TreeAssessmentProtocol
+import com.lifeskill.app.model.AvatarPreset
+import com.lifeskill.app.model.CertificateState
 import com.lifeskill.app.model.CertificateStyle
+import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.EXAM_PASS_SCORE
+import com.lifeskill.app.model.EntryIcon
+import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.validatedNickname
 import kotlinx.coroutines.Dispatchers
@@ -21,23 +26,37 @@ internal class CertificateRepository(
 ) {
     private val dao = database.personal()
     private val assessments = database.assessments()
-    val certificates = dao.watchCertificates().map { rows -> rows.map { it.decode() } }.flowOn(Dispatchers.IO)
+    val certificates = dao.watchCertificates()
+        .map { rows -> rows.mapNotNull { it.state().issued }.sortedBy { it.isSample } }
+        .flowOn(Dispatchers.IO)
 
-    fun watchCertificate(treeId: String) = dao.watchCertificate(treeId).map { it?.decode() }.flowOn(Dispatchers.IO)
+    fun watchCertificate(treeId: String) = dao.watchCertificate(treeId)
+        .map { it?.state() ?: CertificateState() }
+        .flowOn(Dispatchers.IO)
 
     suspend fun prepareArchive() = database.withTransaction { prepareArchiveInTransaction() }
 
     suspend fun setHidden(treeId: String, hidden: Boolean) = database.withTransaction {
         val row = dao.certificate(treeId) ?: throw RuleViolation("这张证书已不存在。")
         val payload = row.payload()
+        if (payload.optBoolean("destroyed")) throw RuleViolation("这张证书已销毁。")
         if (payload.optBoolean("hidden") != hidden) savePayload(row, payload.put("hidden", hidden))
+    }
+
+    suspend fun destroy(treeId: String) = database.withTransaction {
+        val row = dao.certificate(treeId) ?: throw RuleViolation("这张证书已不存在。")
+        // 覆盖签发快照，仅保留销毁标记，防止重考后重新签发或启动时重新放入示例。
+        if (!row.payload().optBoolean("destroyed")) savePayload(row, JSONObject().put("destroyed", true))
     }
 
     suspend fun issue(treeId: String, attemptId: String, enteredNickname: String? = null) = database.withTransaction {
         prepareArchiveInTransaction()
         val attempt = assessments.attempt(treeId, attemptId) ?: throw RuleViolation("本次考试已不存在。")
         if ((attempt.score ?: 0) < EXAM_PASS_SCORE) throw RuleViolation("通过验收考试后可领取结业证书。")
-        if (dao.certificate(treeId) != null) return@withTransaction
+        dao.certificate(treeId)?.let { existing ->
+            if (existing.payload().optBoolean("destroyed")) throw RuleViolation("这张证书已销毁。")
+            return@withTransaction
+        }
         val tree = library.entry(treeId) ?: throw RuleViolation("技能树已不存在。")
         val profile = profiles.current()
         val recipient = if (enteredNickname == null) profile.nickname ?: throw RuleViolation("请填写证书署名。")
@@ -49,6 +68,16 @@ internal class CertificateRepository(
 
     private suspend fun prepareArchiveInTransaction() {
         importLegacyInTransaction()
+        backfillAvatarsInTransaction()
+        if (dao.certificate(SAMPLE_CERTIFICATE_ID) == null) {
+            dao.insertCertificate(CollectedCertificate(
+                SAMPLE_CERTIFICATE_ID, "学习方法入门", CertificateStyle(CertificateTheme.BUSINESS, EntryIcon.BOOK, 0),
+                "示例学员", ProfileAvatar.Preset(AvatarPreset.CAT), isSample = true,
+            ).encode())
+        }
+    }
+
+    private suspend fun backfillAvatarsInTransaction() {
         val bootstrap = database.skills()
         if (bootstrap.initialized(CERTIFICATE_RECIPIENTS_ID)) return
         val rows = dao.certificates()
@@ -57,7 +86,7 @@ internal class CertificateRepository(
             // 旧档案缺少头像。用升级时的本地资料补齐，已签发的昵称与入库顺序保持不变。
             for (row in rows) {
                 val payload = row.payload()
-                if (!payload.has("avatar")) {
+                if (!payload.optBoolean("destroyed") && !payload.has("avatar")) {
                     payload.put("avatar", JSONObject().putAvatar(profile.avatar))
                     if (payload.optString("recipient").isBlank()) payload.put("recipient", profile.displayName)
                     savePayload(row, payload)
@@ -94,12 +123,15 @@ internal class CertificateRepository(
         return CollectedCertificateRow(treeId = treeId, content = secret.seal(json.toString(), "$treeId:certificate"))
     }
 
-    private fun CollectedCertificateRow.decode(): CollectedCertificate {
+    private fun CollectedCertificateRow.state(): CertificateState {
         val json = payload()
-        return CollectedCertificate(treeId, json.getString("name"),
+        if (json.optBoolean("destroyed")) return CertificateState(destroyed = true)
+        return CertificateState(issued = CollectedCertificate(treeId, json.getString("name"),
             checkNotNull(CertificateStyle.fromId(json.getString("style"))),
             json.getString("recipient"), json.getJSONObject("avatar").readAvatar(), json.optBoolean("hidden"),
-            collectedAt = json.optString("collectedAt").takeIf(String::isNotEmpty)?.let(OffsetDateTime::parse))
+            collectedAt = json.optString("collectedAt").takeIf(String::isNotEmpty)?.let(OffsetDateTime::parse),
+            isSample = treeId == SAMPLE_CERTIFICATE_ID,
+        ))
     }
 
     private fun CollectedCertificateRow.payload() = JSONObject(secret.open(content, "$treeId:certificate"))
@@ -110,5 +142,6 @@ internal class CertificateRepository(
     private companion object {
         const val CERTIFICATE_ARCHIVE_ID = 2
         const val CERTIFICATE_RECIPIENTS_ID = 3
+        const val SAMPLE_CERTIFICATE_ID = "lifeskill:certificate-sample"
     }
 }

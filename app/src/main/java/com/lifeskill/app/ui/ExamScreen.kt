@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,7 @@ internal fun ExamScreen(
                     tree.name, checkNotNull(latest.score), CertificateStyle.forTree(tree), certificate,
                     checkNotNull(best), ready, status, active, model::startExam, { reviewing = true },
                     { nickname -> model.collectCertificate(latest.id, nickname) },
+                    model::destroyCertificate,
                 )
             }
             latest != null -> key(latest.id) {
@@ -119,11 +121,15 @@ private enum class CertificateMode { COLLECT, VIEW }
 private fun ExamResult(
     treeName: String, score: Int, style: CertificateStyle, certificate: ExamCertificateContext?, best: Int, ready: Boolean,
     status: AssessmentStatus, active: Boolean,
-    retake: () -> Unit, review: () -> Unit, collectCertificate: (String?) -> Unit,
+    retake: () -> Unit, review: () -> Unit, collectCertificate: (String?) -> Unit, destroyCertificate: () -> Unit,
 ) {
     val passed = score >= EXAM_PASS_SCORE
-    val issued = certificate?.issued
+    val issued = certificate?.state?.issued
+    val destroyed = certificate?.state?.destroyed == true
     var certificateMode by rememberSaveable { mutableStateOf<CertificateMode?>(null) }
+    LaunchedEffect(destroyed) {
+        if (destroyed) certificateMode = null
+    }
     LazyColumn(
         Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -145,7 +151,7 @@ private fun ExamResult(
                 }
             }
         }
-        if (passed && certificate != null) item {
+        if (passed && certificate != null && !destroyed) item {
             Action(
                 if (issued == null) "获取结业证书" else "查看结业证书", Glyph.DIAMOND,
                 { certificateMode = if (issued == null) CertificateMode.COLLECT else CertificateMode.VIEW },
@@ -160,13 +166,15 @@ private fun ExamResult(
         }
         item { AssessmentStatusText(status) }
     }
-    if (active && certificate != null) when (certificateMode) {
+    if (active && certificate != null && !destroyed) when (certificateMode) {
         CertificateMode.COLLECT -> ExamCertificateDialog(
             issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.profile.nickname,
             issued?.avatar ?: certificate.profile.avatar,
             collected = issued != null, status = status, onCollect = collectCertificate, collectedAt = issued?.collectedAt,
         ) { certificateMode = null }
-        CertificateMode.VIEW -> issued?.let { IssuedCertificateDialog(it) { certificateMode = null } }
+        CertificateMode.VIEW -> issued?.let {
+            IssuedCertificateDialog(it, CertificateViewerControls(status, destroyCertificate)) { certificateMode = null }
+        }
         null -> Unit
     }
 }

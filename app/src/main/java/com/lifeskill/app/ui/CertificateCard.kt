@@ -70,6 +70,7 @@ private fun CertificateTheme.palette() = when (this) {
 @Composable
 internal fun CertificateCard(
     treeName: String, style: CertificateStyle, recipient: String, avatar: ProfileAvatar, collectedAt: OffsetDateTime?,
+    isSample: Boolean,
 ) {
     val palette = style.theme.palette()
     Surface(
@@ -92,7 +93,7 @@ internal fun CertificateCard(
             Text("结业证书", Modifier.semantics { heading() }, color = palette.ink, textAlign = TextAlign.Center,
                 style = CertificateType.copy(fontSize = 37.sp, lineHeight = 48.sp, letterSpacing = 3.sp,
                     fontWeight = FontWeight.Bold))
-            Text("CERTIFICATE OF COMPLETION", color = palette.ink, textAlign = TextAlign.Center,
+            Text(if (isSample) "示例证书" else "CERTIFICATE OF COMPLETION", color = palette.ink, textAlign = TextAlign.Center,
                 style = CertificateType.copy(fontSize = 10.sp, lineHeight = 15.sp, letterSpacing = 1.25.sp))
             Spacer(Modifier.height(23.dp))
             CertificateRecipient(recipient, avatar, palette)

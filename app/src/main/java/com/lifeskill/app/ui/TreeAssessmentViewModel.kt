@@ -8,7 +8,7 @@ import com.lifeskill.app.data.TreeAssessmentRepository
 import com.lifeskill.app.model.EXAM_ANSWER_LIMIT
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.ExamAttempt
-import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.CertificateState
 import com.lifeskill.app.model.PersonalProfile
 import com.lifeskill.app.model.TreeChallenge
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 
 internal data class AssessmentStatus(val busy: Boolean = false, val error: String? = null)
 internal data class ExamDraft(val attemptId: String, val answers: List<ExamAnswer>)
-internal data class ExamCertificateContext(val issued: CollectedCertificate?, val profile: PersonalProfile)
+internal data class ExamCertificateContext(val state: CertificateState, val profile: PersonalProfile)
 
 internal class TreeAssessmentViewModel(
     private val repository: TreeAssessmentRepository,
@@ -39,12 +39,12 @@ internal class TreeAssessmentViewModel(
             else throw error
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-    val certificate = combine(certificates.watchCertificate(treeId), profiles.profile) { issued, profile ->
-        ExamCertificateContext(issued, profile)
-    }.catch { error ->
-        if (error is Exception) _examStatus.value = AssessmentStatus(error = readable(error, "无法读取结业证书。"))
-        else throw error
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val certificate = combine(certificates.watchCertificate(treeId), profiles.profile, ::ExamCertificateContext)
+        .catch { error ->
+            if (error is Exception) _examStatus.value = AssessmentStatus(error = readable(error, "无法读取结业证书。"))
+            else throw error
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val challengeOperations = TreeChallenge.entries.associateWith { MutableStateFlow(AssessmentStatus()) }
     private val challengeSessions = TreeChallenge.entries.associateWith { kind ->
@@ -78,6 +78,8 @@ internal class TreeAssessmentViewModel(
     fun collectCertificate(attemptId: String, nickname: String?) = run(_examStatus) {
         certificates.issue(treeId, attemptId, nickname)
     }
+
+    fun destroyCertificate() = run(_examStatus) { certificates.destroy(treeId) }
 
     fun startChallenge(kind: TreeChallenge) = run(challengeOperations.getValue(kind)) {
         repository.startChallenge(treeId, kind)

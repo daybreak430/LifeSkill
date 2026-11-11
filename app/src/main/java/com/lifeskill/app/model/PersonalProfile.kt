@@ -48,8 +48,10 @@ internal fun validatedNickname(value: String, required: Boolean = false): String
 
 internal data class CollectedCertificate(
     val treeId: String, val treeName: String, val style: CertificateStyle, val recipient: String, val avatar: ProfileAvatar,
-    val hidden: Boolean = false, val collectedAt: OffsetDateTime? = null,
+    val hidden: Boolean = false, val collectedAt: OffsetDateTime? = null, val isSample: Boolean = false,
 )
+
+internal data class CertificateState(val issued: CollectedCertificate? = null, val destroyed: Boolean = false)
 
 internal data class LearningStatistics(val skills: Progress, val passedTrees: Int) {
     companion object {

@@ -79,11 +79,12 @@ class PersonalStorageTest {
                 app.profiles.save(profile)
                 repeat(2) { app.certificates.prepareArchive() }
                 val archive = app.certificates.certificates.first()
+                assertEquals(1, archive.count { it.isSample })
                 assertEquals(listOf(
                     CollectedCertificate(second.id, second.name, CertificateStyle.forTree(second), profile.displayName, profile.avatar),
                     CollectedCertificate(old.id, old.name, frozenStyle, profile.displayName, profile.avatar),
-                ), archive)
-                assertNull(app.certificates.watchCertificate(waiting.id).first())
+                ), archive.filterNot { it.isSample })
+                assertNull(app.certificates.watchCertificate(waiting.id).first().issued)
                 val stats = LearningStatistics.from(app.library.snapshot(), app.assessments.summaries.first())
                 assertEquals(Progress(1, 2), stats.skills)
                 assertEquals(Progress(1, 2), app.library.snapshot().progress(direction.id))
@@ -92,13 +93,14 @@ class PersonalStorageTest {
                 assertEquals("现在的昵称", app.certificates.certificates.first().first().recipient)
                 app.library.delete(direction.id)
                 assertTrue(app.assessments.summaries.first().isEmpty())
-                assertEquals(3, app.certificates.certificates.first().size)
+                assertEquals(3, app.certificates.certificates.first().count { !it.isSample })
             }
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
                 app.certificates.prepareArchive()
-                assertEquals(listOf(waiting.id, second.id, old.id), app.certificates.certificates.first().map { it.treeId })
-                assertEquals(profile.displayName, app.certificates.watchCertificate(old.id).first()?.recipient)
+                assertEquals(listOf(waiting.id, second.id, old.id),
+                    app.certificates.certificates.first().filterNot { it.isSample }.map { it.treeId })
+                assertEquals(profile.displayName, app.certificates.watchCertificate(old.id).first().issued?.recipient)
             }
         } finally {
             context.deleteDatabase(name)
@@ -122,17 +124,44 @@ class PersonalStorageTest {
                     content = secret.seal(payload.toString(), "${tree.id}:certificate")))
                 app.profiles.save(PersonalProfile("当前昵称", cat))
                 app.certificates.prepareArchive()
-                assertEquals(issued, app.certificates.watchCertificate(tree.id).first())
+                assertEquals(issued, app.certificates.watchCertificate(tree.id).first().issued)
                 app.certificates.setHidden(tree.id, true)
                 app.profiles.save(PersonalProfile("再次改名", ProfileAvatar.Preset(AvatarPreset.DOG)))
             }
             withDatabase(name) { database ->
                 val app = fixture(database, ScriptedGateway())
                 app.certificates.prepareArchive()
-                assertEquals(issued.copy(hidden = true), app.certificates.certificates.first().single())
+                assertEquals(issued.copy(hidden = true), app.certificates.certificates.first().single { !it.isSample })
                 app.certificates.setHidden(tree.id, false)
-                assertEquals(issued, app.certificates.certificates.first().single())
+                assertEquals(issued, app.certificates.certificates.first().single { !it.isSample })
                 assertEquals(12L, database.personal().certificate(tree.id)?.sequence)
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+        Unit
+    }
+
+    @Test fun destroyedSampleStaysGoneAfterReopenAndArchivePreparation() = runBlocking {
+        val name = "certificate-sample-${UUID.randomUUID()}"
+        try {
+            withDatabase(name) { database ->
+                val app = fixture(database, ScriptedGateway())
+                database.skills().insertBootstrap(BootstrapRow(2))
+                database.skills().insertBootstrap(BootstrapRow(3))
+                app.certificates.prepareArchive()
+                val sample = app.certificates.certificates.first().single()
+                assertTrue(sample.isSample)
+                assertNull(sample.collectedAt)
+                app.certificates.setHidden(sample.treeId, true)
+                assertTrue(app.certificates.certificates.first().single().hidden)
+                app.certificates.destroy(sample.treeId)
+                assertTrue(app.certificates.watchCertificate(sample.treeId).first().destroyed)
+            }
+            withDatabase(name) { database ->
+                val app = fixture(database, ScriptedGateway())
+                repeat(2) { app.certificates.prepareArchive() }
+                assertTrue(app.certificates.certificates.first().isEmpty())
             }
         } finally {
             context.deleteDatabase(name)
