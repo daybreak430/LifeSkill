@@ -95,7 +95,7 @@ private fun ExamIntro(ready: Boolean, status: AssessmentStatus, start: () -> Uni
         item {
             EmptyState(
                 if (ready) "准备验收" else "验收考试未解锁",
-                if (ready) "8 道题 · 满分 $EXAM_MAX_SCORE · $EXAM_PASS_SCORE 分通过" else "点亮全部课程后开始考试。",
+                if (ready) "10 道题 · 满分 $EXAM_MAX_SCORE · $EXAM_PASS_SCORE 分通过" else "点亮全部课程后开始考试。",
             ) {
                 AssessmentMedallion(EntryIcon.BOOK, 76.dp, if (ready) SkillState.AVAILABLE else SkillState.LOCKED)
             }
@@ -196,11 +196,12 @@ private fun ExamQuestionCard(
                 color = Gold, style = MaterialTheme.typography.labelLarge)
             Text(question.prompt, style = MaterialTheme.typography.titleSmall)
             if (question.choices.isEmpty()) {
-                val short = question.type == ExamQuestionType.SHORT
+                val legacyShort = question.type == ExamQuestionType.SHORT
                 OutlinedTextField(
                     answer.text, { update(ExamAnswer(text = it)) }, Modifier.fillMaxWidth().testTag("exam-answer-$index"),
-                    label = { Text("第 ${index + 1} 题答案") }, enabled = enabled, minLines = if (short) 3 else 1,
-                    maxLines = if (short) 6 else 2, shape = ControlShape,
+                    label = { Text("第 ${index + 1} 题答案") }, enabled = enabled,
+                    minLines = if (legacyShort) 3 else 1, maxLines = if (legacyShort) 6 else 2,
+                    shape = ControlShape,
                 )
             } else {
                 val single = question.type == ExamQuestionType.SINGLE

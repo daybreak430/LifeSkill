@@ -4,12 +4,22 @@ internal const val EXAM_PASS_SCORE = 60
 internal const val EXAM_MAX_SCORE = 100
 internal const val EXAM_ANSWER_LIMIT = 2_000
 internal const val DIAGNOSTIC_QUESTIONS = 3
+internal const val EXAM_QUESTION_COUNT = 10
 
 internal enum class ExamQuestionType(val label: String, val points: Int) {
     SINGLE("单选", 10),
     MULTIPLE("多选", 10),
     FILL("填空", 10),
-    SHORT("简答", 20),
+    // 仅用于读取 0.12.0 已保存的历史试卷，新试卷不会再包含此题型。
+    SHORT("简答", 20);
+
+    val examCount: Int
+        get() = when (this) {
+            SINGLE -> 4
+            MULTIPLE -> 3
+            FILL -> 3
+            SHORT -> 0
+        }
 }
 
 internal data class ExamQuestion(

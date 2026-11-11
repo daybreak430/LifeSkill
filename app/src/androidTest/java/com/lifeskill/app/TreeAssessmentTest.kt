@@ -5,12 +5,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.ai.TreeAssessmentProtocol
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.ExamQuestionType
+import com.lifeskill.app.model.EXAM_QUESTION_COUNT
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TreeChallenge
 import kotlinx.coroutines.flow.first
@@ -63,6 +65,8 @@ class TreeAssessmentTest {
             val lesson = context.getJSONArray("lessons").getJSONObject(0)
             assertEquals(skill.goal, lesson.getString("goal"))
             assertTrue(lesson.getJSONArray("excerpts").getString(0).contains("实收金额"))
+            assertTrue(messages.first().text.contains("不要生成简答题"))
+            assertFalse(messages.first().text.contains("SHORT"))
             """{"questions":[]}"""
         }
         gateway.enqueue { messages ->
@@ -73,7 +77,12 @@ class TreeAssessmentTest {
         exams.startExam(tree.id)
         val first = exams.watchAttempts(tree.id).first().single()
         assertNull(first.score)
-        assertEquals(ExamQuestionType.entries.toSet(), first.questions.map { it.type }.toSet())
+        assertEquals(EXAM_QUESTION_COUNT, first.questions.size)
+        val currentTypes = ExamQuestionType.entries.filter { it != ExamQuestionType.SHORT }
+        assertEquals(currentTypes.toSet(), first.questions.map { it.type }.toSet())
+        assertEquals(listOf(4, 3, 3), currentTypes.map { type ->
+            first.questions.count { it.type == type }
+        })
 
         gateway.reply(markFixture())
         exams.submitExam(tree.id, first.id, first.answers)
@@ -82,16 +91,18 @@ class TreeAssessmentTest {
         expectRule { exams.startChallenge(tree.id, TreeChallenge.DIAGNOSTIC) }
 
         gateway.enqueue { messages ->
-            assertEquals(8, JSONObject(messages.last().text).getJSONArray("previousQuestions").length())
+            assertEquals(EXAM_QUESTION_COUNT, JSONObject(messages.last().text).getJSONArray("previousQuestions").length())
             examFixture("第二轮")
         }
         exams.startExam(tree.id)
         val second = exams.watchAttempts(tree.id).first().first()
-        val passing = second.questions.map { question ->
-            when (question.type) {
-                ExamQuestionType.SHORT -> ExamAnswer()
-                ExamQuestionType.FILL -> ExamAnswer(text = "核对金额")
-                else -> ExamAnswer(selected = question.correctChoices)
+        val passing = second.questions.mapIndexed { index, question ->
+            if (index >= 6) ExamAnswer()
+            else {
+                when (question.type) {
+                    ExamQuestionType.FILL -> ExamAnswer(text = "核对金额")
+                    else -> ExamAnswer(selected = question.correctChoices)
+                }
             }
         }
         gateway.reply(markFixture())
@@ -108,7 +119,10 @@ class TreeAssessmentTest {
             markFixture()
         }
         exams.submitExam(tree.id, third.id, third.questions.map { question ->
-            ExamAnswer(question.correctChoices, "以凭证核对金额")
+            when (question.type) {
+                ExamQuestionType.FILL -> ExamAnswer(text = "核对金额")
+                else -> ExamAnswer(selected = question.correctChoices)
+            }
         })
         val attempts = exams.watchAttempts(tree.id).first()
         assertEquals(listOf(100, 60, 0), attempts.map { it.score })
@@ -159,6 +173,14 @@ class TreeAssessmentTest {
         assertNull(exams.watchChallenge(tree.id, feynman).first())
     }
 
+    @Test fun legacyAttemptWithShortQuestionsRemainsReadable() {
+        val attempt = TreeAssessmentProtocol.decodeAttempt("legacy", legacyAttemptFixture())
+
+        assertEquals(8, attempt.questions.size)
+        assertEquals(2, attempt.questions.count { it.type == ExamQuestionType.SHORT })
+        assertEquals(100, attempt.score)
+    }
+
     private suspend fun expectRule(action: suspend () -> Unit) {
         try {
             action()
@@ -171,7 +193,7 @@ class TreeAssessmentTest {
 
 internal fun examFixture(prefix: String = "验收"): String = JSONObject().put("questions", JSONArray(
     ExamQuestionType.entries.flatMap { type ->
-        (1..2).map { index ->
+        (1..type.examCount).map { index ->
             val choices = when (type) {
                 ExamQuestionType.SINGLE, ExamQuestionType.MULTIPLE -> listOf("核对金额", "查找凭证", "修改字体", "忽略差额")
                 else -> emptyList()
@@ -188,10 +210,38 @@ internal fun examFixture(prefix: String = "验收"): String = JSONObject().put("
 )).toString()
 
 internal fun markFixture(pointsAdjustment: Int = 0): String = JSONObject().put("marks", JSONArray(
-    ExamQuestionType.entries.flatMap { type -> listOf(type.points, type.points) }.mapIndexed { index, points ->
-        JSONObject().put("number", index + 1).put("points", points + pointsAdjustment).put("feedback", "说明了核对的方法。")
-    },
+    ExamQuestionType.entries.flatMap { type -> List(type.examCount) { type.points } }
+        .mapIndexed { index, points ->
+            JSONObject().put("number", index + 1).put("points", points + pointsAdjustment)
+                .put("feedback", "说明了核对的方法。")
+        },
 )).toString()
 
 internal fun challengeFixture(feedback: String, accepted: Boolean, next: String): String =
     JSONObject().put("feedback", feedback).put("accepted", accepted).put("next", next).toString()
+
+private fun legacyAttemptFixture(): String {
+    val questions = ExamQuestionType.entries.flatMap { type ->
+        (1..2).map { index ->
+            JSONObject().put("type", type.name).put("prompt", "旧版${type.label}$index")
+                .put("choices", JSONArray(if (type == ExamQuestionType.SINGLE || type == ExamQuestionType.MULTIPLE) {
+                    listOf("A", "B", "C", "D")
+                } else emptyList()))
+                .put("correctChoices", JSONArray(when (type) {
+                    ExamQuestionType.SINGLE -> listOf(1)
+                    ExamQuestionType.MULTIPLE -> listOf(1, 2)
+                    else -> emptyList<Int>()
+                }))
+                .put("reference", "旧版参考答案")
+        }
+    }
+    return JSONObject().put("questions", JSONArray(questions))
+        .put("answers", JSONArray(questions.map {
+            JSONObject().put("selected", JSONArray()).put("text", "旧版回答")
+        }))
+        .put("marks", JSONArray(ExamQuestionType.entries.flatMap { type ->
+            List(2) { type.points }
+        }.mapIndexed { index, points ->
+            JSONObject().put("number", index + 1).put("points", points).put("feedback", "旧版反馈")
+        })).toString()
+}

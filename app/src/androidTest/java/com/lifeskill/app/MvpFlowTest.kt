@@ -448,12 +448,12 @@ class MvpFlowTest {
             await("验收单选1")
 
             val paper = ui.onNodeWithTag("exam-questions")
-            for (index in 0..3) {
+            for (index in 0..6) {
                 paper.performScrollToIndex(index)
                 ui.onNodeWithTag("exam-choice-$index-0").performTouchInput { click() }
-                if (index >= 2) ui.onNodeWithTag("exam-choice-$index-1").performTouchInput { click() }
+                if (index >= 4) ui.onNodeWithTag("exam-choice-$index-1").performTouchInput { click() }
             }
-            for (index in 4..5) {
+            for (index in 7..8) {
                 paper.performScrollToIndex(index)
                 val answer = ui.onNodeWithTag("exam-answer-$index")
                 answer.performTouchInput { click() }
@@ -462,23 +462,23 @@ class MvpFlowTest {
                 pressBack()
                 ui.waitUntil(8_000) { !imeVisible() }
             }
-            await("已答 6 / 8")
+            await("已答 9 / 10")
             ui.onNodeWithText("交卷").performTouchInput { click() }
             await("确认交卷？")
             fixture.ai.reply(markFixture())
             ui.onNodeWithText("确认交卷").performTouchInput { click() }
-            await("60 分")
+            await("90 分")
             ui.onNodeWithText("通过验收").assertIsDisplayed()
             ui.onNodeWithText("再考一次").assertIsEnabled()
             ui.onNodeWithText("查看错题集").performTouchInput { click() }
-            await("验收简答1")
+            await("验收填空3")
             ui.onAllNodesWithText("未作答")[0].assertIsDisplayed()
             pressBack()
-            await("60 分")
+            await("90 分")
             pressBack()
 
             map.performScrollToNode(hasText("费曼复习"))
-            ui.onNodeWithText("最高 60 分").assertIsDisplayed()
+            ui.onNodeWithText("最高 90 分").assertIsDisplayed()
             ui.onNodeWithText("自以为是检测").assertIsDisplayed()
             ui.onNodeWithText("费曼复习").performTouchInput { click() }
             await("开始挑战")
