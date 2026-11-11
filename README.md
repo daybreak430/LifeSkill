@@ -4,7 +4,7 @@ LifeSkill 是一款原生 Android 技能树应用。它把学习目标拆成带�
 
 ## 安装
 
-LifeSkill 支持 Android 8.0（API 26）及以上。当前版本为 0.13.5，本地发布包路径为 `release/LifeSkill-0.13.5-release.apk`。APK 独立于源码分发，克隆仓库后可以自行构建 Debug 安装包。
+LifeSkill 支持 Android 8.0（API 26）及以上。当前版本为 0.13.6，本地发布包路径为 `release/LifeSkill-0.13.6-release.apk`。APK 独立于源码分发，克隆仓库后可以自行构建 Debug 安装包。
 
 手动管理技能树无需模型账户。要使用 AI 功能，在「我的 → 设置 → 模型设置」填入自己的服务商 API Key。自定义服务使用 HTTPS Base URL、模型名和 API Key。详见 [使用指南](docs/user-guide.md)。
 
