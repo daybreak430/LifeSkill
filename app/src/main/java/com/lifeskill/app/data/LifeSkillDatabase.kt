@@ -200,13 +200,18 @@ internal abstract class SkillDao {
 
 @Database(
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
-        ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class],
-    version = 4,
+        ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class,
+        AiUsageRow::class],
+    version = 5,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+    ],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {
     abstract fun skills(): SkillDao
     abstract fun assessments(): TreeAssessmentDao
     abstract fun personal(): PersonalDao
+    abstract fun usage(): AiUsageDao
 }

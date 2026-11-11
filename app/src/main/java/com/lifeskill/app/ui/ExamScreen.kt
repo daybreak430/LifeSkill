@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.EXAM_MAX_SCORE
 import com.lifeskill.app.model.EXAM_PASS_SCORE
@@ -53,6 +54,7 @@ import com.lifeskill.app.model.SkillState
 @Composable
 internal fun ExamScreen(
     tree: Entry, ready: Boolean, app: AppViewModel, model: TreeAssessmentViewModel, active: Boolean,
+    usage: UsageTotal?,
 ) {
     val attempts by model.attempts.collectAsStateWithLifecycle()
     val status by model.examStatus.collectAsStateWithLifecycle()
@@ -77,7 +79,7 @@ internal fun ExamScreen(
                     tree.name, checkNotNull(latest.score), CertificateStyle.forTree(tree), certificate,
                     checkNotNull(best), ready, status, active, model::startExam, { reviewing = true },
                     { nickname -> model.collectCertificate(latest.id, nickname) },
-                    model::destroyCertificate,
+                    model::destroyCertificate, usage,
                 )
             }
             latest != null -> key(latest.id) {
@@ -122,6 +124,7 @@ private fun ExamResult(
     treeName: String, score: Int, style: CertificateStyle, certificate: ExamCertificateContext?, best: Int, ready: Boolean,
     status: AssessmentStatus, active: Boolean,
     retake: () -> Unit, review: () -> Unit, collectCertificate: (String?) -> Unit, destroyCertificate: () -> Unit,
+    usage: UsageTotal?,
 ) {
     val passed = score >= EXAM_PASS_SCORE
     val issued = certificate?.state?.issued
@@ -171,9 +174,10 @@ private fun ExamResult(
             issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.profile.nickname,
             issued?.avatar ?: certificate.profile.avatar,
             collected = issued != null, status = status, onCollect = collectCertificate, collectedAt = issued?.collectedAt,
+            usage = usage,
         ) { certificateMode = null }
         CertificateMode.VIEW -> issued?.let {
-            IssuedCertificateDialog(it, CertificateViewerControls(status, destroyCertificate)) { certificateMode = null }
+            IssuedCertificateDialog(it, CertificateViewerControls(status, destroyCertificate), usage) { certificateMode = null }
         }
         null -> Unit
     }

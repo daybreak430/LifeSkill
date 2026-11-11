@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
@@ -78,6 +79,7 @@ import kotlin.math.abs
 internal fun SkillTreeScreen(
     tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel,
     unlock: SkillUnlock?, active: Boolean, addedEntryId: String?, assessment: TreeAssessmentSummary,
+    usage: UsageTotal?, generationUsage: UsageTotal?,
 ) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
@@ -101,6 +103,7 @@ internal fun SkillTreeScreen(
             tree.name, Modifier.padding(horizontal = 20.dp), style = LibraryTitle,
             maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
+        AiUsageSummary(usage, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), generation = generationUsage)
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

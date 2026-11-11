@@ -10,6 +10,9 @@ import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.GenerationDestination
+import com.lifeskill.app.model.GenerationLevel
+import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
 import kotlinx.coroutines.flow.first
@@ -75,6 +78,44 @@ class AiGatewayTest {
         expectError(Response(failure = SocketTimeoutException()), "超时")
         expectError(Response(failure = UnknownHostException()), "网络")
         expectError(Response(failure = SSLHandshakeException("模拟证书错误")), "HTTPS")
+    }
+
+    @Test fun assignsEveryBilledGenerationAttemptToTheConfirmedCourse() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        fun response(content: String, cached: Int?): Response {
+            val usage = JSONObject().put("prompt_tokens", 100).put("completion_tokens", 20)
+            cached?.let { usage.put("prompt_cache_hit_tokens", it) }
+            val choice = JSONObject().put("message", JSONObject().put("content", content))
+            return Response(body = JSONObject().put("choices", JSONArray().put(choice)).put("usage", usage).toString())
+        }
+        val responses = ArrayDeque(listOf(
+            response(RepositoryTest.TREE_OFFER, 10), response("   ", 10), response(RepositoryTest.CREATED, null),
+        ))
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        try {
+            val app = fixture(database, OpenAiGateway { responses.removeFirst() })
+            val conversations = app.conversations
+            conversations.send(scope, "生成数据质量课程")
+            val offer = conversations.watch(scope).first().last()
+            conversations.generateTree(scope, offer.id, GenerationOptions(GenerationLevel.BEGINNER, 2..2))
+            val draft = conversations.watch(scope).first().last()
+            assertEquals(TurnKind.DRAFT, draft.kind)
+            assertEquals(360L, app.usage.summary.first().total?.tokens)
+            assertTrue(app.usage.summary.first().courses.isEmpty())
+            conversations.confirmDraft(scope, draft.id, GenerationDestination.New("数据能力"))
+            val library = app.library.snapshot()
+            val course = library.childrenOf(library.childrenOf(null).single().id).single()
+            val summary = app.usage.summary.first()
+            assertEquals(240L, summary.courses.getValue(course.id).tokens)
+            assertEquals(summary.courses[course.id], summary.generation[course.id])
+            assertEquals(1, summary.courses.getValue(course.id).unpriced)
+            conversations.clearGeneration(scope)
+            assertEquals(360L, app.usage.summary.first().total?.tokens)
+            assertTrue(responses.isEmpty())
+        } finally {
+            database.close()
+        }
     }
 
     @Test fun deepSeekBlankJsonContentRetriesWithoutJsonModeAndKeepsTheOriginalRequest() = runBlocking {

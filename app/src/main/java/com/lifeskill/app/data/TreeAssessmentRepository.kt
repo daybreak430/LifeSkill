@@ -1,7 +1,6 @@
 package com.lifeskill.app.data
 
 import androidx.room.withTransaction
-import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
@@ -33,7 +32,7 @@ internal class TreeAssessmentRepository(
     private val database: LifeSkillDatabase,
     private val library: LibraryRepository,
     private val settings: SettingsStore,
-    private val gateway: AiGateway,
+    private val usage: AiUsageRepository,
     private val secret: SecretBox,
 ) {
     private val dao = database.assessments()
@@ -60,7 +59,7 @@ internal class TreeAssessmentRepository(
             val previous = latest?.decode()?.questions.orEmpty().map { it.prompt }
             ExamContext(latest?.id, curriculum(current, treeId), learningContext(current, treeId), previous)
         } ?: return
-        val questions = request(TreeAssessmentProtocol.examRequest(snapshot.learning, snapshot.previousQuestions),
+        val questions = request(treeId, TreeAssessmentProtocol.examRequest(snapshot.learning, snapshot.previousQuestions),
             TreeAssessmentProtocol::questions)
         val attempt = ExamAttempt(newId(), questions)
         database.withTransaction {
@@ -87,7 +86,7 @@ internal class TreeAssessmentRepository(
                 ExamAnswer(selected = selected)
             }
         }
-        val marks = request(TreeAssessmentProtocol.gradingRequest(attempt.questions, answers)) {
+        val marks = request(treeId, TreeAssessmentProtocol.gradingRequest(attempt.questions, answers)) {
             TreeAssessmentProtocol.marks(it, attempt.questions, answers)
         }
         val graded = attempt.copy(answers = answers, marks = marks)
@@ -110,7 +109,7 @@ internal class TreeAssessmentRepository(
             row to if (kind == TreeChallenge.DIAGNOSTIC) learningContext(current, treeId) else null
         } ?: return
         val prompt = if (learning == null) TreeAssessmentProtocol.FEYNMAN_PROMPT else {
-            request(TreeAssessmentProtocol.challengeRequest(kind, learning, null, null)) {
+            request(treeId, TreeAssessmentProtocol.challengeRequest(kind, learning, null, null)) {
                 TreeAssessmentProtocol.challenge(it, needsFeedback = false, needsQuestion = true).next
             }
         }
@@ -128,7 +127,7 @@ internal class TreeAssessmentRepository(
             Triple(row, session, learningContext(current, treeId))
         } ?: return
         val needsQuestion = if (kind == TreeChallenge.DIAGNOSTIC) session.exchanges.size + 1 < DIAGNOSTIC_QUESTIONS else null
-        val reply = request(TreeAssessmentProtocol.challengeRequest(kind, learning, session, answer)) {
+        val reply = request(treeId, TreeAssessmentProtocol.challengeRequest(kind, learning, session, answer)) {
             TreeAssessmentProtocol.challenge(it, needsFeedback = true, needsQuestion = needsQuestion).also { reply ->
                 if (needsQuestion == true && (reply.next == session.prompt || session.exchanges.any { it.prompt == reply.next })) {
                     throw RecoverableReply("AI 返回了重复的练习题，请重试。", "保留对本题的反馈，next 改为未问过的新题。")
@@ -178,15 +177,16 @@ internal class TreeAssessmentRepository(
         return JSONObject().put("tree", current.byId.getValue(treeId).name).put("lessons", JSONArray(lessons))
     }
 
-    private suspend fun <T> request(messages: List<ModelMessage>, parse: (String) -> T): T {
+    private suspend fun <T> request(treeId: String, messages: List<ModelMessage>, parse: (String) -> T): T {
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
+        val target = UsageTarget(courseId = treeId)
         return try {
-            val raw = gateway.complete(config, messages, structured = true)
+            val raw = usage.complete(config, messages, structured = true, target = target)
             withContext(Dispatchers.Default) { parse(raw) }
         } catch (error: RecoverableReply) {
             val system = messages.first()
             val retry = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + messages.drop(1)
-            val raw = gateway.complete(config, retry, structured = true, useJsonMode = !error.retryWithoutJsonMode)
+            val raw = usage.complete(config, retry, structured = true, target = target, useJsonMode = !error.retryWithoutJsonMode)
             withContext(Dispatchers.Default) { parse(raw) }
         }
     }

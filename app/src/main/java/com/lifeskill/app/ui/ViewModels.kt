@@ -247,7 +247,7 @@ internal class AppViewModel(
                     .put("description", goal.trim().take(LibraryRules.GOAL_LIMIT))
                 val config = withContext(Dispatchers.IO) { container.settings.active() }
                 val messages = listOf(ModelMessage("system", AiProtocol.iconPrompt()), ModelMessage("user", data.toString()))
-                val icon = AiProtocol.icon(container.gateway.complete(config, messages, structured = true))
+                val icon = AiProtocol.icon(container.usage.complete(config, messages, structured = true))
                 _editor.value?.takeIf { it.initial === editor.initial }?.let {
                     _editor.value = it.copy(icon = icon, suggesting = false)
                 }
@@ -431,7 +431,7 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
         val config = _status.value.config ?: return
         run {
             val input = listOf(ModelMessage("user", "请简短回复「连接成功」。"))
-            container.gateway.complete(config.validated(), input, structured = false)
+            container.usage.complete(config.validated(), input, structured = false)
             _status.value.copy(working = false, message = "连接成功")
         }
     }

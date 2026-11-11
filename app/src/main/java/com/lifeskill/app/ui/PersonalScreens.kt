@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeskill.app.data.UsageSummary
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.LearningStatistics
 import com.lifeskill.app.model.PersonalProfile
@@ -63,6 +65,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun PersonalScreen(
     app: AppViewModel, model: PersonalViewModel, statistics: LearningStatistics, active: Boolean, dark: Boolean,
+    usage: UsageSummary,
 ) {
     val result by model.personalData.collectAsStateWithLifecycle()
     val certificateStatus by model.certificateStatus.collectAsStateWithLifecycle()
@@ -102,7 +105,7 @@ internal fun PersonalScreen(
                     PersonalProfileCard(data.profile) { app.open(Route(Page.PROFILE_EDIT)) }
                 }
                 item(key = "study-statistics", span = { GridItemSpan(maxLineSpan) }) {
-                    StudyStatisticsCard(statistics, certificates.count { !it.isSample })
+                    StudyStatisticsCard(statistics, certificates.count { !it.isSample }, usage.total)
                 }
                 item(key = "certificate-heading", span = { GridItemSpan(maxLineSpan) }) {
                     Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -138,7 +141,7 @@ internal fun PersonalScreen(
                 certificateStatus, destroy = { model.destroyCertificate(selected.treeId) },
                 toggleVisibility = { model.setCertificateHidden(selected.treeId, !selected.hidden) }, hidden = selected.hidden,
             )
-            IssuedCertificateDialog(selected, controls) {
+            IssuedCertificateDialog(selected, controls, usage.courses[selected.treeId]) {
                 selectedId = null
                 model.clearCertificateStatus()
             }
@@ -192,7 +195,9 @@ private val StatisticsMint = Color(0xFFA6CEBB)
 private val StatisticsDivider = Color.White.copy(alpha = .15f)
 
 @Composable
-private fun StudyStatisticsCard(statistics: LearningStatistics, certificateCount: Int) {
+private fun StudyStatisticsCard(
+    statistics: LearningStatistics, certificateCount: Int, usage: UsageTotal?,
+) {
     val progress = statistics.skills
     Surface(Modifier.fillMaxWidth(), shape = PanelShape, color = Color(0xFF12352C)) {
         Column(
@@ -227,6 +232,8 @@ private fun StudyStatisticsCard(statistics: LearningStatistics, certificateCount
                 StudyMetric(statistics.passedTrees.toString(), "通过结业考试", Modifier.weight(1f))
                 StudyMetric(certificateCount.toString(), "已领取证书", Modifier.weight(1f))
             }
+            HorizontalDivider(color = StatisticsDivider)
+            AiUsageSummary(usage, color = StatisticsWhite, label = "DeepSeek 累计用量")
         }
     }
 }

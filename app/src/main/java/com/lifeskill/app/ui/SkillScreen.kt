@@ -24,13 +24,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.SkillState
 
 @Composable
-internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
+internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel, usage: UsageTotal?) {
     val state = library.skillState(skill.id)
     val halo = state.tint()
     val prerequisites = library.prerequisitesOf(skill.id).mapNotNull(library.byId::get)
@@ -85,6 +86,7 @@ internal fun SkillScreen(skill: Entry, library: Library, app: AppViewModel) {
                     LessonMarkdown(skill.goal)
                 }
             }
+            AiUsageSummary(usage, Modifier.padding(horizontal = 4.dp))
             if (prerequisites.isNotEmpty()) {
                 Text("先修课", Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium)
                 prerequisites.forEach { entry ->

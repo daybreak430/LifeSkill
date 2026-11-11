@@ -62,6 +62,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.DEFAULT_PROFILE_NAME
@@ -82,10 +83,12 @@ internal data class CertificateViewerControls(
 
 @Composable
 internal fun IssuedCertificateDialog(
-    certificate: CollectedCertificate, controls: CertificateViewerControls, onClose: () -> Unit,
+    certificate: CollectedCertificate, controls: CertificateViewerControls,
+    usage: UsageTotal?, onClose: () -> Unit,
 ) {
     ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, certificate.avatar,
-        controls = controls, collectedAt = certificate.collectedAt, isSample = certificate.isSample, onClose = onClose)
+        controls = controls, collectedAt = certificate.collectedAt, isSample = certificate.isSample, usage = usage,
+        onClose = onClose)
 }
 
 @Composable
@@ -93,6 +96,7 @@ internal fun ExamCertificateDialog(
     treeName: String, style: CertificateStyle, recipient: String?, avatar: ProfileAvatar, collected: Boolean = false,
     status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null,
     controls: CertificateViewerControls? = null, collectedAt: OffsetDateTime? = null, isSample: Boolean = false,
+    usage: UsageTotal? = null,
     onClose: () -> Unit,
 ) {
     val viewing = onCollect == null
@@ -219,6 +223,9 @@ internal fun ExamCertificateDialog(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar, collectedAt, isSample)
+                    if (!isSample) AiUsageSummary(
+                        usage, Modifier.padding(horizontal = 8.dp).testTag("certificate-ai-usage"), color = CertificatePaper,
+                    )
                     if (controls != null) {
                         CertificateViewerActions(controls, exiting, { confirmingDestruction = true }) { closing = true }
                     } else if (onCollect != null) {

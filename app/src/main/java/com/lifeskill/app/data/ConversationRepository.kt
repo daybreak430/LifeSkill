@@ -1,7 +1,6 @@
 package com.lifeskill.app.data
 
 import androidx.room.withTransaction
-import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.RecoverableReply
@@ -33,7 +32,7 @@ internal class ConversationRepository(
     private val database: LifeSkillDatabase,
     private val library: LibraryRepository,
     private val settings: SettingsStore,
-    private val gateway: AiGateway,
+    private val usage: AiUsageRepository,
     private val secret: SecretBox,
 ) {
     private val dao = database.skills()
@@ -151,6 +150,7 @@ internal class ConversationRepository(
         }
         // 以用户选中的方向为准，写入内容和更新草稿状态一次提交。
         val result = library.applyDraft(null, selected)
+        if (result.entry.kind == EntryKind.TREE) usage.attachDraft(id, result.entry.id)
         val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary + resolved.notice,
             row.contentVersion, resultId = result.entry.id)
         dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
@@ -197,15 +197,25 @@ internal class ConversationRepository(
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
+        val owner = context.owner
+        val target = when (owner?.kind) {
+            EntryKind.SKILL -> UsageTarget(courseId = owner.parentId, lessonId = owner.id)
+            EntryKind.TREE -> UsageTarget(courseId = owner.id, generation = true)
+            else -> UsageTarget(
+                draftId = replyId.takeIf { context.input.kind == TurnKind.GENERATE_TREE },
+                generation = context.input.kind == TurnKind.GENERATE_TREE,
+            )
+        }
         try {
-            val raw = gateway.complete(config, context.messages, structured = true)
+            val raw = usage.complete(config, context.messages, structured = true, target = target)
             persistResponse(scope, requestId, context, raw)
         } catch (error: RecoverableReply) {
             // 只补试一次。沿用原请求标识，撤回、重学或已完成的请求无需再发。
             if (lastPending(scope)?.id != requestId) return
             val system = context.messages.first()
             val messages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + context.messages.drop(1)
-            val corrected = gateway.complete(config, messages, structured = true, useJsonMode = !error.retryWithoutJsonMode)
+            val corrected = usage.complete(config, messages, structured = true, target = target,
+                useJsonMode = !error.retryWithoutJsonMode)
             persistResponse(scope, requestId, context, corrected)
         }
     }

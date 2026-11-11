@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lifeskill.app.AppContainer
+import com.lifeskill.app.data.UsageSummary
 import com.lifeskill.app.R
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
@@ -85,6 +86,7 @@ internal fun LifeSkillApp(
     val notice by app.notice.collectAsStateWithLifecycle()
     val error by app.loadError.collectAsStateWithLifecycle()
     val assessments by container.assessments.summaries.collectAsStateWithLifecycle(emptyMap())
+    val usage by container.usage.summary.collectAsStateWithLifecycle(UsageSummary())
     val snackbar = remember { SnackbarHostState() }
     val stateHolder = rememberSaveableStateHolder()
 
@@ -165,7 +167,7 @@ internal fun LifeSkillApp(
                                         val statistics = remember(displayedLibrary, assessments) {
                                             LearningStatistics.from(displayedLibrary, assessments)
                                         }
-                                        PersonalScreen(app, personalModel(container), statistics, active, dark)
+                                        PersonalScreen(app, personalModel(container), statistics, active, dark, usage)
                                     }
                                     Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
                                     Page.DIRECTION -> entry?.let {
@@ -174,9 +176,9 @@ internal fun LifeSkillApp(
                                     Page.TREE -> entry?.let {
                                         val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
                                         SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition,
-                                            assessments[it.id] ?: TreeAssessmentSummary())
+                                            assessments[it.id] ?: TreeAssessmentSummary(), usage.courses[it.id], usage.generation[it.id])
                                     }
-                                    Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app) }
+                                    Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app, usage.lessons[it.id]) }
                                     Page.SETTINGS -> {
                                         val model: SettingsViewModel = viewModel(
                                             factory = remember(container) {
@@ -191,7 +193,8 @@ internal fun LifeSkillApp(
                                         ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active)
                                     }
                                     Page.EXAM -> entry?.let {
-                                        ExamScreen(it, displayedLibrary.examAvailable(it.id), app, assessmentModel(container, it.id), active)
+                                        ExamScreen(it, displayedLibrary.examAvailable(it.id), app,
+                                            assessmentModel(container, it.id), active, usage.courses[it.id])
                                     }
                                     Page.DIAGNOSTIC, Page.FEYNMAN -> entry?.let {
                                         val kind = if (displayedRoute.page == Page.DIAGNOSTIC) TreeChallenge.DIAGNOSTIC else TreeChallenge.FEYNMAN

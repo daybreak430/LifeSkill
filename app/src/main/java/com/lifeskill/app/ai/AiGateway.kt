@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.URI
+import java.time.Instant
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLException
 
@@ -32,6 +33,7 @@ internal class RecoverableReply(
 internal interface AiGateway {
     suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean = true,
+        onUsage: (suspend (DeepSeekUsage) -> Unit)? = null,
     ): String
 
     suspend fun balance(settings: ModelSettings): DeepSeekBalance =
@@ -46,6 +48,7 @@ internal class OpenAiGateway(
         messages: List<ModelMessage>,
         structured: Boolean,
         useJsonMode: Boolean,
+        onUsage: (suspend (DeepSeekUsage) -> Unit)?,
     ): String = withContext(Dispatchers.IO) {
         val valid = settings.validated()
         val jsonMode = valid.provider == Provider.DEEPSEEK && structured && useJsonMode
@@ -61,11 +64,19 @@ internal class OpenAiGateway(
             connection.setRequestProperty("Accept", "application/json")
             val request = requestBody(valid, messages, structured, jsonMode).toString().toByteArray()
             connection.setFixedLengthStreamingMode(request.size)
+            val startedAt = Instant.now()
             connection.outputStream.use { it.write(request) }
             val status = connection.responseCode
             if (status !in 200..299) throw httpError(status)
             val raw = readBody(connection, "AI 响应过长，请缩小本次请求。")
-            readCompletion(raw, jsonMode)
+            val response = AiJson.objectOrNull(raw)
+            // 正文可能触发补试，先记录服务商返回的用量，避免漏掉已计费的尝试。
+            if (response != null && onUsage != null && valid.provider == Provider.DEEPSEEK &&
+                valid.baseUrl == Provider.DEEPSEEK.baseUrl
+            ) {
+                DeepSeekUsage.from(response, valid.model, startedAt)?.let { onUsage(it) }
+            }
+            readCompletion(response, jsonMode)
         } catch (_: SocketTimeoutException) {
             throw RuleViolation("模型响应超时，请重试。")
         } catch (_: SSLException) {
@@ -126,8 +137,8 @@ internal class OpenAiGateway(
             }
         }
 
-    private fun readCompletion(raw: String, jsonMode: Boolean): String {
-        val response = AiJson.objectOrNull(raw) ?: throw RecoverableReply(
+    private fun readCompletion(response: JSONObject?, jsonMode: Boolean): String {
+        response ?: throw RecoverableReply(
             "模型服务返回的格式有误，请重试。",
             "请重新回答最后一条用户消息，直接输出一个完整的 JSON 对象。",
         )
