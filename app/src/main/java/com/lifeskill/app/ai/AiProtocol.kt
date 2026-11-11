@@ -61,7 +61,9 @@ internal data class PreparedGeneration(val draft: GenerationDraft, val ignored: 
         if (removed > 0) append("\n已略过 $removed 条不符合规则的前置关系")
     }
 }
-internal data class GenerationReply(val reply: String, val draft: GenerationDraft? = null, val offersTree: Boolean = false)
+internal data class GenerationReply(
+    val reply: String, val draft: GenerationDraft? = null, val kind: TurnKind = TurnKind.MESSAGE,
+)
 internal data class TutorReply(val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>)
 
 internal object AiProtocol {
@@ -106,7 +108,8 @@ internal object AiProtocol {
         val treeOffer = """
             本轮尚未收到 App 的建树确认。用户提出明确的学习规划需求时（如「我想学用 Python 整理表格」），返回 offer_tree，只填 kind 和 reply。reply 用一两句话归纳主题和已知要求。App 会先弹窗让用户选择当前掌握程度和课程数量，确认后才生成技能树。
             提议示例：{"kind":"offer_tree","reply":"我可以为你规划一棵家庭预算技能树，重点是记录开支和制定每月计划。"}
-            一次只规划一个主题下的一棵树。如果用户提出多个独立主题，先用 message 请用户选择这次要学哪一个。
+            一次只规划一个主题下的一棵树。主题不明确或有多个独立主题时，用 clarify_tree 追问一句，只填 kind 和 reply。
+            追问示例：{"kind":"clarify_tree","reply":"这次想先学摄影还是剪辑？"}
         """.trimIndent()
         // 仅展示当前入口接受的结构，避免模型把首页字段带到方向或技能树的回复。
         val format = when {
@@ -137,9 +140,11 @@ internal object AiProtocol {
         val createsSkills = options != null || owner?.kind == EntryKind.TREE
         return """
             你是 LifeSkill 的技能树规划助手。你的权限只有新增。理解用户的主题、现有水平和可执行的学习目标。
-            回答最后一条用户消息。历史中的「确认生成」和「已新增」属于之前的请求。本轮能执行的操作由当前入口和 App 的确认状态决定。
+            回答最后一条用户消息。历史讨论只用于理解学习要求。本轮能执行的操作由当前入口和 App 的确认状态决定。
             目标或边界不明确时，先用一句话追问。用户只问建议时返回 message。
-            用户要求重名或修改、删除已有项目时，说明限制并给出下一步，不要擅自更名或新增其他内容。
+            用户要求修改或删除已有项目时，说明限制并给出下一步。
+            ${if (owner?.kind == EntryKind.TREE) "检查 items 中的当前技能点，避免生成同名技能点。"
+              else "用户明确要求创建技能树时，按本轮确认状态提议或生成草稿。App 会在用户选定方向并添加时查询当前技能库检查重名。允许重新规划聊过的主题，也允许为同一主题在其他方向规划技能树。"}
             输出单个 json 对象，reply 是给用户看的简短中文。使用用户指定的语言编写技能内容。kind 为 message 时只输出 kind 和 reply。
             $DIAGRAM_FORMAT
             追问或建议示例：{"kind":"message","reply":"你想先学习哪一类工作流？"}
@@ -220,9 +225,14 @@ internal object AiProtocol {
     fun generation(raw: String, savedDraft: Boolean = false): GenerationReply = parse(raw) { json ->
         val reply = json.text("reply", 3_000)
         when (val kind = json.text("kind", 32)) {
-            "message", "offer_tree" -> {
+            "message", "offer_tree", "clarify_tree" -> {
                 json.only("kind", "reply")
-                GenerationReply(reply, offersTree = kind == "offer_tree")
+                val turnKind = when (kind) {
+                    "offer_tree" -> TurnKind.TREE_OFFER
+                    "clarify_tree" -> TurnKind.TREE_QUESTION
+                    else -> TurnKind.MESSAGE
+                }
+                GenerationReply(reply, kind = turnKind)
             }
             "create" -> {
                 json.only("kind", "reply", "directionId", "directionName", "trees", "skills")
@@ -248,9 +258,12 @@ internal object AiProtocol {
         }
     }
 
-    // 草稿摘要和添加回执属于对话背景，按消息发回模型，避免被模仿成新草稿。
     fun generationHistory(turn: Turn): String = JSONObject()
-        .put("kind", if (turn.kind == TurnKind.TREE_OFFER) "offer_tree" else "message")
+        .put("kind", when (turn.kind) {
+            TurnKind.TREE_OFFER -> "offer_tree"
+            TurnKind.TREE_QUESTION -> "clarify_tree"
+            else -> "message"
+        })
         .put("reply", turn.modelText)
         .toString()
 

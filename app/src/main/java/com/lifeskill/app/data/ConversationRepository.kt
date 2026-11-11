@@ -172,7 +172,10 @@ internal class ConversationRepository(
                 } else emptyMap()
                 AiProtocol.generationPrompt(owner, candidates, remaining, levels, input.generationOptions)
             }
-            Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, recent))
+            val history = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
+                newTreeHistory(recent, input)
+            } else recent
+            Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
@@ -210,11 +213,11 @@ internal class ConversationRepository(
         val version = input.contentVersion
         val options = input.generationOptions
         val reply = AiProtocol.generation(raw)
-        if (reply.offersTree) {
+        if (reply.kind == TurnKind.TREE_OFFER || reply.kind == TurnKind.TREE_QUESTION) {
             if (options != null || owner?.kind == EntryKind.TREE) {
-                throw RecoverableReply("AI 返回了不适用的生成提议，请重试。", "请按当前入口和确认状态回答，不要返回 offer_tree。")
+                throw RecoverableReply("AI 返回了不适用的规划回复，请重试。", "请按当前入口和确认状态回答，不要返回 offer_tree 或 clarify_tree。")
             }
-            return Turn(id, Speaker.ASSISTANT, TurnKind.TREE_OFFER, reply.reply, version)
+            return Turn(id, Speaker.ASSISTANT, reply.kind, reply.reply, version)
         }
         val draft = reply.draft ?: return Turn(id, Speaker.ASSISTANT, TurnKind.MESSAGE, reply.reply, version)
         if (owner?.kind == EntryKind.TREE) {
@@ -231,7 +234,7 @@ internal class ConversationRepository(
         if (options == null && draft.trees.isNotEmpty()) {
             throw RecoverableReply(
                 "请先确认技能树的生成设置。",
-                "用户还未确认掌握程度和课程数量。主题清楚时仅返回 offer_tree，主题不清楚时用 message 澄清。",
+                "用户还未确认掌握程度和课程数量。主题清楚时仅返回 offer_tree，主题不清楚时用 clarify_tree 追问。",
             )
         }
         if (options != null) {
@@ -305,6 +308,19 @@ internal class ConversationRepository(
 
     private suspend fun lastPending(scope: ChatScope): Turn? =
         dao.recentTurns(scope.id, 1).firstOrNull { it.speaker == Speaker.USER.name }?.toTurn()
+
+    private fun newTreeHistory(recent: List<Turn>, input: Turn): List<Turn> {
+        val offerId = recent.getOrNull(recent.lastIndex - 1)
+            ?.takeIf { input.kind == TurnKind.GENERATE_TREE && it.kind == TurnKind.TREE_OFFER }?.id
+        val previousPlan = recent.indexOfLast {
+            it.id != offerId && (it.kind == TurnKind.TREE_OFFER || it.kind == TurnKind.DRAFT || it.kind == TurnKind.CREATED)
+        }
+        // 保留用户的要求、当前的追问和本轮确认的提议。历史草稿、回执及普通回复不参与下一轮规划。
+        return recent.filterIndexed { index, turn ->
+            turn.id == input.id || turn.id == offerId || (turn.speaker == Speaker.USER && turn.kind == TurnKind.MESSAGE) ||
+                (index > previousPlan && turn.kind == TurnKind.TREE_QUESTION)
+        }
+    }
 
     private fun messageWindow(mode: ChatMode, recent: List<Turn>): List<ModelMessage> {
         val messages = recent.map {

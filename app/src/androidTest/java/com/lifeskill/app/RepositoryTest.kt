@@ -431,27 +431,27 @@ class RepositoryTest {
         return offer.id
     }
 
-    @Test fun repeatedTopicAfterAddingATreeKeepsJsonHistoryAndRequiresNewConfirmation() = runBlocking {
+    @Test fun repeatedTopicChecksDuplicatesOnlyInTheSelectedDirectionAtAddTime() = runBlocking {
         container.settings.save(ModelSettings(Provider.MINIMAX, apiKey = "test-key"))
         val scope = ChatScope(ChatMode.GENERATE)
         val conversations = container.conversations
         val topic = "从零学习文明 6"
         val offerId = offerTree(scope, topic)
-        ai.reply(newTreeBatch(33))
+        val response = newTreeBatch(33, "文明6")
+        ai.reply(response)
         conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 33..33))
         val draft = conversations.watch(scope).first().last()
         val direction = container.library.snapshot().childrenOf(null).first()
         conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
         val library = container.library.snapshot()
+        val original = library.childrenOf(direction.id).single()
 
         ai.reply("可以继续规划这棵技能树。")
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("本轮尚未收到 App 的建树确认"))
             assertTrue(messages.first().text.contains("上一次回复未通过格式校验"))
             assertEquals(topic, messages.last().text)
-            val history = messages.filter { it.role == "assistant" }.map { JSONObject(it.text) }
-            assertEquals(listOf("offer_tree", "message"), history.map { it.getString("kind") })
-            assertTrue(history.last().getString("reply").contains("33 个技能点"))
+            assertTrue(messages.none { it.role == "assistant" })
             TREE_OFFER
         }
         conversations.send(scope, topic)
@@ -459,6 +459,78 @@ class RepositoryTest {
         assertEquals(TurnKind.TREE_OFFER, turns.last().kind)
         assertEquals(1, turns.count { it.kind == TurnKind.CREATED })
         assertEquals(library, container.library.snapshot())
+
+        ai.reply(response)
+        conversations.generateTree(scope, turns.last().id, GenerationOptions(GenerationLevel.BEGINNER, 33..33))
+        val duplicate = conversations.watch(scope).first().last()
+        expectRule { conversations.confirmDraft(scope, duplicate.id, GenerationDestination.Existing(direction.id)) }
+        assertEquals(library, container.library.snapshot())
+
+        container.library.delete(original.id)
+        ai.reply("""{"kind":"message","reply":"你已有《文明6》技能树（33 个技能点）。"}""")
+        conversations.send(scope, topic)
+        ai.enqueue { messages ->
+            assertTrue(messages.none { it.role == "assistant" })
+            assertTrue(messages.none { "确认生成 ·" in it.text })
+            assertEquals(topic, messages.last().text)
+            TREE_OFFER
+        }
+        conversations.send(scope, topic)
+        val newOffer = conversations.watch(scope).first().last()
+        ai.reply(response)
+        conversations.generateTree(scope, newOffer.id, GenerationOptions(GenerationLevel.BEGINNER, 33..33))
+        val replacement = conversations.watch(scope).first().last()
+        conversations.confirmDraft(scope, replacement.id, GenerationDestination.Existing(direction.id))
+        val updated = container.library.snapshot()
+        val newTree = updated.childrenOf(direction.id).single()
+        assertEquals("文明6", newTree.name)
+        assertNotEquals(original.id, newTree.id)
+        assertEquals(33, updated.childrenOf(newTree.id).size)
+    }
+
+    @Test fun unconfirmedDraftAndOldProposalDoNotBlockASecondPlan() = runBlocking {
+        val direction = container.library.snapshot().childrenOf(null).first()
+        val scope = ChatScope(ChatMode.GENERATE, direction.id)
+        val conversations = container.conversations
+        val topic = "从零学习文明 7"
+        val options = GenerationOptions(GenerationLevel.BEGINNER, 3..3)
+        val response = newTreeBatch(3, "文明7")
+
+        ai.reply("""{"kind":"offer_tree","reply":"上一次的文明7提议"}""")
+        conversations.send(scope, topic)
+        val oldOffer = conversations.watch(scope).first().last()
+        ai.reply(response)
+        conversations.generateTree(scope, oldOffer.id, options)
+        val oldDraft = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.DRAFT, oldDraft.kind)
+        assertTrue(container.library.snapshot().childrenOf(direction.id).isEmpty())
+
+        ai.enqueue { messages ->
+            assertTrue(messages.none { it.role == "assistant" })
+            assertTrue(messages.none { "确认生成 ·" in it.text })
+            assertEquals(topic, messages.last().text)
+            """{"kind":"clarify_tree","reply":"想重点学经济还是外交？"}"""
+        }
+        conversations.send(scope, topic)
+        ai.enqueue { messages ->
+            val question = JSONObject(messages.single { it.role == "assistant" }.text)
+            assertEquals("clarify_tree", question.getString("kind"))
+            assertEquals("想重点学经济还是外交？", question.getString("reply"))
+            TREE_OFFER
+        }
+        conversations.send(scope, "第二个")
+        val newOffer = conversations.watch(scope).first().last()
+        ai.enqueue { messages ->
+            val planningKinds = messages.filter { it.role == "assistant" }.map { JSONObject(it.text).getString("kind") }
+            assertEquals(listOf("clarify_tree", "offer_tree"), planningKinds)
+            response
+        }
+        conversations.generateTree(scope, newOffer.id, options)
+        val newDraft = conversations.watch(scope).first().last()
+        conversations.confirmDraft(scope, newDraft.id, GenerationDestination.Existing(direction.id))
+        val history = conversations.watch(scope).first()
+        assertEquals(oldDraft, history.single { it.id == oldDraft.id })
+        assertEquals("文明7", container.library.snapshot().childrenOf(direction.id).single().name)
     }
 
     @Test fun scopedGenerationCanAttachOnlyToNodesInItsTargetTree() = runBlocking {
@@ -697,9 +769,9 @@ class RepositoryTest {
         return JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills).toString()
     }
 
-    private fun newTreeBatch(count: Int): String {
+    private fun newTreeBatch(count: Int, name: String = "数据审计"): String {
         val response = JSONObject(skillBatch(count))
-        val tree = JSONObject().put("name", "数据审计").put("skills", response.remove("skills"))
+        val tree = JSONObject().put("name", name).put("skills", response.remove("skills"))
         return response.put("trees", JSONArray().put(tree)).toString()
     }
 

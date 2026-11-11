@@ -15,7 +15,8 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 
 enum class Speaker { USER, ASSISTANT }
 enum class TurnKind {
-    MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART, TREE_OFFER, GENERATE_TREE,
+    MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART,
+    TREE_QUESTION, TREE_OFFER, GENERATE_TREE,
 }
 
 enum class GenerationLevel(val label: String) {
