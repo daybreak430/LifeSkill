@@ -1,6 +1,6 @@
-# LifeOS 协作说明
+# LifeSkill 协作说明
 
-本文档是本项目的开发约束入口；项目现状、模块边界和技术决策分别见 `README.md` 与 `docs/`。
+本文档是本项目的 AI 协作约定。项目入口见 [README](README.md)，提交与验证流程见[贡献指南](CONTRIBUTING.md)，模块边界见[架构与代码导航](docs/architecture.md)。
 
 ## 开发原则
 
