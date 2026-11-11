@@ -51,9 +51,12 @@ import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.model.CollectedCertificate
 import com.lifeskill.app.model.ProfileAvatar
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 private val Parchment = Color(0xFFFCF7ED)
 private val CertificateType = TextStyle(fontFamily = FontFamily.Serif, localeList = LocaleList(Locale("zh-CN")))
+private val CertificateTimeFormat = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", java.util.Locale.ROOT)
 
 private data class CertificatePalette(val ink: Color, val border: Color, val paperEdge: Color)
 
@@ -65,7 +68,9 @@ private fun CertificateTheme.palette() = when (this) {
 }
 
 @Composable
-internal fun CertificateCard(treeName: String, style: CertificateStyle, recipient: String, avatar: ProfileAvatar) {
+internal fun CertificateCard(
+    treeName: String, style: CertificateStyle, recipient: String, avatar: ProfileAvatar, collectedAt: OffsetDateTime?,
+) {
     val palette = style.theme.palette()
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("certificate-paper-${style.theme.name.lowercase()}"),
@@ -101,6 +106,11 @@ internal fun CertificateCard(treeName: String, style: CertificateStyle, recipien
             }
             Spacer(Modifier.height(16.dp))
             CertificateSeal(style, palette.ink)
+            if (collectedAt != null) {
+                Spacer(Modifier.height(10.dp))
+                Text("获取时间  ${CertificateTimeFormat.format(collectedAt)}", Modifier.testTag("certificate-collected-at"),
+                    color = palette.ink, textAlign = TextAlign.Center, style = CertificateType.copy(fontSize = 12.sp))
+            }
         }
     }
 }

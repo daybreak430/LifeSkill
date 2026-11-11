@@ -217,7 +217,7 @@ private fun StudyStatisticsCard(statistics: LearningStatistics, certificateCount
             HorizontalDivider(color = StatisticsDivider)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 StudyMetric(statistics.passedTrees.toString(), "通过验收", Modifier.weight(1f))
-                StudyMetric(certificateCount.toString(), "收藏证书", Modifier.weight(1f))
+                StudyMetric(certificateCount.toString(), "获取证书", Modifier.weight(1f))
             }
         }
     }

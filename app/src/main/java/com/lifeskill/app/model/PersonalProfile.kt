@@ -1,5 +1,7 @@
 package com.lifeskill.app.model
 
+import java.time.OffsetDateTime
+
 internal const val NICKNAME_LIMIT = 24
 internal const val DEFAULT_PROFILE_NAME = "学习者"
 
@@ -46,7 +48,7 @@ internal fun validatedNickname(value: String, required: Boolean = false): String
 
 internal data class CollectedCertificate(
     val treeId: String, val treeName: String, val style: CertificateStyle, val recipient: String, val avatar: ProfileAvatar,
-    val hidden: Boolean = false,
+    val hidden: Boolean = false, val collectedAt: OffsetDateTime? = null,
 )
 
 internal data class LearningStatistics(val skills: Progress, val passedTrees: Int) {

@@ -64,6 +64,7 @@ import com.lifeskill.app.model.DEFAULT_PROFILE_NAME
 import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.validatedNickname
+import java.time.OffsetDateTime
 
 private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
@@ -77,14 +78,14 @@ internal fun IssuedCertificateDialog(
     certificate: CollectedCertificate, visibility: CertificateVisibilityControl? = null, onClose: () -> Unit,
 ) {
     ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, certificate.avatar,
-        visibility = visibility, onClose = onClose)
+        visibility = visibility, collectedAt = certificate.collectedAt, onClose = onClose)
 }
 
 @Composable
 internal fun ExamCertificateDialog(
     treeName: String, style: CertificateStyle, recipient: String?, avatar: ProfileAvatar, collected: Boolean = false,
     status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null,
-    visibility: CertificateVisibilityControl? = null, onClose: () -> Unit,
+    visibility: CertificateVisibilityControl? = null, collectedAt: OffsetDateTime? = null, onClose: () -> Unit,
 ) {
     val viewing = onCollect == null
     var opened by rememberSaveable { mutableStateOf(viewing) }
@@ -199,7 +200,7 @@ internal fun ExamCertificateDialog(
                     }.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar)
+                    CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar, collectedAt)
                     if (viewing) {
                         CertificateViewerActions(visibility, exiting) { closing = true }
                     } else {

@@ -34,6 +34,7 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.OffsetDateTime
 
 @RunWith(AndroidJUnit4::class)
 class TreeAssessmentTest {
@@ -127,9 +128,15 @@ class TreeAssessmentTest {
         val certificateStyle = CertificateStyle.forTree(tree)
         val portrait = ProfileAvatar.Preset(AvatarPreset.CAT)
         container.profiles.save(PersonalProfile(avatar = portrait))
+        val beforeCollection = OffsetDateTime.now()
         archive.issue(tree.id, second.id, "  学习伙伴  ")
+        val issued = archive.certificates.first().single()
+        val collectedAt = checkNotNull(issued.collectedAt)
+        assertFalse(collectedAt.isBefore(beforeCollection))
+        assertFalse(collectedAt.isAfter(OffsetDateTime.now()))
+        assertEquals(CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴", portrait,
+            collectedAt = collectedAt), issued)
         archive.issue(tree.id, second.id, "重复提交")
-        val issued = CollectedCertificate(tree.id, tree.name, certificateStyle, "学习伙伴", portrait)
         assertEquals(issued, archive.certificates.first().single())
         assertEquals("学习伙伴", container.profiles.current().nickname)
         assertTrue(exams.summaries.first().getValue(tree.id).passed)

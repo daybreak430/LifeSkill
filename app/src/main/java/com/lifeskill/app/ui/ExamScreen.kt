@@ -164,7 +164,7 @@ private fun ExamResult(
         CertificateMode.COLLECT -> ExamCertificateDialog(
             issued?.treeName ?: treeName, issued?.style ?: style, issued?.recipient ?: certificate.profile.nickname,
             issued?.avatar ?: certificate.profile.avatar,
-            collected = issued != null, status = status, onCollect = collectCertificate,
+            collected = issued != null, status = status, onCollect = collectCertificate, collectedAt = issued?.collectedAt,
         ) { certificateMode = null }
         CertificateMode.VIEW -> issued?.let { IssuedCertificateDialog(it) { certificateMode = null } }
         null -> Unit

@@ -706,6 +706,7 @@ class MvpFlowTest {
                 ui.onNode(hasText(name) and hasAnyAncestor(hasTestTag(paperTag))).assertIsDisplayed()
                 ui.onNodeWithText("林知远").assertIsDisplayed()
                 ui.onNodeWithTag("certificate-avatar").assertIsDisplayed()
+                ui.onNodeWithTag("certificate-collected-at").assertIsDisplayed()
                 ui.onNode(hasText("100 分", substring = true) and hasAnyAncestor(hasTestTag(paperTag))).assertDoesNotExist()
                 captureScreenshot("captureCertificateScreenshots", "${theme.name.lowercase()}.png")
                 ui.onNodeWithText("关闭").performTouchInput { click() }
@@ -719,6 +720,8 @@ class MvpFlowTest {
             await("LifeSkill")
             ui.onNodeWithTag("tab-personal").performTouchInput { click() }
             await("证书展柜")
+            ui.onNodeWithText("获取证书", substring = true).assertIsDisplayed()
+            ui.onNodeWithText("收藏证书", substring = true).assertDoesNotExist()
             ui.onNodeWithText("查看全部").assertDoesNotExist()
             val cabinet = ui.onNodeWithTag("personal-home")
             examples.forEach { (_, _, name) -> cabinet.performScrollToNode(hasText(name) and hasClickAction()) }

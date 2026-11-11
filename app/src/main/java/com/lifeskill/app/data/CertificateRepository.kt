@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
+import java.time.OffsetDateTime
 
 internal class CertificateRepository(
     private val database: LifeSkillDatabase,
@@ -43,7 +44,7 @@ internal class CertificateRepository(
             else checkNotNull(validatedNickname(enteredNickname, required = true))
         if (recipient != profile.nickname) profiles.save(profile.copy(nickname = recipient))
         dao.insertCertificate(CollectedCertificate(treeId, tree.name, CertificateStyle.forTree(tree), recipient,
-            profile.avatar).encode())
+            profile.avatar, collectedAt = OffsetDateTime.now()).encode())
     }
 
     private suspend fun prepareArchiveInTransaction() {
@@ -89,6 +90,7 @@ internal class CertificateRepository(
     private fun CollectedCertificate.encode(): CollectedCertificateRow {
         val json = JSONObject().put("name", treeName).put("style", style.id).put("recipient", recipient)
             .put("avatar", JSONObject().putAvatar(avatar))
+            .put("collectedAt", collectedAt?.toString())
         return CollectedCertificateRow(treeId = treeId, content = secret.seal(json.toString(), "$treeId:certificate"))
     }
 
@@ -96,7 +98,8 @@ internal class CertificateRepository(
         val json = payload()
         return CollectedCertificate(treeId, json.getString("name"),
             checkNotNull(CertificateStyle.fromId(json.getString("style"))),
-            json.getString("recipient"), json.getJSONObject("avatar").readAvatar(), json.optBoolean("hidden"))
+            json.getString("recipient"), json.getJSONObject("avatar").readAvatar(), json.optBoolean("hidden"),
+            collectedAt = json.optString("collectedAt").takeIf(String::isNotEmpty)?.let(OffsetDateTime::parse))
     }
 
     private fun CollectedCertificateRow.payload() = JSONObject(secret.open(content, "$treeId:certificate"))
