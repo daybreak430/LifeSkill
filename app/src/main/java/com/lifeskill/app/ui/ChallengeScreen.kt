@@ -65,15 +65,15 @@ internal fun ChallengeScreen(
                                 kind == TreeChallenge.DIAGNOSTIC -> "回答 3 道看似简单的问题，找出理解上的漏洞。"
                                 else -> "用自己的话，把刚学到的概念讲给 10 岁的孩子听。"
                             },
-                        ) { AssessmentMedallion(kind.icon, 70.dp) }
+                        ) { ChallengeSigilMedallion(kind, 70.dp) }
                         if (passedExam) Action(if (status.busy) "正在准备" else "开始挑战", Glyph.SPARK,
                             { model.startChallenge(kind) }, Modifier.fillMaxWidth(), primary = true, enabled = !status.busy)
                     }
                     current.passed -> EmptyState("挑战成功") {
-                        AssessmentMedallion(kind.icon, 86.dp, challengeCompleted = true)
+                        ChallengeSigilMedallion(kind, 86.dp, completed = true)
                     }
                     current.finished -> {
-                        EmptyState("挑战未通过", "可以根据反馈再挑战一次。") { AssessmentMedallion(kind.icon, 70.dp) }
+                        EmptyState("挑战未通过", "可以根据反馈再挑战一次。") { ChallengeSigilMedallion(kind, 70.dp) }
                         Action(if (status.busy) "正在准备" else "再挑战一次", Glyph.RESTART, { model.startChallenge(kind) },
                             Modifier.fillMaxWidth(), primary = true, enabled = !status.busy)
                     }

@@ -419,17 +419,21 @@ class MvpFlowTest {
     }
 
     @Test fun treeExamUsesSeparatePageAndRevealsChallengesAfterPassing() {
-        await("本职工作")
+        await("LifeSkill")
         val library = fixture.container.library
-        val (tree, skill) = runBlocking {
-            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+        val (direction, tree, skill) = runBlocking {
+            val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "验收考试导航"))
             val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "验收流程测试"))
-            tree to library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对凭证", "用凭证核对总额"))
+            val skill = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对凭证", "用凭证核对总额"))
+            Triple(direction, tree, skill)
         }
         try {
-            ui.onNodeWithText("本职工作").performTouchInput { click() }
+            ui.waitForIdle()
+            val cardTag = "direction-card-${direction.id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(cardTag))
+            ui.onNodeWithTag(cardTag).performTouchInput { click() }
             await(tree.name)
-            ui.onNodeWithText(tree.name).performTouchInput { click() }
+            ui.onNode(hasText(tree.name) and hasClickAction()).performClick()
             val map = ui.onNodeWithTag("skill-map")
             map.performScrollToNode(hasText("验收考试"))
             ui.onNodeWithText("自以为是检测").assertDoesNotExist()
@@ -477,6 +481,12 @@ class MvpFlowTest {
             await("90 分")
             pressBack()
 
+            ui.waitUntil(10_000) {
+                ui.onAllNodes(
+                    hasTestTag("challenge-reveal") and
+                        SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "挑战节点已显现"),
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
             map.performScrollToNode(hasText("费曼复习"))
             ui.onNodeWithText("最高 90 分").assertIsDisplayed()
             ui.onNodeWithText("自以为是检测").assertIsDisplayed()
@@ -491,7 +501,10 @@ class MvpFlowTest {
             map.performScrollToNode(hasText("挑战成功"))
             ui.onNodeWithText("挑战成功").assertIsDisplayed()
         } finally {
-            runBlocking { library.delete(tree.id) }
+            runBlocking {
+                library.delete(tree.id)
+                library.delete(direction.id)
+            }
         }
     }
 

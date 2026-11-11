@@ -25,7 +25,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,9 +131,10 @@ internal fun SkillTreeScreen(
                     SkillMap(
                         skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
                         addedEntryId, app::finishShowingAddition,
+                        assessmentPassed = assessment.passed,
                         onOpen = { app.open(Route.entry(it)) },
                         assessmentNodes = { diameter ->
-                            ExamMapNodes(library.examAvailable(tree.id), assessment, diameter,
+                            ExamMapNodes(library.examAvailable(tree.id), assessment, diameter, active, tree.id,
                                 { app.open(Route(Page.EXAM, tree.id)) },
                                 { kind ->
                                     val page = when (kind) {
@@ -197,11 +202,22 @@ private fun SkillMap(
     skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?,
     unlock: SkillUnlock?, active: Boolean, onUnlockFinished: (String) -> Unit,
     addedEntryId: String?, onAdditionShown: (String) -> Unit, onOpen: (Entry) -> Unit,
+    assessmentPassed: Boolean,
     assessmentNodes: @Composable (Dp) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
+    var assessmentWasPassed by rememberSaveable { mutableStateOf(assessmentPassed) }
     RevealListAddition(addedEntryId, layout.nodes[addedEntryId]?.row?.takeIf { unlock == null }, listState, onAdditionShown)
+    LaunchedEffect(active, assessmentPassed, layout.rowCount) {
+        // 首次通过验收并回到地图时，主动滚到地图末端，让蓄力与双节点显现完整进入视野。
+        if (active && assessmentPassed && !assessmentWasPassed) {
+            listState.animateScrollToItem(layout.rowCount)
+            assessmentWasPassed = true
+        } else if (!assessmentPassed) {
+            assessmentWasPassed = false
+        }
+    }
     val clock = remember(unlock?.key) { Animatable(if (unlock == null) 1f else 0f) }
     LaunchedEffect(unlock?.key, active) {
         if (!active || unlock == null) return@LaunchedEffect
