@@ -158,6 +158,30 @@ object LibraryRules {
 object SkillGraph {
     const val BRANCH_LIMIT = 2
 
+    internal fun fitGeneratedEdges(skillIds: Set<String>, proposed: List<Edge>): List<Edge> {
+        val prerequisites = mutableMapOf<String, MutableList<String>>()
+        fun dependsOn(skill: String, ancestor: String, visited: MutableSet<String>): Boolean =
+            skill == ancestor || visited.add(skill) &&
+                prerequisites[skill].orEmpty().any { dependsOn(it, ancestor, visited) }
+
+        // 按草稿顺序保留关系，丢弃指向自己或会让已保留关系成环的边。
+        val acyclic = proposed.distinct().filter { edge ->
+            if (dependsOn(edge.prerequisiteId, edge.skillId, mutableSetOf())) false
+            else {
+                prerequisites.getOrPut(edge.skillId) { mutableListOf() }.add(edge.prerequisiteId)
+                true
+            }
+        }
+        fun adjacentOnly(edges: List<Edge>): List<Edge> {
+            val depths = levels(skillIds, edges)
+            return edges.filter { isAdjacent(it, depths) }
+        }
+
+        // 先移除跨层边，避免它占用分叉名额。裁剪分叉可能改变节点层级，因此重新检查相邻关系。
+        val bounded = adjacentOnly(acyclic).groupBy(Edge::prerequisiteId).values.flatMap { it.take(BRANCH_LIMIT) }.toSet()
+        return adjacentOnly(acyclic.filter { it in bounded })
+    }
+
     fun validate(skillIds: Set<String>, edges: List<Edge>, previousEdges: List<Edge> = emptyList()) {
         if (edges.any { it.skillId !in skillIds || it.prerequisiteId !in skillIds }) {
             throw RuleViolation("前置节点必须与当前节点属于同一棵技能树。")

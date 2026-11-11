@@ -69,6 +69,22 @@ class RulesTest {
         assertThrows(RuleViolation::class.java) { SkillGraph.validate(ids, legacy + Edge("four", "root"), legacy) }
     }
 
+    @Test fun generatedGraphKeepsValidBranchesAndFitsLinksAfterDepthChanges() {
+        val ids = setOf("root", "left", "right", "third", "bridge", "tip", "finish", "independent")
+        val proposed = listOf(
+            Edge("left", "root"), Edge("right", "root"), Edge("third", "root"),
+            Edge("bridge", "left"), Edge("bridge", "independent"), Edge("tip", "third"),
+            Edge("finish", "bridge"), Edge("finish", "tip"), Edge("finish", "root"),
+            Edge("root", "finish"), Edge("right", "right"),
+        )
+        val fitted = SkillGraph.fitGeneratedEdges(ids, proposed)
+        assertEquals(listOf(
+            Edge("left", "root"), Edge("right", "root"), Edge("bridge", "left"),
+            Edge("tip", "third"), Edge("finish", "bridge"),
+        ), fitted)
+        SkillGraph.validate(ids, fitted)
+    }
+
     @Test fun legacyProgressRequiresTheWholePrerequisiteChain() {
         val root = Entry("root", "tree", EntryKind.SKILL, "起点")
         val middle = root.copy(id = "middle", name = "进阶", mastery = Mastery.MANUAL)

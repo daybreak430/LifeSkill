@@ -1,5 +1,6 @@
 package com.lifeskill.app.ai
 
+import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.EntryIcon
@@ -26,13 +27,14 @@ internal data class GenerationDraft(
     val trees: List<TreeDraft>,
     val skills: List<SkillDraft>,
 ) {
-    fun resolveNewTreeReferences(): ResolvedGeneration {
+    fun prepareNewTrees(): PreparedGeneration {
         var ignored = 0
+        var removed = 0
         val resolved = trees.map { tree ->
             val refs = tree.skills.map(SkillDraft::ref).toSet()
             val byName = tree.skills.groupBy(SkillDraft::name)
-            tree.copy(skills = tree.skills.map { skill ->
-                val requires = skill.requires.map(String::trim).distinct().mapNotNull { reference ->
+            val edges = tree.skills.flatMap { skill ->
+                skill.requires.map(String::trim).distinct().mapNotNull { reference ->
                     // 新树只引用本批的节点。模型偶尔把本地 ref 加上 existing:，或直接使用节点名称。
                     val local = reference.removePrefix("existing:")
                     val resolvedRef = when {
@@ -41,17 +43,23 @@ internal data class GenerationDraft(
                         else -> null
                     }
                     if (resolvedRef == null) ignored++
-                    resolvedRef
-                }.distinct()
-                skill.copy(requires = requires)
-            })
+                    resolvedRef?.let { Edge(skill.ref, it) }
+                }
+            }.distinct()
+            val fitted = SkillGraph.fitGeneratedEdges(refs, edges)
+            removed += edges.size - fitted.size
+            val bySkill = fitted.groupBy(Edge::skillId, Edge::prerequisiteId)
+            tree.copy(skills = tree.skills.map { skill -> skill.copy(requires = bySkill[skill.ref].orEmpty()) })
         }
-        return ResolvedGeneration(copy(trees = resolved), ignored)
+        return PreparedGeneration(copy(trees = resolved), ignored, removed)
     }
 }
 
-internal data class ResolvedGeneration(val draft: GenerationDraft, val ignored: Int) {
-    val notice get() = if (ignored == 0) "" else "\n已略过 $ignored 条无法定位的前置关系"
+internal data class PreparedGeneration(val draft: GenerationDraft, val ignored: Int, val removed: Int) {
+    val notice get() = buildString {
+        if (ignored > 0) append("\n已略过 $ignored 条无法定位的前置关系")
+        if (removed > 0) append("\n已略过 $removed 条不符合规则的前置关系")
+    }
 }
 internal data class GenerationReply(val reply: String, val draft: GenerationDraft? = null, val offersTree: Boolean = false)
 internal data class TutorReply(val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>)

@@ -223,7 +223,7 @@ class RepositoryTest {
         assertEquals(TurnKind.CREATED, container.conversations.watch(scope).first().last().kind)
     }
 
-    @Test fun confirmingInvalidDraftRollsBackWholeBatch() = runBlocking {
+    @Test fun invalidNamesRollBackButCrossTierEdgesAreFixedWithoutAnotherModelCall() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
         val invalid = """
             {"kind":"create","reply":"方案","directionName":"设计","trees":[
@@ -231,7 +231,7 @@ class RepositoryTest {
               {"name":"树 B","skills":[
                 {"ref":"base","name":"基础","goal":"能解释用途","requires":[]},
                 {"ref":"next","name":"进阶","goal":"能使用基础概念","requires":["base"]},
-                {"ref":"last","name":"应用","goal":"能完成练习","requires":["base","next"]}
+                {"ref":"last","name":"进阶","goal":"能完成练习","requires":["base","next"]}
               ]}
             ]}
         """.trimIndent()
@@ -244,24 +244,23 @@ class RepositoryTest {
 
         val offerId = offerTree(scope)
         val newTree = JSONObject(invalid).getJSONArray("trees").getJSONObject(1)
+        newTree.getJSONArray("skills").getJSONObject(2).put("name", "应用")
         val singleTree = JSONObject(invalid).put("trees", JSONArray().put(newTree))
         ai.reply(singleTree.toString())
-        ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("上一版技能树没有通过校验"))
-            assertTrue(messages.first().text.contains("紧邻的上一层"))
-            newTree.getJSONArray("skills").getJSONObject(2).put("requires", JSONArray(listOf("next")))
-            singleTree.toString()
-        }
         container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 3..3))
         val secondDraft = container.conversations.watch(scope).first().last()
+        assertTrue(secondDraft.text.contains("略过 1 条不符合规则的前置关系"))
         container.conversations.confirmDraft(scope, secondDraft.id, GenerationDestination.New("数据能力"))
         val history = container.conversations.watch(scope).first()
         assertEquals(secondDraft.id, history.last().id)
         assertEquals(TurnKind.CREATED, history.last().kind)
         val treeId = history.last().resultId
         assertNotNull(treeId)
-        assertEquals(3, container.library.snapshot().childrenOf(treeId).size)
-        assertEquals(2, container.library.snapshot().edges.size)
+        val library = container.library.snapshot()
+        val (base, next, last) = library.childrenOf(treeId)
+        assertEquals(setOf(base.id), library.prerequisitesOf(next.id))
+        assertEquals(setOf(next.id), library.prerequisitesOf(last.id))
+        assertTrue(history.last().text.contains("略过 1 条不符合规则的前置关系"))
     }
 
     @Test fun confirmingLegacyDraftKeepsLocalPrerequisitesAndIgnoresForeignReferences() = runBlocking {
@@ -272,12 +271,14 @@ class RepositoryTest {
               {"name":"基础","skills":[{"ref":"foreign","name":"外树节点","goal":"能说明用途","requires":[]}]},
               {"name":"实践","skills":[
                 {"ref":"base","name":"本树前置","goal":"掌握概念","requires":[]},
-                {"ref":"follow","name":"本树后续","goal":"实际运用","requires":[" existing:base ","本树前置","foreign","existing:missing"]}
+                {"ref":"follow","name":"本树后续","goal":"实际运用","requires":[" existing:base ","本树前置","foreign","existing:missing"]},
+                {"ref":"application","name":"综合练习","goal":"能完成综合练习","requires":["base","follow"]}
               ]}
             ]}
         """.trimIndent())
         val draft = container.conversations.watch(scope).first().single()
         assertTrue(draft.text.contains("略过 2 条"))
+        assertTrue(draft.text.contains("略过 1 条不符合规则的前置关系"))
         assertTrue(container.library.snapshot().childrenOf(direction.id).isEmpty())
 
         container.conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
@@ -285,10 +286,11 @@ class RepositoryTest {
         val trees = library.childrenOf(direction.id)
         assertEquals(listOf("基础", "实践"), trees.map(Entry::name))
         assertEquals(listOf(EntryIcon.BOOK, EntryIcon.TOOLS), trees.map(Entry::icon))
-        val (base, follow) = library.childrenOf(trees.last().id)
+        val (base, follow, application) = library.childrenOf(trees.last().id)
         assertEquals(EntryIcon.BOOK, base.icon)
         assertEquals(EntryIcon.EXPLORE, follow.icon)
         assertEquals(setOf(base.id), library.prerequisitesOf(follow.id))
+        assertEquals(setOf(follow.id), library.prerequisitesOf(application.id))
         val created = container.conversations.watch(scope).first().single()
         assertEquals(TurnKind.CREATED, created.kind)
         assertTrue(created.text.contains("略过 2 条"))

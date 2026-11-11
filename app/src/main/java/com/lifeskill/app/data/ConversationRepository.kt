@@ -125,18 +125,14 @@ internal class ConversationRepository(
         if (row.kind != TurnKind.DRAFT.name) throw RuleViolation("这条消息没有可添加的草稿。")
         requireOwner(scope)
         val resolved = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn"), savedDraft = true).draft)
-            .resolveNewTreeReferences()
+            .prepareNewTrees()
         val draft = resolved.draft
         val selected = when (destination) {
             is GenerationDestination.Existing -> draft.copy(directionId = destination.id, directionName = null)
             is GenerationDestination.New -> draft.copy(directionId = null, directionName = destination.name)
         }
         // 以用户选中的方向为准，写入内容和更新草稿状态一次提交。
-        val result = try {
-            library.applyDraft(null, selected)
-        } catch (_: SkippedPrerequisiteTier) {
-            throw RuleViolation("这份草稿含有跨层前置关系，请重新生成。")
-        }
+        val result = library.applyDraft(null, selected)
         val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary + resolved.notice,
             row.contentVersion, resultId = result.entry.id)
         dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
@@ -254,7 +250,7 @@ internal class ConversationRepository(
             throw RuleViolation("AI 返回的草稿与当前入口不匹配，请重试。")
         }
         try {
-            library.validateNewTrees(draft.resolveNewTreeReferences().draft.trees)
+            library.validateNewTrees(draft.prepareNewTrees().draft.trees)
         } catch (error: RuleViolation) {
             throw RecoverableReply(
                 error.message ?: "生成的技能树存在冲突，请重试。",
@@ -344,7 +340,7 @@ internal class ConversationRepository(
             val draft = checkNotNull(AiProtocol.generation(body, savedDraft = true).draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
             val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成 ${draft.trees.size} 棵技能树"
-            return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.resolveNewTreeReferences().notice,
+            return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.prepareNewTrees().notice,
                 contentVersion, preview = preview)
         }
         if (turnKind == TurnKind.GENERATE_TREE) {
