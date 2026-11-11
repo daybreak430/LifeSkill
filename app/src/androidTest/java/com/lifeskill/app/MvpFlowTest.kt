@@ -48,6 +48,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.lifeskill.app.ai.DeepSeekBalance
+import com.lifeskill.app.ai.DeepSeekBalanceInfo
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.CertificateTheme
@@ -64,6 +66,7 @@ import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -1037,6 +1040,61 @@ class MvpFlowTest {
             }
         } finally {
             runBlocking { library.delete(tree.id) }
+        }
+    }
+
+    @Test fun deepSeekBalanceStaysBelowModelActionsAndClearsWhenTheKeyChanges() {
+        val appearance = AppearanceSettings(ui.activity.applicationContext)
+        val original = appearance.load()
+        val balance = DeepSeekBalance(true, listOf(DeepSeekBalanceInfo("CNY", "8.25", "0", "8.25")))
+        val response = CompletableDeferred<DeepSeekBalance>()
+        try {
+            openSettings()
+            await("账户余额")
+            val query = ui.onNodeWithContentDescription("查询账户余额")
+            assertTrue(query.fetchSemanticsNode().boundsInRoot.top >
+                ui.onNodeWithText("保存").fetchSemanticsNode().boundsInRoot.bottom)
+            fixture.ai.enqueueBalance { response.await() }
+            query.performScrollTo().performTouchInput { click() }
+            await("查询中…")
+            query.assertIsNotEnabled()
+            response.complete(balance)
+            await("¥8.25")
+            val refresh = ui.onNodeWithContentDescription("刷新账户余额")
+            refresh.assertIsEnabled()
+
+            ui.onNodeWithText("深色").performScrollTo().performClick().assertIsSelected()
+            refresh.performScrollTo().assertIsDisplayed()
+            captureScreenshot("captureBalanceScreenshots", "deepseek-balance-dark.png")
+            ui.onNodeWithText("浅色").performScrollTo().performClick().assertIsSelected()
+            refresh.performScrollTo().assertIsDisplayed()
+            captureScreenshot("captureBalanceScreenshots", "deepseek-balance-light.png")
+
+            fixture.ai.enqueueBalance { throw RuleViolation("余额查询失败，请重试。") }
+            refresh.performTouchInput { click() }
+            await("余额查询失败，请重试。")
+            ui.onNodeWithText("¥8.25").assertDoesNotExist()
+
+            val delayed = CompletableDeferred<DeepSeekBalance>()
+            fixture.ai.enqueueBalance { delayed.await() }
+            refresh.performTouchInput { click() }
+            await("查询中…")
+            ui.onNode(hasSetTextAction() and hasText("API Key")).performScrollTo().performTextReplacement("")
+            delayed.complete(balance)
+            await("填写 API Key 后可查询")
+            query.performScrollTo().assertIsNotEnabled()
+            ui.onNodeWithText("¥8.25").assertDoesNotExist()
+            ui.onNodeWithText("MiniMax").performScrollTo().performClick()
+            await("MiniMax-M3.1-Flash")
+            ui.onNodeWithText("账户余额").assertDoesNotExist()
+            if (imeVisible()) {
+                pressBack()
+                ui.waitUntil(5_000) { !imeVisible() }
+            }
+            pressBack()
+            await("我的")
+        } finally {
+            appearance.save(original)
         }
     }
 

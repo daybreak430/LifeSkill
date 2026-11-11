@@ -390,14 +390,16 @@ internal data class SettingsStatus(
     val balance: DeepSeekBalance? = null,
     val balanceWorking: Boolean = false,
     val balanceMessage: String? = null,
-    val balanceError: Boolean = false,
 )
 
 internal class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val _status = MutableStateFlow(SettingsStatus())
     val status = _status.asStateFlow()
+    private var balanceRequest: Job? = null
 
     fun load(provider: Provider? = null) {
+        if (_status.value.working) return
+        resetBalance()
         run {
             val config = withContext(Dispatchers.IO) {
                 if (provider == null) container.settings.active() else container.settings.load(provider)
@@ -407,13 +409,11 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
     }
 
     fun edit(config: ModelSettings) {
+        resetBalance()
         _status.value = _status.value.copy(
             config = config,
             message = null,
             error = false,
-            balance = null,
-            balanceMessage = null,
-            balanceError = false,
         )
     }
 
@@ -421,7 +421,9 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
         val config = _status.value.config ?: return
         run {
             withContext(Dispatchers.IO) { container.settings.save(config) }
-            SettingsStatus(config.validated(requireKey = false), message = "已保存为当前模型")
+            _status.value.copy(
+                config = config.validated(requireKey = false), working = false, message = "已保存为当前模型",
+            )
         }
     }
 
@@ -430,26 +432,36 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
         run {
             val input = listOf(ModelMessage("user", "请简短回复「连接成功」。"))
             container.gateway.complete(config.validated(), input, structured = false)
-            SettingsStatus(config, message = "连接成功")
+            _status.value.copy(working = false, message = "连接成功")
         }
     }
 
     fun refreshBalance() {
-        val config = _status.value.config ?: return
-        if (config.provider != Provider.DEEPSEEK || _status.value.balanceWorking) return
-        _status.value = _status.value.copy(balanceWorking = true, balanceMessage = null, balanceError = false)
-        viewModelScope.launch {
+        val state = _status.value
+        val config = state.config ?: return
+        if (config.provider != Provider.DEEPSEEK || config.apiKey.isBlank() || state.working || state.balanceWorking) return
+        _status.value = state.copy(balanceWorking = true, balanceMessage = null)
+        balanceRequest = viewModelScope.launch {
             try {
-                val balance = withContext(Dispatchers.IO) { container.gateway.balance(config.validated()) }
+                val balance = container.gateway.balance(config.validated())
+                ensureActive()
                 _status.value = _status.value.copy(balance = balance, balanceWorking = false)
             } catch (error: Exception) {
+                ensureActive()
                 _status.value = _status.value.copy(
+                    balance = null,
                     balanceWorking = false,
                     balanceMessage = readable(error, "余额查询失败，请重试。"),
-                    balanceError = true,
                 )
             }
         }
+    }
+
+    private fun resetBalance() {
+        // 切换服务商或编辑密钥后，迟到的查询结果不能显示为当前账户的余额。
+        balanceRequest?.cancel()
+        balanceRequest = null
+        _status.value = _status.value.copy(balance = null, balanceWorking = false, balanceMessage = null)
     }
 
     private fun run(action: suspend () -> SettingsStatus) {

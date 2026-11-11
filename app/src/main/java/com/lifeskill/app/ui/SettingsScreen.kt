@@ -20,9 +20,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +41,7 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
     val appearance by app.appearance.collectAsStateWithLifecycle()
     val config = state.config
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     LaunchedEffect(model) { model.load() }
     Column(Modifier.fillMaxSize()) {
         PageHeader("设置", app::back)
@@ -87,9 +91,6 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                             }
                         }
                     }
-                    if (config.provider == Provider.DEEPSEEK) {
-                        DeepSeekBalanceRow(state, model)
-                    }
                     OutlinedTextField(
                         config.apiKey, { model.edit(config.copy(apiKey = it)) }, Modifier.fillMaxWidth(),
                         label = { Text("API Key") }, singleLine = true,
@@ -117,48 +118,64 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                if (config?.provider == Provider.DEEPSEEK) {
+                    DeepSeekBalanceRow(state) {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                        model.refreshBalance()
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DeepSeekBalanceRow(state: SettingsStatus, model: SettingsViewModel) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text("余额", style = MaterialTheme.typography.titleMedium)
-            when {
-                state.balanceWorking -> Text("查询中…", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                state.balance != null -> {
-                    state.balance.balances.forEach { balance ->
-                        Text(
-                            "${currencySymbol(balance.currency)}${balance.totalBalance}",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                    if (!state.balance.isAvailable) {
-                        Text("当前余额不足以调用 API", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                state.balanceMessage != null -> Text(
-                    state.balanceMessage,
-                    color = if (state.balanceError) MaterialTheme.colorScheme.error else Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                state.configHasApiKey() -> Text("尚未查询", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                else -> Text("填写 API Key 后查询", color = Muted, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        TextButton(
-            onClick = model::refreshBalance,
-            enabled = !state.working && !state.balanceWorking && state.configHasApiKey(),
+private fun DeepSeekBalanceRow(state: SettingsStatus, refresh: () -> Unit) {
+    val hasKey = !state.config?.apiKey.isNullOrBlank()
+    val queried = state.balance != null || state.balanceMessage != null
+    Surface(Modifier.fillMaxWidth(), shape = ControlShape, color = Ground) {
+        Row(
+            Modifier.padding(start = 14.dp, end = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (state.balanceWorking) "查询中…" else "刷新")
+            Column(
+                Modifier.weight(1f).padding(vertical = 10.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text("账户余额", style = MaterialTheme.typography.labelLarge, color = Muted)
+                when {
+                    state.balanceWorking -> Text("查询中…", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    state.balanceMessage != null -> Text(
+                        state.balanceMessage, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    state.balance != null -> {
+                        state.balance.balances.forEach { balance ->
+                            Text(
+                                "${currencySymbol(balance.currency)}${balance.totalBalance}",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        if (!state.balance.isAvailable) {
+                            Text("余额不足，暂不可调用 API", color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    !hasKey -> Text("填写 API Key 后可查询", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            TextButton(
+                onClick = refresh,
+                modifier = Modifier.semantics { contentDescription = if (queried) "刷新账户余额" else "查询账户余额" },
+                enabled = !state.working && !state.balanceWorking && hasKey,
+            ) {
+                Text(if (queried) "刷新" else "查询")
+            }
         }
     }
 }
-
-private fun SettingsStatus.configHasApiKey(): Boolean = !config?.apiKey.isNullOrBlank()
 
 private fun currencySymbol(currency: String): String = when (currency.uppercase()) {
     "CNY" -> "¥"

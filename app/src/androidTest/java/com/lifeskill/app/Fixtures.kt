@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.runner.AndroidJUnitRunner
 import com.lifeskill.app.ai.AiGateway
+import com.lifeskill.app.ai.DeepSeekBalance
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
@@ -31,12 +32,20 @@ internal fun fixture(database: LifeSkillDatabase, ai: AiGateway): AppContainer =
 
 internal class ScriptedGateway : AiGateway {
     private val script = ConcurrentLinkedQueue<suspend (List<ModelMessage>) -> String>()
+    private val balanceScript = ConcurrentLinkedQueue<suspend () -> DeepSeekBalance>()
 
     fun reply(json: String) = enqueue { json }
 
     fun enqueue(action: suspend (List<ModelMessage>) -> String) {
         script.add(action)
     }
+
+    fun enqueueBalance(action: suspend () -> DeepSeekBalance) {
+        balanceScript.add(action)
+    }
+
+    override suspend fun balance(settings: ModelSettings): DeepSeekBalance =
+        checkNotNull(balanceScript.poll()) { "测试缺少预设余额响应。" }()
 
     override suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean,
