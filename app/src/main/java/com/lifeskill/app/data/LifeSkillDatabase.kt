@@ -155,6 +155,13 @@ internal abstract class SkillDao {
     abstract suspend fun recentTurns(chatId: String, limit: Int): List<TurnRow>
 
     @Query("""
+        SELECT * FROM turns WHERE chatId = :chatId AND contentVersion = :version
+        AND speaker = 'ASSISTANT' AND kind IN (:kinds)
+        ORDER BY sequence DESC LIMIT :limit
+    """)
+    abstract suspend fun recentTeaching(chatId: String, version: Long, kinds: List<String>, limit: Int): List<TurnRow>
+
+    @Query("""
         SELECT COUNT(*) FROM (
             SELECT sequence FROM turns WHERE chatId = :chatId AND contentVersion = :version
             AND speaker = 'ASSISTANT' AND kind IN (:kinds) AND sequence > COALESCE((
@@ -192,11 +199,13 @@ internal abstract class SkillDao {
 }
 
 @Database(
-    entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class],
-    version = 2,
+    entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
+        ExamAttemptRow::class, TreeChallengeRow::class],
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {
     abstract fun skills(): SkillDao
+    abstract fun assessments(): TreeAssessmentDao
 }

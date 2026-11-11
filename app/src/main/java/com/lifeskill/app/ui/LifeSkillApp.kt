@@ -50,6 +50,9 @@ import com.lifeskill.app.R
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.TreeAssessmentSummary
+import com.lifeskill.app.model.TreeChallenge
+import com.lifeskill.app.model.examAvailable
 
 private const val PAGE_MOTION_MS = 220
 
@@ -77,6 +80,7 @@ internal fun LifeSkillApp(
     val deleting by app.deleting.collectAsStateWithLifecycle()
     val notice by app.notice.collectAsStateWithLifecycle()
     val error by app.loadError.collectAsStateWithLifecycle()
+    val assessments by container.assessments.summaries.collectAsStateWithLifecycle(emptyMap())
     val snackbar = remember { SnackbarHostState() }
     val stateHolder = rememberSaveableStateHolder()
 
@@ -95,7 +99,7 @@ internal fun LifeSkillApp(
             return@LifeSkillTheme
         }
         val gradient = when (route.page) {
-            Page.TUTOR, Page.GENERATE -> aiColors.backdrop
+            Page.TUTOR, Page.GENERATE, Page.DIAGNOSTIC, Page.FEYNMAN -> aiColors.backdrop
             else -> studyColors.backdrop
         }
         val backdrop = key(dark) {
@@ -153,7 +157,8 @@ internal fun LifeSkillApp(
                                     }
                                     Page.TREE -> entry?.let {
                                         val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
-                                        SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition)
+                                        SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition,
+                                            assessments[it.id] ?: TreeAssessmentSummary())
                                     }
                                     Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app) }
                                     Page.SETTINGS -> {
@@ -168,6 +173,13 @@ internal fun LifeSkillApp(
                                         val mode = if (displayedRoute.page == Page.GENERATE) ChatMode.GENERATE else ChatMode.TUTOR
                                         val scope = ChatScope(mode, displayedRoute.id)
                                         ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active)
+                                    }
+                                    Page.EXAM -> entry?.let {
+                                        ExamScreen(it, displayedLibrary.examAvailable(it.id), app, assessmentModel(container, it.id), active)
+                                    }
+                                    Page.DIAGNOSTIC, Page.FEYNMAN -> entry?.let {
+                                        val kind = if (displayedRoute.page == Page.DIAGNOSTIC) TreeChallenge.DIAGNOSTIC else TreeChallenge.FEYNMAN
+                                        ChallengeScreen(it, kind, assessments[it.id]?.passed == true, app, assessmentModel(container, it.id))
                                     }
                                 }
                             }
@@ -192,4 +204,12 @@ private fun Modifier.routeInput(active: Boolean): Modifier =
 private fun conversationModel(container: AppContainer, scope: ChatScope): ChatViewModel = viewModel(
     key = scope.id,
     factory = remember(container, scope) { viewModelFactory { initializer { ChatViewModel(container, scope) } } },
+)
+
+@Composable
+private fun assessmentModel(container: AppContainer, treeId: String): TreeAssessmentViewModel = viewModel(
+    key = "assessment:$treeId",
+    factory = remember(container, treeId) {
+        viewModelFactory { initializer { TreeAssessmentViewModel(container.assessments, treeId) } }
+    },
 )

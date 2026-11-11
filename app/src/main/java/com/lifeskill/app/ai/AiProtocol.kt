@@ -72,7 +72,6 @@ internal object AiProtocol {
     private const val DIAGRAM_FORMAT =
         "结构图、剖面图、空间关系图等非流程示意图优先使用 Unicode Box Drawing（如 ┌─┐│└─┘），也可使用 ASCII。" +
             "用完整的 Markdown 代码围栏，语言标记为 diagram。用空格对齐，中文按两列计算。用短标签，避免制表符和表情。"
-    private val fenced = Regex("""(?is)^\x60\x60\x60(?:json)?\s*(.*?)\s*\x60\x60\x60$""")
     private val tutorKinds = mapOf(
         "teach" to TurnKind.MESSAGE,
         "offer_check" to TurnKind.CHECK_OFFER,
@@ -357,8 +356,7 @@ internal object AiProtocol {
     }
 
     private fun <T> parse(raw: String, decode: (JSONObject) -> T): T {
-        val content = fenced.matchEntire(raw.trim())?.groupValues?.get(1) ?: raw.trim()
-        val json = AiJson.objectOrNull(content) ?: invalid()
+        val json = AiJson.modelObjectOrNull(raw) ?: invalid()
         return decode(json)
     }
 

@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-internal enum class Page { HOME, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS }
+internal enum class Page { HOME, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN }
 
 internal data class Route(val page: Page, val id: String? = null) {
     fun encode() = "${page.name}:${id.orEmpty()}"
@@ -396,7 +396,7 @@ internal class SettingsViewModel(private val container: AppContainer) : ViewMode
     }
 }
 
-private fun readable(error: Exception, fallback: String): String = when (error) {
+internal fun readable(error: Exception, fallback: String): String = when (error) {
     is CancellationException -> throw error
     is RuleViolation -> error.message ?: fallback
     else -> fallback

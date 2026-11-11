@@ -361,11 +361,12 @@ class MvpFlowTest {
             assertEquals(initial, cardHeight(changing), .5f)
             assertEquals(initialTitle, titleOffset())
             val title = ui.onNodeWithText(directions.first().name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val count = ui.onNodeWithText("0/1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val countNode = ui.onNode(hasText("0/1") and hasAnyAncestor(changing), useUnmergedTree = true)
+            val count = countNode.fetchSemanticsNode().boundsInRoot
             val card = ui.onNode(changing).fetchSemanticsNode().boundsInRoot
             assertTrue(count.top > title.bottom)
             assertTrue(count.left > card.left && count.right < card.center.x)
-            ui.onNodeWithText("0/1", useUnmergedTree = true).performTouchInput { click() }
+            countNode.performTouchInput { click() }
             await("对齐测试树")
             pressBack()
             await("学习方向")
@@ -406,15 +407,92 @@ class MvpFlowTest {
         ui.onNodeWithText("连线分支").performClick()
         await("技能地图")
         ui.onNodeWithText("关联", substring = true).assertDoesNotExist()
-        val mapBounds = ui.onNodeWithTag("skill-map").fetchSemanticsNode().boundsInRoot
         val lastNode = ui.onNodeWithContentDescription("左下游").fetchSemanticsNode().boundsInRoot
-        assertTrue(mapBounds.bottom - lastNode.bottom < lastNode.height / 2)
+        val examNode = ui.onNodeWithText("验收考试").fetchSemanticsNode().boundsInRoot
+        assertTrue(examNode.top >= lastNode.bottom)
         ui.onNodeWithContentDescription("左下游")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "未解锁"))
             .performTouchInput { click() }
         await("前置技能")
         await("右起点")
         await("左起点")
+    }
+
+    @Test fun treeExamUsesSeparatePageAndRevealsChallengesAfterPassing() {
+        await("本职工作")
+        val library = fixture.container.library
+        val (tree, skill) = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "验收流程测试"))
+            tree to library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对凭证", "用凭证核对总额"))
+        }
+        try {
+            ui.onNodeWithText("本职工作").performTouchInput { click() }
+            await(tree.name)
+            ui.onNodeWithText(tree.name).performTouchInput { click() }
+            val map = ui.onNodeWithTag("skill-map")
+            map.performScrollToNode(hasText("验收考试"))
+            ui.onNodeWithText("自以为是检测").assertDoesNotExist()
+            ui.onNodeWithText("费曼复习").assertDoesNotExist()
+            ui.onNodeWithText("验收考试").performTouchInput { click() }
+            await("验收考试未解锁")
+            ui.onNodeWithText("开始考试").assertDoesNotExist()
+            pressBack()
+            runBlocking { library.lightFromAssessment(skill) }
+            await("1 / 1 已点亮")
+            map.performScrollToNode(hasText("验收考试"))
+            ui.onNodeWithText("验收考试").performTouchInput { click() }
+            await("开始考试")
+            fixture.ai.reply(examFixture())
+            ui.onNodeWithText("开始考试").performTouchInput { click() }
+            await("验收单选1")
+
+            val paper = ui.onNodeWithTag("exam-questions")
+            for (index in 0..3) {
+                paper.performScrollToIndex(index)
+                ui.onNodeWithTag("exam-choice-$index-0").performTouchInput { click() }
+                if (index >= 2) ui.onNodeWithTag("exam-choice-$index-1").performTouchInput { click() }
+            }
+            for (index in 4..5) {
+                paper.performScrollToIndex(index)
+                val answer = ui.onNodeWithTag("exam-answer-$index")
+                answer.performTouchInput { click() }
+                ui.waitUntil(8_000) { imeVisible() }
+                answer.performTextReplacement("核对金额")
+                pressBack()
+                ui.waitUntil(8_000) { !imeVisible() }
+            }
+            await("已答 6 / 8")
+            ui.onNodeWithText("交卷").performTouchInput { click() }
+            await("确认交卷？")
+            fixture.ai.reply(markFixture())
+            ui.onNodeWithText("确认交卷").performTouchInput { click() }
+            await("60 分")
+            ui.onNodeWithText("通过验收").assertIsDisplayed()
+            ui.onNodeWithText("再考一次").assertIsEnabled()
+            ui.onNodeWithText("查看错题集").performTouchInput { click() }
+            await("验收简答1")
+            ui.onAllNodesWithText("未作答")[0].assertIsDisplayed()
+            pressBack()
+            await("60 分")
+            pressBack()
+
+            map.performScrollToNode(hasText("费曼复习"))
+            ui.onNodeWithText("最高 60 分").assertIsDisplayed()
+            ui.onNodeWithText("自以为是检测").assertIsDisplayed()
+            ui.onNodeWithText("费曼复习").performTouchInput { click() }
+            await("开始挑战")
+            ui.onNodeWithText("开始挑战").performTouchInput { click() }
+            await("请选一个你刚学过的核心概念", substring = true)
+            fixture.ai.reply(challengeFixture("讲清楚了核对的方法。", true, ""))
+            send("把付的钱和收据上的数字比一比。")
+            await("挑战成功")
+            pressBack()
+            map.performScrollToNode(hasText("挑战成功"))
+            ui.onNodeWithText("挑战成功").assertIsDisplayed()
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
     }
 
     @Test fun skillMapWrapsIntoTwoColumnsAndOnlyScrollsVertically() {

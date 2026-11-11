@@ -62,6 +62,9 @@ import com.lifeskill.app.model.MapPoint
 import com.lifeskill.app.model.SkillMapLayout
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.SkillUnlock
+import com.lifeskill.app.model.TreeAssessmentSummary
+import com.lifeskill.app.model.TreeChallenge
+import com.lifeskill.app.model.examAvailable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -70,7 +73,7 @@ import kotlin.math.abs
 @Composable
 internal fun SkillTreeScreen(
     tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel,
-    unlock: SkillUnlock?, active: Boolean, addedEntryId: String?,
+    unlock: SkillUnlock?, active: Boolean, addedEntryId: String?, assessment: TreeAssessmentSummary,
 ) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
@@ -124,9 +127,20 @@ internal fun SkillTreeScreen(
                     SkillMap(
                         skills, layout, library, latestStudySkillId, unlock, active, app::finishUnlock,
                         addedEntryId, app::finishShowingAddition,
-                    ) {
-                        app.open(Route.entry(it))
-                    }
+                        onOpen = { app.open(Route.entry(it)) },
+                        assessmentNodes = { diameter ->
+                            ExamMapNodes(library.examAvailable(tree.id), assessment, diameter,
+                                { app.open(Route(Page.EXAM, tree.id)) },
+                                { kind ->
+                                    val page = when (kind) {
+                                        TreeChallenge.DIAGNOSTIC -> Page.DIAGNOSTIC
+                                        TreeChallenge.FEYNMAN -> Page.FEYNMAN
+                                    }
+                                    app.open(Route(page, tree.id))
+                                },
+                            )
+                        },
+                    )
                 }
             }
         }
@@ -183,6 +197,7 @@ private fun SkillMap(
     skills: List<Entry>, layout: SkillMapLayout, library: Library, latestStudySkillId: String?,
     unlock: SkillUnlock?, active: Boolean, onUnlockFinished: (String) -> Unit,
     addedEntryId: String?, onAdditionShown: (String) -> Unit, onOpen: (Entry) -> Unit,
+    assessmentNodes: @Composable (Dp) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
@@ -294,6 +309,7 @@ private fun SkillMap(
                     }
                 }
             }
+            item(key = "tree-assessment") { assessmentNodes(diameter) }
         }
     }
 }

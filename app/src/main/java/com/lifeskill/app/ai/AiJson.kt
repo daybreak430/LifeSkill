@@ -7,6 +7,13 @@ import org.json.JSONObject
 import java.io.StringReader
 
 internal object AiJson {
+    private val fenced = Regex("""(?is)^\x60\x60\x60(?:json)?\s*(.*?)\s*\x60\x60\x60$""")
+
+    fun modelObjectOrNull(raw: String): JSONObject? {
+        val text = raw.trim()
+        return objectOrNull(fenced.matchEntire(text)?.groupValues?.get(1) ?: text)
+    }
+
     fun objectOrNull(text: String): JSONObject? = runCatching {
         JsonReader(StringReader(text)).use { reader ->
             val value = readValue(reader, 0) as? JSONObject

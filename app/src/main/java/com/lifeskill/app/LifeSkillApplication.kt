@@ -10,6 +10,7 @@ import com.lifeskill.app.data.LibraryRepository
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.LocalSettings
 import com.lifeskill.app.data.SecretBox
+import com.lifeskill.app.data.TreeAssessmentRepository
 
 open class LifeSkillApplication : Application() {
     internal val container by lazy { createContainer() }
@@ -29,4 +30,5 @@ internal class AppContainer(
 ) {
     val library = LibraryRepository(database, secret)
     val conversations = ConversationRepository(database, library, settings, gateway, secret)
+    val assessments = TreeAssessmentRepository(database, library, settings, gateway, secret)
 }
