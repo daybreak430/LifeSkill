@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,11 +44,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.GenerationLevel
+import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.data.ConversationRepository
@@ -214,15 +219,74 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
 private fun EditorField(
     value: String, onChange: (String) -> Unit, label: String, enabled: Boolean,
     minLines: Int = 1, maxLines: Int = 1, placeholder: String? = null, error: String? = null,
-    imeAction: ImeAction = ImeAction.Default,
+    imeAction: ImeAction = ImeAction.Default, keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     OutlinedTextField(
         value, onChange, Modifier.fillMaxWidth(), label = { Text(label) },
         placeholder = placeholder?.let { { Text(it) } },
         singleLine = maxLines == 1, minLines = minLines, maxLines = maxLines, enabled = enabled,
         isError = error != null, supportingText = error?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(imeAction = imeAction), shape = ControlShape,
+        keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType), shape = ControlShape,
         colors = fieldColors(),
+    )
+}
+
+private enum class CourseCountOption(val label: String, val range: IntRange?) {
+    OVERVIEW("大致了解（3–5 节）", GenerationOptions.OVERVIEW),
+    DETAILED("掰开揉碎（8–12 节）", GenerationOptions.DETAILED),
+    CUSTOM("自定义", null),
+}
+
+@Composable
+internal fun TreeGenerationDialog(onDismiss: () -> Unit, onConfirm: (GenerationOptions) -> Unit) {
+    var level by rememberSaveable { mutableStateOf<GenerationLevel?>(null) }
+    var countOption by rememberSaveable { mutableStateOf<CourseCountOption?>(null) }
+    var customCount by rememberSaveable { mutableStateOf("") }
+    val validCustom = customCount.toIntOrNull()?.takeIf { it in 1..GenerationOptions.COURSE_LIMIT }
+    val count = if (countOption == CourseCountOption.CUSTOM) validCustom?.let { it..it } else countOption?.range
+    val options = level?.let { selected -> count?.let { GenerationOptions(selected, it) } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss, shape = DialogShape, containerColor = Panel,
+        title = { Text("生成技能树") },
+        text = {
+            val focus = LocalFocusManager.current
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("当前掌握程度", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+                    GenerationLevel.entries.forEach { choice ->
+                        DialogRadioChoice(choice.label, level == choice) {
+                            focus.clearFocus()
+                            level = choice
+                        }
+                    }
+                }
+                Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("课程数量", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+                    CourseCountOption.entries.forEach { choice ->
+                        DialogRadioChoice(choice.label, countOption == choice) {
+                            focus.clearFocus()
+                            countOption = choice
+                        }
+                    }
+                }
+                if (countOption == CourseCountOption.CUSTOM) {
+                    EditorField(
+                        customCount, { customCount = it }, "课数（1–${GenerationOptions.COURSE_LIMIT}）", enabled = true,
+                        error = if (customCount.isNotEmpty() && validCustom == null) {
+                            "请输入 1–${GenerationOptions.COURSE_LIMIT} 的整数"
+                        } else null,
+                        imeAction = ImeAction.Done, keyboardType = KeyboardType.Number,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { options?.let(onConfirm) }, enabled = options != null, shape = ControlShape) {
+                Text("确认生成")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 

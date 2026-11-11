@@ -17,6 +17,7 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
+import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.RuleViolation
@@ -297,6 +298,10 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory())
 
     fun send(text: String, check: Boolean = false) = run { repository.send(scope, text, check) }
+    fun generateTree(offerId: String, options: GenerationOptions) = run {
+        repository.generateTree(scope, offerId, options)
+    }
+
     fun restartLesson(requirements: String) = run { repository.restartLesson(scope, requirements) }
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
     fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }

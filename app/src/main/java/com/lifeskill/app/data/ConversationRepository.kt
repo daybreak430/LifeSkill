@@ -11,6 +11,8 @@ import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
+import com.lifeskill.app.model.GenerationLevel
+import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.GenerationPreview
 import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 
 internal class ConversationRepository(
     private val database: LifeSkillDatabase,
@@ -56,7 +59,18 @@ internal class ConversationRepository(
         queueAndRespond(scope, TurnKind.RESTART, input)
     }
 
-    private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String) {
+    suspend fun generateTree(scope: ChatScope, offerId: String, options: GenerationOptions) {
+        if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中确认。")
+        // 与待处理消息一起加密保存，自动补试、手动重试和重启都使用已确认的设置。
+        val input = JSONObject()
+            .put("level", options.level.name)
+            .put("minimum", options.courseCount.first)
+            .put("maximum", options.courseCount.last)
+            .toString()
+        queueAndRespond(scope, TurnKind.GENERATE_TREE, input, offerId)
+    }
+
+    private suspend fun queueAndRespond(scope: ChatScope, kind: TurnKind, input: String, offerId: String? = null) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
             requireUnlockedLesson(scope, owner)
@@ -67,6 +81,12 @@ internal class ConversationRepository(
             } else {
                 val last = dao.recentTurns(scope.id, 1).firstOrNull()
                 if (last?.speaker == Speaker.USER.name) throw RuleViolation("请先处理上一条待回复消息。")
+                if (kind == TurnKind.GENERATE_TREE && (owner?.kind == EntryKind.TREE || last == null ||
+                        last.id != offerId || last.kind != TurnKind.TREE_OFFER.name ||
+                        last.contentVersion != (owner?.contentVersion ?: 0L))
+                ) {
+                    throw RuleViolation("当前生成提议已失效，请重新描述学习要求。")
+                }
                 if (kind == TurnKind.CHECK) {
                     checkNotNull(owner)
                     val lastReply = last?.takeIf { it.speaker == Speaker.ASSISTANT.name && it.contentVersion == owner.contentVersion }
@@ -104,7 +124,8 @@ internal class ConversationRepository(
         if (row.kind == TurnKind.CREATED.name) return@withTransaction
         if (row.kind != TurnKind.DRAFT.name) throw RuleViolation("这条消息没有可添加的草稿。")
         requireOwner(scope)
-        val resolved = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn")).draft).resolveNewTreeReferences()
+        val resolved = checkNotNull(AiProtocol.generation(secret.open(row.text, "$id:turn"), savedDraft = true).draft)
+            .resolveNewTreeReferences()
         val draft = resolved.draft
         val selected = when (destination) {
             is GenerationDestination.Existing -> draft.copy(directionId = destination.id, directionName = null)
@@ -153,7 +174,7 @@ internal class ConversationRepository(
                 val levels = if (owner?.kind == EntryKind.TREE) {
                     SkillGraph.levels(candidates.map(Entry::id), current.edges)
                 } else emptyMap()
-                AiProtocol.generationPrompt(owner, candidates, remaining, levels)
+                AiProtocol.generationPrompt(owner, candidates, remaining, levels, input.generationOptions)
             }
             Request(owner, input, pending, listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, recent))
         } ?: return
@@ -182,15 +203,23 @@ internal class ConversationRepository(
                 throw RuleViolation("当前项目已编辑，请重新发送这条消息。")
             }
             val turn = when (scope.mode) {
-                ChatMode.GENERATE -> generationTurn(raw, current, replyId, context.input.contentVersion)
+                ChatMode.GENERATE -> generationTurn(raw, current, replyId, context.input)
                 ChatMode.TUTOR -> tutorTurn(raw, context, replyId)
             }
             dao.insertTurn(turn.row(scope))
         }
     }
 
-    private suspend fun generationTurn(raw: String, owner: Entry?, id: String, version: Long): Turn {
+    private suspend fun generationTurn(raw: String, owner: Entry?, id: String, input: Turn): Turn {
+        val version = input.contentVersion
+        val options = input.generationOptions
         val reply = AiProtocol.generation(raw)
+        if (reply.offersTree) {
+            if (options != null || owner?.kind == EntryKind.TREE) {
+                throw RecoverableReply("AI 返回了不适用的生成提议，请重试。", "请按当前入口和确认状态回答，不要返回 offer_tree。")
+            }
+            return Turn(id, Speaker.ASSISTANT, TurnKind.TREE_OFFER, reply.reply, version)
+        }
         val draft = reply.draft ?: return Turn(id, Speaker.ASSISTANT, TurnKind.MESSAGE, reply.reply, version)
         if (owner?.kind == EntryKind.TREE) {
             val result = try {
@@ -202,6 +231,22 @@ internal class ConversationRepository(
                 )
             }
             return Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary, version, resultId = result.entry.id)
+        }
+        if (options == null && draft.trees.isNotEmpty()) {
+            throw RecoverableReply(
+                "请先确认技能树的生成设置。",
+                "用户还未确认掌握程度和课程数量。主题清楚时仅返回 offer_tree，主题不清楚时用 message 澄清。",
+            )
+        }
+        if (options != null) {
+            val courseCount = draft.trees.singleOrNull()?.skills?.size ?: 0
+            if (courseCount !in options.courseCount) {
+                val expected = "1 棵技能树，包含 ${options.courseCountLabel}"
+                throw RecoverableReply(
+                    "请生成$expected。",
+                    "上一版没有满足用户确认的树数或课数。请重新生成$expected，并输出完整 JSON。",
+                )
+            }
         }
         if (draft.skills.isNotEmpty() || (owner != null && (draft.directionId != null || draft.directionName != null)) ||
             (draft.trees.isEmpty() && (owner != null || draft.directionName == null || draft.directionId != null))
@@ -295,11 +340,18 @@ internal class ConversationRepository(
         val body = secret.open(text, "$id:turn")
         val turnKind = TurnKind.valueOf(kind)
         if (turnKind == TurnKind.DRAFT) {
-            val draft = checkNotNull(AiProtocol.generation(body).draft)
+            val draft = checkNotNull(AiProtocol.generation(body, savedDraft = true).draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
             val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成 ${draft.trees.size} 棵技能树"
             return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.resolveNewTreeReferences().notice,
                 contentVersion, preview = preview)
+        }
+        if (turnKind == TurnKind.GENERATE_TREE) {
+            val data = JSONObject(body)
+            val options = GenerationOptions(
+                GenerationLevel.valueOf(data.getString("level")), data.getInt("minimum")..data.getInt("maximum"),
+            )
+            return Turn(id, Speaker.USER, turnKind, options.confirmation, contentVersion, generationOptions = options)
         }
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))

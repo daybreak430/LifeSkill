@@ -54,6 +54,7 @@ import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -528,9 +529,12 @@ class MvpFlowTest {
 
         fixture.ai.enqueue { throw RuleViolation("模型服务请求过于频繁，请稍后重试。") }
         fixture.ai.reply("""{"kind":"message","reply":"你想用什么主题？"}""")
+        fixture.ai.reply(RepositoryTest.TREE_OFFER)
         fixture.ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("按每个技能点的名称和学习目标选择 icon"))
             assertTrue(messages.first().text.contains("树的 icon 应代表树名及整棵树的学习主题"))
+            assertTrue(messages.first().text.contains("本次掌握程度为「进阶」"))
+            assertTrue(messages.first().text.contains("精确生成 2 节"))
             RepositoryTest.CREATED
         }
         ui.onNodeWithText("AI 生成技能树").performClick()
@@ -544,6 +548,30 @@ class MvpFlowTest {
         ui.onNodeWithText("重试").performClick()
         await("你想用什么主题？")
         send("请生成一个数据质量方向的技能树")
+        await("当前掌握程度")
+        ui.onNodeWithText("通用").assertDoesNotExist()
+        ui.onNodeWithText("确认生成").assertIsNotEnabled()
+        pressBack()
+        await("生成设置")
+        ui.onNodeWithText("当前掌握程度").assertDoesNotExist()
+        assertEquals(TurnKind.TREE_OFFER, runBlocking {
+            fixture.container.conversations.watch(ChatScope(ChatMode.GENERATE)).first().last().kind
+        })
+        ui.onNodeWithText("生成设置").performTouchInput { click() }
+        ui.onNodeWithText("进阶").performTouchInput { click() }.assertIsSelected()
+        ui.onNodeWithText("大致了解（3–5 节）").performScrollTo().performTouchInput { click() }.assertIsSelected()
+        ui.onNodeWithText("确认生成").assertIsEnabled()
+        ui.onNodeWithText("自定义").performScrollTo().performTouchInput { click() }.assertIsSelected()
+        ui.onNodeWithText("确认生成").assertIsNotEnabled()
+        val count = ui.onNode(hasSetTextAction() and hasText("课数（1–33）"))
+        count.performScrollTo().performTouchInput { click() }
+        count.performTextInput("34")
+        await("请输入 1–33 的整数")
+        ui.onNodeWithText("确认生成").assertIsNotEnabled()
+        pressBack()
+        await("当前掌握程度")
+        count.performTextReplacement("2")
+        ui.onNodeWithText("确认生成").assertIsDisplayed().assertIsEnabled().performTouchInput { click() }
         await("选择方向")
         assertTrue(runBlocking { fixture.container.library.snapshot().entries.none { it.name == "数据质量" } })
         ui.onNodeWithText("选择方向").performTouchInput { click() }

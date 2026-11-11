@@ -89,6 +89,9 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     var showRestart by rememberSaveable { mutableStateOf(false) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     val draftTurn = history.firstOrNull { it.id == selectedDraftId && it.preview != null }
+    val treeOffer = history.lastOrNull()?.takeIf { it.kind == TurnKind.TREE_OFFER }
+    var openedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -108,6 +111,14 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         keyboard?.hide()
         followReply = true
         chat.send(text, check)
+    }
+
+    LaunchedEffect(pageActive, canSend, treeOffer?.id) {
+        if (pageActive && canSend && treeOffer != null && openedOfferId != treeOffer.id) {
+            keyboard?.hide()
+            openedOfferId = treeOffer.id
+            selectedOfferId = treeOffer.id
+        }
     }
 
     LaunchedEffect(pageActive, newCelebrationId) {
@@ -158,7 +169,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         if (tutor) owner?.goal.orEmpty() else if (owner != null) {
                             "告诉 AI 你想在这里新增什么。"
                         } else {
-                            "描述你想学的主题、已有基础和目标。"
+                            "描述你想学的主题和目标。"
                         },
                     ) { AiCrystal(54.dp, forAction = !tutor) }
                     if (tutor && !status.working) {
@@ -193,6 +204,17 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                                 keyboard?.hide()
                                 chat.clearDraftError()
                                 selectedDraftId = turn.id
+                            },
+                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp),
+                            enabled = canSend, trailingGlyph = Glyph.NEXT,
+                        )
+                    }
+                    if (turn.id == treeOffer?.id) {
+                        ChatPill(
+                            "生成设置",
+                            onClick = {
+                                keyboard?.hide()
+                                selectedOfferId = turn.id
                             },
                             modifier = Modifier.padding(start = ReplyInset, top = 6.dp),
                             enabled = canSend, trailingGlyph = Glyph.NEXT,
@@ -283,6 +305,16 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 followReply = true
                 chat.restartLesson(requirements)
                 draft = ""
+            },
+        )
+    }
+    if (pageActive && canSend && treeOffer != null && treeOffer.id == selectedOfferId) {
+        TreeGenerationDialog(
+            onDismiss = { selectedOfferId = null },
+            onConfirm = { options ->
+                selectedOfferId = null
+                followReply = true
+                chat.generateTree(treeOffer.id, options)
             },
         )
     }
@@ -460,7 +492,10 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit
             if (status.working) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Loading(Modifier.size(25.dp))
-                    Text("正在等待 AI 回复", style = MaterialTheme.typography.labelMedium, color = Muted)
+                    Text(
+                        if (pending?.kind == TurnKind.GENERATE_TREE) "正在生成技能树" else "正在等待 AI 回复",
+                        style = MaterialTheme.typography.labelMedium, color = Muted,
+                    )
                 }
             } else {
                 Text(
@@ -475,6 +510,7 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit
                             Text(when (pending.kind) {
                                 TurnKind.CHECK -> "撤回检验"
                                 TurnKind.RESTART -> "取消请求"
+                                TurnKind.GENERATE_TREE -> "取消生成"
                                 else -> "撤回编辑"
                             }, color = aiColors.accent)
                         }

@@ -14,7 +14,33 @@ data class ChatScope(val mode: ChatMode, val ownerId: String? = null) {
 }
 
 enum class Speaker { USER, ASSISTANT }
-enum class TurnKind { MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART }
+enum class TurnKind {
+    MESSAGE, CHECK, CHECK_OFFER, EXERCISE, PASSED, RETRY, OFF_TOPIC, DRAFT, CREATED, RESTART, TREE_OFFER, GENERATE_TREE,
+}
+
+enum class GenerationLevel(val label: String) {
+    BEGINNER("初学者"),
+    INTERMEDIATE("进阶"),
+    EXPERT("专家"),
+}
+
+data class GenerationOptions(val level: GenerationLevel, val courseCount: IntRange) {
+    init {
+        require(courseCount == OVERVIEW || courseCount == DETAILED ||
+            (courseCount.first == courseCount.last && courseCount.first in 1..COURSE_LIMIT))
+    }
+
+    val courseCountLabel get() = if (courseCount.first == courseCount.last) "${courseCount.first} 节"
+        else "${courseCount.first}–${courseCount.last} 节"
+
+    internal val confirmation get() = "确认生成 · ${level.label} · $courseCountLabel"
+
+    companion object {
+        internal const val COURSE_LIMIT = 33
+        internal val OVERVIEW = 3..5
+        internal val DETAILED = 8..12
+    }
+}
 
 data class GenerationPreview(
     val treeNames: List<String>,
@@ -37,6 +63,7 @@ data class Turn(
     val resultId: String? = null,
     val choices: List<String> = emptyList(),
     val preview: GenerationPreview? = null,
+    val generationOptions: GenerationOptions? = null,
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")

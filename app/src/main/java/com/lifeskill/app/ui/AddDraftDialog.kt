@@ -1,20 +1,13 @@
 package com.lifeskill.app.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,10 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.GenerationDestination
@@ -66,8 +56,8 @@ internal fun AddDraftDialog(
             ) {
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     existing.forEach { direction ->
-                        DirectionChoice(direction.name, !createNew && selectedId == direction.id, working,
-                            recommended = preview.suggestedDirectionId == direction.id,
+                        DialogRadioChoice(direction.name, !createNew && selectedId == direction.id, enabled = !working,
+                            badge = if (preview.suggestedDirectionId == direction.id) "推荐" else null,
                         ) {
                             selectedId = direction.id
                             createNew = false
@@ -75,7 +65,7 @@ internal fun AddDraftDialog(
                         }
                     }
                     if (newName != null) {
-                        DirectionChoice("新建 · $newName", createNew, working, recommended = false) {
+                        DialogRadioChoice("新建 · $newName", createNew, enabled = !working) {
                             createNew = true
                             onSelectionChange()
                         }
@@ -96,21 +86,4 @@ internal fun AddDraftDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("取消") } },
     )
-}
-
-@Composable
-private fun DirectionChoice(
-    name: String, selected: Boolean, working: Boolean, recommended: Boolean, onClick: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
-            .background(if (selected) GoldGround else Ground)
-            .selectable(selected, enabled = !working, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected, onClick = null, enabled = !working)
-        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        if (recommended) Text("推荐", color = Gold, style = MaterialTheme.typography.labelMedium)
-    }
 }

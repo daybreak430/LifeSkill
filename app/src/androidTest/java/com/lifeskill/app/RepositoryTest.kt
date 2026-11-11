@@ -22,6 +22,8 @@ import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
+import com.lifeskill.app.model.GenerationLevel
+import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillState
@@ -240,13 +242,17 @@ class RepositoryTest {
         assertFalse(container.library.snapshot().entries.any { it.name in setOf("设计", "树 A", "树 B") })
         assertEquals(preview, container.conversations.watch(scope).first().last())
 
-        ai.reply(invalid)
+        val offerId = offerTree(scope)
+        val newTree = JSONObject(invalid).getJSONArray("trees").getJSONObject(1)
+        val singleTree = JSONObject(invalid).put("trees", JSONArray().put(newTree))
+        ai.reply(singleTree.toString())
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("上一版技能树没有通过校验"))
             assertTrue(messages.first().text.contains("紧邻的上一层"))
-            CREATED
+            newTree.getJSONArray("skills").getJSONObject(2).put("requires", JSONArray(listOf("next")))
+            singleTree.toString()
         }
-        container.conversations.send(scope, "重新生成数据技能树")
+        container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 3..3))
         val secondDraft = container.conversations.watch(scope).first().last()
         container.conversations.confirmDraft(scope, secondDraft.id, GenerationDestination.New("数据能力"))
         val history = container.conversations.watch(scope).first()
@@ -254,8 +260,8 @@ class RepositoryTest {
         assertEquals(TurnKind.CREATED, history.last().kind)
         val treeId = history.last().resultId
         assertNotNull(treeId)
-        assertEquals(2, container.library.snapshot().childrenOf(treeId).size)
-        assertEquals(1, container.library.snapshot().edges.size)
+        assertEquals(3, container.library.snapshot().childrenOf(treeId).size)
+        assertEquals(2, container.library.snapshot().edges.size)
     }
 
     @Test fun confirmingLegacyDraftKeepsLocalPrerequisitesAndIgnoresForeignReferences() = runBlocking {
@@ -302,6 +308,7 @@ class RepositoryTest {
     @Test fun overlappingGenerationAndConfirmationUseOnlyTheSelectedDirection() = runBlocking {
         withTimeout(10_000) {
             val scope = ChatScope(ChatMode.GENERATE)
+            val offerId = offerTree(scope)
             val firstWaiting = CompletableDeferred<Unit>()
             val releaseFirst = CompletableDeferred<Unit>()
             ai.enqueue {
@@ -310,13 +317,15 @@ class RepositoryTest {
                 CREATED
             }
             ai.reply(CREATED)
-            val first = async { container.conversations.send(scope, "生成数据技能树") }
+            val first = async {
+                container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 2..2))
+            }
             firstWaiting.await()
             container.conversations.retry(scope)
             releaseFirst.complete(Unit)
             first.await()
             val history = container.conversations.watch(scope).first()
-            assertEquals(2, history.size)
+            assertEquals(4, history.size)
             assertFalse(container.library.snapshot().entries.any { it.name in setOf("数据能力", "数据质量") })
             val chosen = container.library.snapshot().childrenOf(null).first()
             val draft = history.last()
@@ -333,8 +342,9 @@ class RepositoryTest {
     @Test fun directionScopedDraftCanBeConfirmedInADifferentDirection() = runBlocking {
         val (source, destination) = container.library.snapshot().childrenOf(null)
         val scope = ChatScope(ChatMode.GENERATE, source.id)
+        val offerId = offerTree(scope, "生成信息化技能树")
         ai.reply("""{"kind":"create","reply":"已规划","trees":[{"name":"信息化基础","icon":"TREE","skills":[{"ref":"intro","name":"认识信息系统","goal":"能用 SQL 查询数据","requires":[],"icon":"CODE"}]}]}""")
-        container.conversations.send(scope, "生成信息化技能树")
+        container.conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 1..1))
         val draft = container.conversations.watch(scope).first().last()
         assertEquals(source.id, draft.preview?.suggestedDirectionId)
         assertTrue(container.library.snapshot().childrenOf(source.id).isEmpty())
@@ -345,6 +355,66 @@ class RepositoryTest {
         assertEquals("信息化基础", tree.name)
         assertEquals(EntryIcon.CHART, tree.icon)
         assertEquals(EntryIcon.CODE, library.childrenOf(tree.id).single().icon)
+    }
+
+    @Test fun newTreeRequiresConfirmationAndKeepsTheConfirmedCountAcrossRetries() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val conversations = container.conversations
+        val original = container.library.snapshot()
+        val options = GenerationOptions(GenerationLevel.EXPERT, 33..33)
+        expectRule { conversations.generateTree(scope, "missing", options) }
+        assertTrue(conversations.watch(scope).first().isEmpty())
+
+        val request = "生成用于数据审计的技能树，重点是异常诊断"
+        ai.reply(CREATED)
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("用户还未确认掌握程度和课程数量"))
+            TREE_OFFER
+        }
+        conversations.send(scope, request)
+        val offer = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.TREE_OFFER, offer.kind)
+        assertEquals(original, container.library.snapshot())
+
+        val duplicate = JSONObject(CREATED)
+        duplicate.getJSONArray("trees").put(JSONObject().put("name", "另一棵树"))
+        ai.reply(duplicate.toString())
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("数组数量超过上限"))
+            assertTrue(messages.first().text.contains("精确生成 33 节"))
+            assertTrue(messages.any { it.text == request })
+            newTreeBatch(32)
+        }
+        expectRule { conversations.generateTree(scope, offer.id, options) }
+        val pending = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.GENERATE_TREE, pending.kind)
+        assertEquals(options, pending.generationOptions)
+        assertEquals(original, container.library.snapshot())
+
+        ai.reply(newTreeBatch(34))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("失效模式和方案权衡"))
+            assertTrue(messages.first().text.contains("精确生成 33 节"))
+            assertEquals("确认生成 · 专家 · 33 节", messages.last().text)
+            newTreeBatch(33)
+        }
+        conversations.retry(scope, pending.id)
+        val draft = conversations.watch(scope).first().last()
+        assertEquals(TurnKind.DRAFT, draft.kind)
+        assertEquals(original, container.library.snapshot())
+
+        val direction = original.childrenOf(null).first()
+        conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        val updated = container.library.snapshot()
+        assertEquals(33, updated.childrenOf(updated.childrenOf(direction.id).single().id).size)
+    }
+
+    private suspend fun offerTree(scope: ChatScope, request: String = "生成数据技能树"): String {
+        ai.reply(TREE_OFFER)
+        container.conversations.send(scope, request)
+        val offer = container.conversations.watch(scope).first().last()
+        assertEquals(TurnKind.TREE_OFFER, offer.kind)
+        return offer.id
     }
 
     @Test fun scopedGenerationCanAttachOnlyToNodesInItsTargetTree() = runBlocking {
@@ -583,6 +653,12 @@ class RepositoryTest {
         return JSONObject().put("kind", "create").put("reply", "已规划").put("skills", skills).toString()
     }
 
+    private fun newTreeBatch(count: Int): String {
+        val response = JSONObject(skillBatch(count))
+        val tree = JSONObject().put("name", "数据审计").put("skills", response.remove("skills"))
+        return response.put("trees", JSONArray().put(tree)).toString()
+    }
+
     @Test fun assessmentCannotLightEditedSkillWhileWaiting() = runBlocking {
         withTimeout(10_000) {
             val direction = container.library.snapshot().childrenOf(null).first()
@@ -712,6 +788,7 @@ class RepositoryTest {
     }
 
     companion object {
+        const val TREE_OFFER = """{"kind":"offer_tree","reply":"可以为你规划这棵技能树。"}"""
         const val CREATED = """{"kind":"create","reply":"已规划","directionName":"数据能力","trees":[{"name":"数据质量","icon":"TARGET","skills":[{"ref":"base","name":"基础","goal":"能解释数据质量","requires":[],"icon":"CHART"},{"ref":"practice","name":"实践","goal":"能找出异常记录","requires":["base"],"icon":"UNKNOWN"}]}]}"""
 
         fun verdict(kind: String, text: String, id: String): String =
