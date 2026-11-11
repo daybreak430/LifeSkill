@@ -69,10 +69,12 @@ import org.commonmark.node.SoftLineBreak
 import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.Text as PlainText
 import org.commonmark.node.ThematicBreak
+import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
 import java.net.URI
 
-private val lessonParser = Parser.builder().extensions(listOf(TablesExtension.create())).build()
+private val lessonParser = Parser.builder().extensions(listOf(TablesExtension.create()))
+    .includeSourceSpans(IncludeSourceSpans.BLOCKS).build()
 private val decisionShape = GenericShape { size, _ ->
     moveTo(size.width / 2, 0f)
     lineTo(size.width, size.height / 2)
@@ -85,21 +87,29 @@ private val decisionShape = GenericShape { size, _ ->
 internal fun LessonMarkdown(source: String) {
     val document = remember(source) { lessonParser.parse(source) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        document.children().forEach { LessonBlock(it) }
+        document.children().forEach { LessonBlock(it, source) }
     }
 }
 
 @Composable
-private fun LessonBlock(node: Node) {
+private fun LessonBlock(node: Node, source: String) {
     when (node) {
         is Heading -> Text(
             node.richText(), color = Ink,
             style = if (node.level <= 2) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
         )
         is Paragraph -> {
-            val text = node.richText()
-            val flow = remember(text.text) { LessonFlow.parse(text.text) }
-            if (flow == null) Text(text, color = Ink, style = MaterialTheme.typography.bodyLarge) else FlowBlock(flow)
+            val diagram = remember(node, source) {
+                // CommonMark 会整理段落缩进，识别未围栏的示意图时读取每行原文。
+                node.sourceSpans.joinToString("\n") { source.substring(it.inputIndex, it.inputIndex + it.length) }
+                    .takeIf(::looksLikeTextDiagram)
+            }
+            if (diagram != null) LessonDiagram(diagram)
+            else {
+                val text = node.richText()
+                val flow = remember(text.text) { LessonFlow.parse(text.text) }
+                if (flow == null) Text(text, color = Ink, style = MaterialTheme.typography.bodyLarge) else FlowBlock(flow)
+            }
         }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             val start = (node as? OrderedList)?.markerStartNumber ?: 1
@@ -107,32 +117,42 @@ private fun LessonBlock(node: Node) {
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(if (node is OrderedList) "${start + index}." else "•", color = Gold, style = MaterialTheme.typography.bodyLarge)
                     Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        item.children().forEach { LessonBlock(it) }
+                        item.children().forEach { LessonBlock(it, source) }
                     }
                 }
             }
         }
         is BlockQuote -> Surface(shape = RoundedCornerShape(9.dp), color = Raised) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                node.children().forEach { LessonBlock(it) }
+                node.children().forEach { LessonBlock(it, source) }
             }
         }
         is FencedCodeBlock -> {
-            val language = node.info.trim().takeWhile { !it.isWhitespace() }
-            LessonCode(node.literal, mermaidFence = language.equals("mermaid", ignoreCase = true))
+            val language = node.info.trim().takeWhile { !it.isWhitespace() }.lowercase()
+            LessonCode(node.literal, language)
         }
         is IndentedCodeBlock -> LessonCode(node.literal)
         is HtmlBlock -> CodeBlock(node.literal)
         is ThematicBreak -> HorizontalDivider(color = Line)
         is TableBlock -> LessonTable(node)
-        else -> node.children().forEach { LessonBlock(it) }
+        else -> node.children().forEach { LessonBlock(it, source) }
     }
 }
 
 @Composable
-private fun LessonCode(source: String, mermaidFence: Boolean = false) {
-    val flow = remember(source, mermaidFence) { LessonFlow.parse(source, mermaidFence) }
-    if (flow == null) CodeBlock(source) else FlowBlock(flow)
+private fun LessonCode(source: String, language: String = "") {
+    val diagram = remember(source, language) {
+        when (language) {
+            "diagram", "ascii", "box-drawing" -> true
+            "", "text", "plaintext", "unicode" -> looksLikeTextDiagram(source)
+            else -> false
+        }
+    }
+    if (diagram) LessonDiagram(source)
+    else {
+        val flow = remember(source, language) { LessonFlow.parse(source, mermaidFence = language == "mermaid") }
+        if (flow == null) CodeBlock(source) else FlowBlock(flow)
+    }
 }
 
 private fun Node.children(): Sequence<Node> = generateSequence(firstChild) { it.next }

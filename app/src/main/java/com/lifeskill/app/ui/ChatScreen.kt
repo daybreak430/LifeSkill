@@ -3,6 +3,7 @@ package com.lifeskill.app.ui
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,6 +46,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -66,6 +70,8 @@ import com.lifeskill.app.model.choiceAnswer
 import kotlinx.coroutines.flow.first
 
 private val ReplyInset = 42.dp
+private const val CHAT_END = "chat-end"
+private const val CHAT_STATUS = "chat-status"
 private val creationCount = Regex("""([0-9]+) [个棵](方向|技能树|技能点)""")
 
 @Composable
@@ -73,6 +79,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val timeline by chat.history.collectAsStateWithLifecycle()
     val history = timeline.turns
     val status by chat.status.collectAsStateWithLifecycle()
+    val editor by app.editor.collectAsStateWithLifecycle()
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
     val locked = tutor && owner != null && library.skillState(owner.id) == SkillState.LOCKED
@@ -87,8 +94,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
     val checkOffered = !locked && !examAvailable && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
+    var openedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     val draftTurn = history.firstOrNull { it.id == selectedDraftId && it.preview != null }
+    val latestDraft = history.lastOrNull()?.takeIf { it.preview != null }
     val treeOffer = history.lastOrNull()?.takeIf { it.kind == TurnKind.TREE_OFFER }
     var openedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -111,6 +120,19 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         keyboard?.hide()
         followReply = true
         chat.send(text, check)
+    }
+
+    fun openDraft(id: String) {
+        keyboard?.hide()
+        chat.clearDraftError()
+        selectedDraftId = id
+    }
+
+    LaunchedEffect(pageActive, canSend, latestDraft?.id, editor == null) {
+        if (pageActive && canSend && editor == null && latestDraft != null && openedDraftId != latestDraft.id) {
+            openedDraftId = latestDraft.id
+            openDraft(latestDraft.id)
+        }
     }
 
     LaunchedEffect(pageActive, canSend, treeOffer?.id) {
@@ -139,14 +161,16 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
         if (!pageActive || lastSeenMessage == last.id) return@LaunchedEffect
         val initial = lastSeenMessage == null
         val layout = listState.layoutInfo
-        val nearEnd = (layout.visibleItemsInfo.lastOrNull()?.index ?: 0) >= layout.totalItemsCount - 2
+        val lastVisibleKey = layout.visibleItemsInfo.lastOrNull()?.key
+        val nearEnd = lastVisibleKey == CHAT_END || lastVisibleKey == CHAT_STATUS
         val sent = last.speaker == Speaker.USER
         val following = followReply
         if (!sent) followReply = false
         lastSeenMessage = last.id
         // 阅读历史时保留锚点，仅发送消息或原本在末尾时跟随新回复。
         if (!initial && !nearEnd && !sent && !following) return@LaunchedEffect
-        val destination = history.lastIndex + if (footerVisible && sent) 1 else 0
+        // 对齐列表末端，确保比视口还高的回复也能滚到末行及气泡底部留白。
+        val destination = history.size + if (footerVisible && sent) 1 else 0
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > destination }
         if (initial) listState.scrollToItem(destination) else listState.animateScrollToItem(destination)
     }
@@ -185,8 +209,8 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 val active = exercise != null && turn.id == lastQuizTurn?.id && turn.exerciseId == exercise.id
                 val choices = if (active) exercise.choices else turn.choices
                 Column(
-                    Modifier.animateItem(fadeInSpec = tween(170), fadeOutSpec = tween(120), placementSpec = null)
-                        .animateContentSize(tween(170)),
+                    // 尺寸动画会把气泡阴影裁在消息边界内，列表只保留淡入淡出。
+                    Modifier.animateItem(fadeInSpec = tween(170), fadeOutSpec = tween(120), placementSpec = null),
                 ) {
                     ChatBubble(
                         turn = turn,
@@ -195,20 +219,9 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         active = active,
                         canAnswer = canSend,
                         onAnswer = { submit(it) },
+                        onOpenDraft = if (turn.preview != null) ({ openDraft(turn.id) }) else null,
                         open = { app.open(Route.entry(it)) },
                     )
-                    if (turn.preview != null) {
-                        ChatPill(
-                            "选择方向",
-                            onClick = {
-                                keyboard?.hide()
-                                chat.clearDraftError()
-                                selectedDraftId = turn.id
-                            },
-                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp),
-                            enabled = canSend, trailingGlyph = Glyph.NEXT,
-                        )
-                    }
                     if (turn.id == treeOffer?.id) {
                         ChatPill(
                             "生成设置",
@@ -250,7 +263,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                 }
             }
             if (footerVisible) {
-                item(key = "chat-status") {
+                item(key = CHAT_STATUS) {
                     // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
                     ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = { turn ->
                         followReply = true
@@ -261,6 +274,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                     }
                 }
             }
+            item(key = CHAT_END) { Spacer(Modifier.height(1.dp)) }
         }
         Column(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp, top = 4.dp),
@@ -318,12 +332,14 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             },
         )
     }
-    draftTurn?.takeIf { pageActive }?.let { turn ->
+    draftTurn?.takeIf { pageActive && editor == null }?.let { turn ->
+        val preview = checkNotNull(turn.preview)
         AddDraftDialog(
-            checkNotNull(turn.preview), library.childrenOf(null), status.working, status.draftError,
+            preview, library.childrenOf(null), status.working, status.draftError,
             onDismiss = { selectedDraftId = null },
             onCreateDirection = {
-                selectedDraftId = null
+                // 仅建方向的草稿可直接手动完成。技能树草稿在方向编辑器关闭后继续确认。
+                if (preview.treeNames.isEmpty()) selectedDraftId = null
                 app.add(EntryKind.DIRECTION)
             },
             onSelectionChange = chat::clearDraftError,
@@ -340,6 +356,7 @@ private fun ChatBubble(
     active: Boolean,
     canAnswer: Boolean,
     onAnswer: (String) -> Unit,
+    onOpenDraft: (() -> Unit)?,
     open: (Entry) -> Unit,
 ) {
     if (turn.kind == TurnKind.RESTART) {
@@ -374,6 +391,19 @@ private fun ChatBubble(
         ) {
             if (created) {
                 CreationReceipt(turn.text, result, open)
+                return@Surface
+            }
+            if (onOpenDraft != null) {
+                Row(
+                    Modifier.clickable(
+                        enabled = canAnswer, onClickLabel = "选择学习方向", role = Role.Button, onClick = onOpenDraft,
+                    ).heightIn(min = 48.dp).padding(horizontal = 15.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(turn.text, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
+                    Mark(Glyph.NEXT, colors.accent, Modifier.size(15.dp))
+                }
                 return@Surface
             }
             val backdrop = if (user) Modifier.background(Brush.linearGradient(colors.outgoing)) else Modifier

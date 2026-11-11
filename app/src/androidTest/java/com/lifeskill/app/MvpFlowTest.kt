@@ -41,6 +41,7 @@ import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.click
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -64,6 +65,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.json.JSONObject
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class MvpFlowTest {
@@ -109,6 +111,57 @@ class MvpFlowTest {
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
         ui.onNodeWithText("AI 生成").assertIsDisplayed()
+    }
+
+    @Test fun chatAlignsCharacterDiagramsAndScrollsLongRepliesToTheLastOption() {
+        await("本职工作")
+        val library = fixture.container.library
+        val tree = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first()
+            library.save(EntryEdit(null, direction.id, EntryKind.TREE, "示意图练习树"))
+        }
+        try {
+            val diagram = "┌${"─".repeat(52)}┐\n│ 数据示例${" ".repeat(43)}│\n└${"─".repeat(52)}┘"
+            val ascii = "+------+\n|  OK  |\n+------+"
+            val fence = "```"
+            val lesson = "$fence" + "diagram\n$diagram\n$fence\n\n$ascii"
+            runBlocking {
+                val skill = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "阅读示意图", "理解图例和边框"))
+                fixture.ai.reply(JSONObject().put("kind", "offer_check").put("reply", lesson).toString())
+                fixture.container.conversations.send(ChatScope(ChatMode.TUTOR, skill.id), "用字符图演示")
+            }
+            await("继续学习")
+            ui.onNodeWithText("继续学习").performTouchInput { click() }
+            await("阅读示意图")
+            val unicode = ui.onNode(hasTestTag("lesson-diagram") and hasText(diagram))
+            unicode.assertIsDisplayed()
+            ui.onNode(hasTestTag("lesson-diagram") and hasText(ascii)).assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            unicode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
+            val textLayout = layouts.single()
+            val upperRight = textLayout.getHorizontalPosition(diagram.indexOf('┐'), usePrimaryDirection = true)
+            val middleRight = textLayout.getHorizontalPosition(diagram.lastIndexOf('│'), usePrimaryDirection = true)
+            assertTrue("中文行右框线应与上边框对齐：$upperRight / $middleRight", abs(upperRight - middleRight) < 1f)
+            val horizontal = SemanticsProperties.HorizontalScrollAxisRange
+            assertTrue(unicode.fetchSemanticsNode().config[horizontal].maxValue() > 0)
+            unicode.performTouchInput { swipe(Offset(width * .86f, height * .55f), Offset(width * .14f, height * .55f)) }
+            assertTrue(unicode.fetchSemanticsNode().config[horizontal].value() > 0)
+
+            val question = (1..14).joinToString("\n\n") { "问题背景$it：观察图例和边框的位置，再判断数据如何分区。" }
+            fixture.ai.reply(JSONObject().put("kind", "exercise").put("reply", question)
+                .put("choices", org.json.JSONArray(listOf("甲", "乙", "丙", "最后一个选项"))).toString())
+            ui.onNode(hasText("检验掌握") and hasClickAction()).performTouchInput { click() }
+            await("D. 最后一个选项")
+            val lastOption = ui.onNode(hasText("D. 最后一个选项") and hasClickAction()).assertIsDisplayed()
+            val messages = ui.onNodeWithTag("chat-messages")
+            assertTrue(lastOption.getUnclippedBoundsInRoot().bottom < messages.getUnclippedBoundsInRoot().bottom - 16.dp)
+            messages.performTouchInput {
+                swipe(Offset(width * .52f, height * .18f), Offset(width * .52f, height * .88f))
+            }
+            lastOption.assertIsNotDisplayed()
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
     }
 
     @Test fun homeResumesLatestLessonAndTreeCardsStayUsableWhileScrolling() {
@@ -572,17 +625,18 @@ class MvpFlowTest {
         await("当前掌握程度")
         count.performTextReplacement("2")
         ui.onNodeWithText("确认生成").assertIsDisplayed().assertIsEnabled().performTouchInput { click() }
-        await("选择方向")
-        assertTrue(runBlocking { fixture.container.library.snapshot().entries.none { it.name == "数据质量" } })
-        ui.onNodeWithText("选择方向").performTouchInput { click() }
         await("选择学习方向")
+        ui.onNodeWithText("选择方向").assertDoesNotExist()
         ui.onNodeWithText("确认添加").assertIsNotEnabled()
         ui.onNodeWithText("数据质量").assertDoesNotExist()
-        ui.onNodeWithText("取消").performClick()
+        pressBack()
+        ui.onNodeWithText("选择学习方向").assertDoesNotExist()
         assertTrue(runBlocking { fixture.container.library.snapshot().entries.none { it.name == "数据质量" } })
+        val draftBubble = ui.onNode(hasText("已生成 1 棵技能树") and hasClickAction())
+        draftBubble.performTouchInput { click() }
+        await("选择学习方向")
         ui.activityRule.scenario.recreate()
-        await("选择方向")
-        ui.onNodeWithText("选择方向").performClick()
+        await("选择学习方向")
         ui.onNodeWithText("新建 · 数据能力").performScrollTo().performTouchInput { click() }
         ui.onNodeWithText("方向名称").assertDoesNotExist()
         ui.onNodeWithText("确认添加").assertIsEnabled().performTouchInput { click() }
@@ -709,6 +763,9 @@ class MvpFlowTest {
             }
             ui.onNodeWithTag("skill-celebration").assertIsDisplayed()
             ui.mainClock.advanceTimeBy(2_000)
+            ui.onNodeWithTag("celebration-fireworks").assertExists()
+            ui.mainClock.advanceTimeBy(1_100)
+            ui.onNodeWithTag("celebration-fireworks").assertDoesNotExist()
             closeCelebration.assertIsDisplayed()
         } finally {
             ui.mainClock.autoAdvance = true
@@ -719,6 +776,7 @@ class MvpFlowTest {
         closeCelebration.assertIsDisplayed()
         ui.activityRule.scenario.recreate()
         await("已点亮技能点", substring = true)
+        ui.onNodeWithTag("celebration-fireworks").assertDoesNotExist()
         closeCelebration.assertIsDisplayed().performClick()
         ui.waitUntil(8_000) { ui.onAllNodesWithTag("skill-celebration").fetchSemanticsNodes().isEmpty() }
         pressBack()
@@ -751,6 +809,8 @@ class MvpFlowTest {
         await("开始新一轮")
         ui.onNodeWithText("取消").performClick()
         await("从核对账单开始讲。")
+        // 底层消息在弹窗关闭前也可读，系统返回要等窗口焦点回到对话页。
+        ui.waitUntil(8_000) { ui.runOnUiThread { ui.activity.hasWindowFocus() } && !imeVisible() }
         pressBack()
         await("2 / 2 已点亮")
     }

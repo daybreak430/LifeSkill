@@ -4,7 +4,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,24 +15,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
@@ -38,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -45,13 +54,17 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import com.lifeskill.app.model.Entry
-import com.lifeskill.app.model.SkillState
-import kotlin.math.cos
-import kotlin.math.sin
+import com.lifeskill.app.model.EntryIcon
 
 internal const val MAP_UNLOCK_DELAY_MS = 200L
 internal const val MAP_UNLOCK_DURATION_MS = 1050
 internal const val MAP_LOCK_RELEASE_AT = .88f
+internal const val CELEBRATION_DURATION_MS = 3_000
+
+private val CelebrationGold = Color(0xFFFFDEA0)
+private val CelebrationMint = Color(0xFFAFEAD1)
+private val CelebrationNight = Color(0xFF0B1E26)
+private val CelebrationInk = Color(0xFFFFF3DA)
 
 internal fun motionPhase(progress: Float, start: Float, end: Float): Float =
     ((progress - start) / (end - start)).coerceIn(0f, 1f)
@@ -84,13 +97,19 @@ internal fun SkillCelebration(key: String, skill: Entry, onClose: () -> Unit) {
 
 @Composable
 private fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
-    val clock = remember(key) { Animatable(0f) }
+    var played by rememberSaveable(key) { mutableStateOf(false) }
+    val clock = remember(key) { Animatable(if (played) 1f else 0f) }
+    val showFireworks by remember(clock) { derivedStateOf { clock.value < 1f } }
     val exit = remember(key) { Animatable(0f) }
     var closing by remember(key) { mutableStateOf(false) }
     val close = rememberUpdatedState(onClose)
-    val colors = studyColors
-    val spark = Gold
-    LaunchedEffect(key) { clock.animateTo(1f, tween(1450, easing = LinearEasing)) }
+    LaunchedEffect(key) {
+        // 同一次点亮在旋转屏幕后直接恢复徽章，避免重放整段烟花。
+        if (!played) {
+            played = true
+            clock.animateTo(1f, tween(CELEBRATION_DURATION_MS, easing = LinearEasing))
+        }
+    }
     LaunchedEffect(key, closing) {
         if (closing) {
             exit.animateTo(1f, tween(180))
@@ -99,67 +118,97 @@ private fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
     }
     Box(
         Modifier.fillMaxSize().testTag("skill-celebration")
-            .drawBehind { drawRect(Color.Black.copy(alpha = .62f * (1f - exit.value))) }
-            .safeDrawingPadding(),
+            .drawBehind { drawRect(CelebrationNight.copy(alpha = .86f * (1f - exit.value))) },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            val time = clock.value
-            // 关闭按钮在卡片下方，光环中心仍对准卡片。
-            val badgeCenter = center - Offset(0f, 32.dp.toPx())
-            val remaining = 1f - exit.value
-            val pulse = motionPhase(time, 0f, .66f)
-            val glow = .24f * (1f - motionPhase(time, .20f, .78f)) * remaining
-            val reach = minOf(size.width * .46f, 230.dp.toPx())
-            drawCircle(
-                Brush.radialGradient(listOf(colors.focusBand.copy(alpha = glow), Color.Transparent), badgeCenter, reach),
-                reach, badgeCenter,
+        if (showFireworks) {
+            CelebrationFireworks(
+                Modifier.matchParentSize().testTag("celebration-fireworks"), { clock.value }, { 1f - exit.value },
             )
-            repeat(2) { ring ->
-                val wave = motionPhase(time, ring * .10f, .68f + ring * .10f)
-                if (wave > 0f) drawCircle(
-                    spark.copy(alpha = .32f * (1f - wave) * remaining), reach * (.28f + .68f * wave), badgeCenter,
-                    style = Stroke(1.5.dp.toPx()),
-                )
-            }
-            repeat(14) { index ->
-                val angle = index * .4488f
-                val reachRatio = .63f + (index % 3) * .14f
-                val distance = reach * reachRatio * (.32f + .68f * pulse)
-                val point = badgeCenter + Offset(cos(angle) * distance, sin(angle) * distance)
-                drawCircle(
-                    (if (index % 3 == 0) colors.focusBand else spark).copy(alpha = .78f * (1f - pulse) * remaining),
-                    (2 + index % 3).dp.toPx(), point,
-                )
-            }
         }
         Column(
-            Modifier.graphicsLayer {
-                val appear = FastOutSlowInEasing.transform(motionPhase(clock.value, 0f, .08f))
+            Modifier.safeDrawingPadding().graphicsLayer {
+                val appear = FastOutSlowInEasing.transform(motionPhase(clock.value, 0f, .13f))
                 val leave = exit.value
-                alpha = (.56f + .44f * appear) * (1f - leave)
-                scaleX = .92f + .08f * appear
+                alpha = (.38f + .62f * appear) * (1f - leave)
+                scaleX = .94f + .06f * appear
                 scaleY = scaleX
-                translationY = (1f - appear - leave) * 8.dp.toPx()
+                translationY = (1f - appear - leave) * 12.dp.toPx()
             }.verticalScroll(rememberScrollState()).padding(horizontal = 32.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Surface(
-                Modifier.widthIn(min = 194.dp, max = 300.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                shape = DialogShape, color = Panel, shadowElevation = 8.dp,
+                Modifier.widthIn(min = 222.dp, max = 320.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                shape = DialogShape, color = CelebrationNight, shadowElevation = 10.dp,
+                border = BorderStroke(1.dp, Brush.linearGradient(listOf(
+                    CelebrationGold.copy(alpha = .72f), CelebrationMint.copy(alpha = .17f),
+                    CelebrationGold.copy(alpha = .50f),
+                ))),
             ) {
                 Column(
-                    Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                    Modifier.background(Brush.verticalGradient(listOf(
+                        Color(0xFF225749), Color(0xFF14372F), CelebrationNight,
+                    ))).padding(horizontal = 25.dp, vertical = 22.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    SkillMedallion(skill.displayIcon, SkillState.LIT, 76.dp)
-                    Text("技能已点亮", style = MaterialTheme.typography.titleLarge, color = Gold)
-                    Text(skill.name, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
+                    CelebrationBadge(skill.displayIcon) { clock.value }
+                    Text("技能已点亮", style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold, color = CelebrationInk, textAlign = TextAlign.Center)
+                    Text(skill.name, style = MaterialTheme.typography.bodyMedium,
+                        color = CelebrationMint, textAlign = TextAlign.Center)
                 }
             }
-            GlyphButton(Glyph.CLOSE, "关闭庆祝", { closing = true }, enabled = !closing)
+            GlyphButton(Glyph.CLOSE, "关闭庆祝", { closing = true }, enabled = !closing,
+                tint = CelebrationInk, background = Color(0xFF24453D))
+        }
+    }
+}
+
+@Composable
+private fun CelebrationBadge(icon: EntryIcon, progress: () -> Float) {
+    Box(
+        Modifier.size(116.dp).graphicsLayer {
+            val reveal = FastOutSlowInEasing.transform(motionPhase(progress(), .025f, .20f))
+            val settle = FastOutSlowInEasing.transform(motionPhase(progress(), .20f, .34f))
+            scaleX = .74f + .34f * reveal - .08f * settle
+            scaleY = scaleX
+            alpha = .45f + .55f * reveal
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.matchParentSize()) {
+            val radius = size.minDimension / 2
+            drawCircle(Brush.radialGradient(
+                listOf(CelebrationGold.copy(alpha = .30f), Color.Transparent), center, radius,
+            ), radius)
+            drawCircle(Brush.sweepGradient(listOf(
+                Color(0xFFAB8249), CelebrationGold, CelebrationMint, Color(0xFF7A5D35),
+                CelebrationGold, Color(0xFFAB8249),
+            ), center), radius * .84f)
+            drawCircle(CelebrationNight, radius * .78f)
+            drawCircle(Brush.radialGradient(
+                listOf(Color(0xFF67B79A), Color(0xFF22634F), Color(0xFF103D35)),
+                center - Offset(radius * .24f, radius * .34f), radius,
+            ), radius * .70f)
+            drawCircle(CelebrationMint.copy(alpha = .63f), radius * .70f, style = Stroke(1.dp.toPx()))
+            drawCircle(CelebrationGold.copy(alpha = .42f), radius * .57f, style = Stroke(1.dp.toPx()))
+            val edge = radius * .91f
+            drawArc(CelebrationMint.copy(alpha = .54f), 196f, 72f, false,
+                topLeft = center - Offset(edge, edge), size = Size(edge * 2, edge * 2),
+                style = Stroke(1.dp.toPx(), cap = StrokeCap.Round))
+            drawArc(CelebrationGold.copy(alpha = .62f), 14f, 62f, false,
+                topLeft = center - Offset(edge, edge), size = Size(edge * 2, edge * 2),
+                style = Stroke(1.dp.toPx(), cap = StrokeCap.Round))
+        }
+        Mark(icon.glyph, CelebrationInk, Modifier.size(42.dp))
+        Surface(Modifier.align(Alignment.BottomEnd).padding(end = 6.dp, bottom = 6.dp).size(28.dp),
+            shape = CircleShape, color = CelebrationGold, border = BorderStroke(1.5.dp, CelebrationNight),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Mark(Glyph.CHECK, CelebrationNight, Modifier.size(16.dp))
+            }
         }
     }
 }
