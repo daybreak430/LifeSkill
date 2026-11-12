@@ -89,7 +89,7 @@ class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
 
-    @Test fun settingsShowsInstalledVersionAndOpensLatestRelease() {
+    @Test fun settingsShowsInstalledVersionAndOpensReleaseList() {
         await("本职工作")
         openSettings()
         val context = ui.activity
@@ -102,7 +102,7 @@ class MvpFlowTest {
         val filter = IntentFilter(Intent.ACTION_VIEW).apply {
             addDataScheme("https")
             addDataAuthority("github.com", null)
-            addDataPath("/daybreak430/LifeSkill/releases/latest", PatternMatcher.PATTERN_LITERAL)
+            addDataPath("/daybreak430/LifeSkill/releases", PatternMatcher.PATTERN_LITERAL)
         }
         val monitor = instrumentation.addMonitor(filter, null, true)
         try {

@@ -42,7 +42,7 @@ import com.lifeskill.app.BuildConfig
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.AppearanceMode
 
-private const val LATEST_RELEASE_URL = "https://github.com/daybreak430/LifeSkill/releases/latest"
+private const val RELEASES_URL = "https://github.com/daybreak430/LifeSkill/releases"
 
 @Composable
 internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
@@ -149,7 +149,7 @@ private fun AppVersionCard() {
         Surface(
             onClick = {
                 openFailed = try {
-                    uriHandler.openUri(LATEST_RELEASE_URL)
+                    uriHandler.openUri(RELEASES_URL)
                     false
                 } catch (_: IllegalArgumentException) {
                     true
