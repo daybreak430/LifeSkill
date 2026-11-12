@@ -22,3 +22,7 @@ enum class EntryIcon(val label: String) {
         }
     }
 }
+
+enum class DirectionColor(val label: String) {
+    VIOLET("紫色"), BLUE("蓝色"), GREEN("绿色"), ORANGE("橙色");
+}

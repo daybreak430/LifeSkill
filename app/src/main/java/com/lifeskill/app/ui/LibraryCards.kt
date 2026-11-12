@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.HomeStudy
@@ -113,11 +115,12 @@ internal fun HomeStudyCard(
         HomeStudyState.RESUME -> "继续学习"
     }
     Box(modifier.fillMaxWidth().clipToBounds()) {
-        Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = 11.dp, bottom = 16.dp)
+        Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = colors.heroLayerTopInset, bottom = 16.dp)
             .rotate(-3f)
             .background(colors.heroLayer, heroShape))
         BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape).background(Brush.linearGradient(colors.hero)),
+            Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape)
+                .background(Brush.linearGradient(colors.hero)).border(1.dp, colors.heroRim, heroShape),
         ) {
             val wideArt = maxWidth >= 328.dp && fontScale < 1.3f
             val compactArt = !wideArt && maxWidth >= 256.dp
@@ -263,7 +266,11 @@ internal fun DirectionCard(
                             style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    progress.total > 0 -> DirectionProgress(progress, tint)
+                    progress.total > 0 -> {
+                        val track = studyColors.progressTrack
+                        // 自选色也轻染未完成刻度，零进度时仍能看出配色。
+                        DirectionProgress(progress, tint, if (entry.directionColor == null) track else lerp(track, tint, .25f))
+                    }
                     else -> Text(
                         "尚未添加课时", Modifier.padding(start = 41.dp),
                         color = Muted, style = MaterialTheme.typography.labelMedium,
@@ -275,7 +282,7 @@ internal fun DirectionCard(
 }
 
 @Composable
-private fun DirectionProgress(progress: Progress, tint: Color) {
+private fun DirectionProgress(progress: Progress, tint: Color, track: Color) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -287,22 +294,34 @@ private fun DirectionProgress(progress: Progress, tint: Color) {
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         SegmentedProgress(
-            progress, Modifier.weight(1f), active = tint, track = studyColors.progressTrack,
+            progress, Modifier.weight(1f), active = tint, track = track,
             barHeight = 4.dp, animate = true,
         )
     }
 }
 
 @Composable
-internal fun entryTint(entry: Entry): Color {
+internal fun entryTint(entry: Entry): Color = entryTint(entry.displayIcon, entry.id, entry.directionColor)
+
+@Composable
+internal fun DirectionColor.tint(): Color = when (this) {
+    DirectionColor.VIOLET -> studyColors.iconViolet
+    DirectionColor.BLUE -> studyColors.iconBlue
+    DirectionColor.GREEN -> studyColors.iconGreen
+    DirectionColor.ORANGE -> studyColors.iconOrange
+}
+
+@Composable
+internal fun entryTint(icon: EntryIcon, id: String?, directionColor: DirectionColor?): Color {
+    if (directionColor != null) return directionColor.tint()
     val colors = studyColors
-    return when (entry.displayIcon) {
+    return when (icon) {
         EntryIcon.WORK, EntryIcon.CODE, EntryIcon.CHART, EntryIcon.BOOK -> colors.iconViolet
         EntryIcon.DIAMOND, EntryIcon.TREE, EntryIcon.TARGET, EntryIcon.SPEECH -> colors.iconBlue
         EntryIcon.SIDE, EntryIcon.PRACTICAL, EntryIcon.LEAF, EntryIcon.TOOLS -> colors.iconGreen
         EntryIcon.HOBBY, EntryIcon.MUSIC, EntryIcon.CAMERA -> colors.iconOrange
         EntryIcon.EXPLORE -> listOf(colors.iconBlue, colors.iconViolet, colors.iconGreen, colors.iconOrange)
-            .get((entry.id.hashCode() and Int.MAX_VALUE) % 4)
+            .get((id.orEmpty().hashCode() and Int.MAX_VALUE) % 4)
     }
 }
 

@@ -33,6 +33,7 @@ data class Entry(
     val masteryVersion: Long = 0,
     val icon: EntryIcon? = null,
     val shortName: String? = null,
+    val directionColor: DirectionColor? = null,
 ) {
     val lit get() = mastery != Mastery.UNLIT
     val mapName get() = shortName ?: LibraryRules.mapName(name)

@@ -207,6 +207,7 @@ internal class AppViewModel(
         val requirements = library.value?.prerequisitesOf(entry.id).orEmpty()
         _editor.value = Editor(EntryEdit(
             entry.id, entry.parentId, entry.kind, entry.name, entry.goal, requirements, entry.icon, entry.shortName.orEmpty(),
+            directionColor = entry.directionColor,
         ))
     }
 

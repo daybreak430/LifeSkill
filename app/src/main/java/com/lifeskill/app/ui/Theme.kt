@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -102,14 +103,18 @@ internal data class StudyColors(
     val iconGreen: Color,
     val iconOrange: Color,
     val mapNodePalette: MapNodePalette? = null,
+    val heroRim: Color = Color.Transparent,
+    val heroLayerTopInset: Dp = 11.dp,
 )
 
 private val LightStudyColors = StudyColors(
     backdrop = listOf(Color(0xFFF7F9FC), Color(0xFFF3F7FB), Color(0xFFEDF3FB)),
     cardShadow = Color(0xFF869BAF),
     progressTrack = Color(0xFFE4E8F1),
-    hero = listOf(Color(0xFFEAF7E9), Color(0xFFE6F3F4), Color(0xFFDDE8FA)),
-    heroLayer = Color(0xFFE7E1F6),
+    hero = listOf(Color(0xFFDDF3E6), Color(0xFFDCEFF1), Color(0xFFD2E1F7)),
+    heroLayer = Color(0xFFDDD2F2),
+    heroRim = Color(0x6689B9AF),
+    heroLayerTopInset = 8.dp,
     heroGlow = Color(0xBBA1C9EB),
     heroEmblem = listOf(Color(0xFF639AAA), Color(0xFF36758A)),
     map = listOf(Color(0xFFEAF4F5), Color(0xFFF8FBFD)),

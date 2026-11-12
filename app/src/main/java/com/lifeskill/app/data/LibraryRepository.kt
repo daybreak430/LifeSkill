@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.lifeskill.app.ai.GenerationDraft
 import com.lifeskill.app.ai.SkillDraft
 import com.lifeskill.app.ai.TreeDraft
+import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
@@ -29,6 +30,7 @@ internal data class EntryEdit(
     val prerequisites: Set<String> = emptySet(),
     val icon: EntryIcon? = null,
     val shortName: String = "",
+    val directionColor: DirectionColor? = null,
 )
 
 internal data class Creation(val entry: Entry, val directions: Int, val trees: Int, val skills: Int) {
@@ -99,14 +101,17 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         })
         val goal = if (edit.kind == EntryKind.SKILL) LibraryRules.goal(edit.goal) else ""
         val shortName = if (edit.kind == EntryKind.SKILL) LibraryRules.shortName(edit.shortName) else null
+        val directionColor = edit.directionColor.takeIf { edit.kind == EntryKind.DIRECTION }
         val saved = if (previous == null) {
-            Entry(newId(), edit.parentId, edit.kind, name, goal, icon = edit.icon, shortName = shortName)
+            Entry(newId(), edit.parentId, edit.kind, name, goal, icon = edit.icon, shortName = shortName,
+                directionColor = directionColor)
         } else {
             previous.copy(
                 name = name,
                 goal = goal,
                 icon = edit.icon,
                 shortName = shortName,
+                directionColor = directionColor,
                 contentVersion = previous.contentVersion + if (previous.name != name || previous.goal != goal) 1 else 0,
             )
         }
@@ -272,12 +277,14 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         id, parentId, kind.name, secret.seal(name, "$id:name"), secret.seal(goal, "$id:goal"),
         mastery.name, contentVersion, masteryVersion, position,
         icon?.name, shortName?.let { secret.seal(it, "$id:shortName") },
+        directionColor?.name,
     )
 
     private fun EntryRow.toEntry() = Entry(
         id, parentId, EntryKind.valueOf(kind), secret.open(name, "$id:name"), secret.open(goal, "$id:goal"),
         Mastery.valueOf(mastery), contentVersion, masteryVersion,
         EntryIcon.fromId(icon), shortName?.let { secret.open(it, "$id:shortName") },
+        DirectionColor.entries.firstOrNull { it.name == directionColor },
     )
 
     private fun invalidScope(): Nothing = throw RuleViolation("AI 返回的新增内容与当前层级不匹配，请重试。")

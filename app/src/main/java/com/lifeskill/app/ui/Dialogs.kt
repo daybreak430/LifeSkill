@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.lifeskill.app.model.Entry
+import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationLevel
@@ -60,6 +63,7 @@ import com.lifeskill.app.data.ConversationRepository
 internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     val initial = editor.initial
     val skill = initial.kind == EntryKind.SKILL
+    val direction = initial.kind == EntryKind.DIRECTION
     val siblings = if (skill) library.childrenOf(initial.parentId).filterNot { it.id == initial.id } else emptyList()
     var name by remember(initial) { mutableStateOf(initial.name) }
     var goal by remember(initial) { mutableStateOf(initial.goal) }
@@ -67,10 +71,13 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
     var selected by remember(initial) { mutableStateOf(initial.prerequisites) }
     var showPrerequisites by remember(initial) { mutableStateOf(false) }
     var showIcons by remember(initial) { mutableStateOf(false) }
+    var directionColor by rememberSaveable(initial) { mutableStateOf(initial.directionColor) }
+    var showColors by remember(initial) { mutableStateOf(false) }
     val nameTooLong = name.trim().length > LibraryRules.NAME_LIMIT
     val goalTooLong = goal.trim().length > LibraryRules.GOAL_LIMIT
     val invalidShortName = skill && runCatching { LibraryRules.shortName(shortName) }.isFailure
     val activeIcon = editor.icon ?: EntryIcon.default(initial.kind, initial.id)
+    val iconTint = if (direction) entryTint(activeIcon, initial.id, directionColor) else Gold
     val canSave = !editor.saving && !editor.suggesting && name.isNotBlank() && !nameTooLong && !invalidShortName &&
         (!skill || goal.isNotBlank() && !goalTooLong)
     Dialog(onDismissRequest = app::closeEditor) {
@@ -155,8 +162,12 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                         onClick = {
                             focus.clearFocus()
                             showIcons = !showIcons
+                            showColors = false
                         },
-                        leading = { Emblem(activeIcon.glyph, diameter = 32.dp) },
+                        leading = {
+                            Emblem(activeIcon.glyph, iconTint,
+                                if (direction) iconTint.copy(alpha = .12f) else GoldGround, diameter = 32.dp)
+                        },
                     )
                     if (showIcons) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -178,6 +189,34 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                     enabled = !editor.saving && !editor.suggesting,
                                     leadingIcon = { Mark(icon.glyph, if (editor.icon == icon) Gold else Muted, Modifier.size(16.dp)) },
                                 )
+                            }
+                        }
+                    }
+                    if (direction) {
+                        val canChooseColor = !editor.saving && !editor.suggesting
+                        EditorPickerRow(
+                            title = "图标颜色", value = directionColor?.label ?: "自动", expanded = showColors,
+                            enabled = canChooseColor,
+                            onClick = {
+                                focus.clearFocus()
+                                showColors = !showColors
+                                showIcons = false
+                            },
+                        )
+                        if (showColors) {
+                            FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                SelectionChip("自动", directionColor == null, {
+                                    directionColor = null
+                                    showColors = false
+                                }, enabled = canChooseColor)
+                                for (color in DirectionColor.entries) {
+                                    SelectionChip(color.label, directionColor == color, {
+                                        directionColor = color
+                                        showColors = false
+                                    }, enabled = canChooseColor, leadingIcon = {
+                                        Box(Modifier.size(14.dp).background(color.tint(), CircleShape))
+                                    })
+                                }
                             }
                         }
                     }
@@ -210,6 +249,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                             focus.clearFocus()
                             app.saveEntry(initial.copy(
                                 name = name, goal = goal, prerequisites = selected, icon = editor.icon, shortName = shortName,
+                                directionColor = directionColor,
                             ))
                         },
                         modifier = Modifier.heightIn(min = 48.dp), enabled = canSave, shape = ControlShape,

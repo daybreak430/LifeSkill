@@ -11,6 +11,8 @@ import android.provider.OpenableColumns
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -21,6 +23,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -68,6 +71,7 @@ import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.AppearanceMode
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
+import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.AvatarPreset
@@ -95,6 +99,58 @@ import kotlin.math.abs
 class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
+
+    @Test fun directionColorChangesItsIconAndProgressTogether() {
+        await("本职工作")
+        val library = fixture.container.library
+        val (direction, course) = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first()
+            val course = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "方向颜色验证"))
+            val lesson = library.save(EntryEdit(null, course.id, EntryKind.SKILL, "第一节", "了解基础"))
+            library.save(EntryEdit(null, course.id, EntryKind.SKILL, "第二节", "练习巩固"))
+            library.lightFromAssessment(lesson)
+            direction to course
+        }
+        val card = ui.onNodeWithTag("direction-card-${direction.id}")
+        fun openEditor() {
+            ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+            ui.onNodeWithText("编辑方向").performClick()
+        }
+        try {
+            await("1/2")
+            card.performTouchInput { click() }
+            await(course.name)
+            openEditor()
+            ui.onNodeWithText("图标颜色").performTouchInput { click() }
+            ui.onNodeWithText("橙色").performTouchInput { click() }
+            ui.onNodeWithText("保存").performClick()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("保存").fetchSemanticsNodes().isEmpty() }
+            assertEquals(DirectionColor.ORANGE, runBlocking { library.entry(direction.id)?.directionColor })
+            pressBack()
+            await("1/2")
+
+            val pixels = card.captureToImage().toPixelMap()
+            val orange = setOf(0xFFBB886A.toInt(), 0xFFF5B483.toInt())
+            fun hasOrange(rows: IntRange) = rows.any { row ->
+                (0 until pixels.width).any { column -> pixels[column, row].toArgb() in orange }
+            }
+            assertTrue("方向图标应使用保存的颜色", hasOrange(0 until pixels.height / 2))
+            assertTrue("已完成的进度刻度应使用同色", hasOrange(pixels.height / 2 until pixels.height))
+
+            card.performTouchInput { click() }
+            await(course.name)
+            openEditor()
+            ui.onNodeWithText("图标颜色").performTouchInput { click() }
+            ui.onNode(hasText("橙色") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).assertIsSelected()
+            ui.onNodeWithText("自动").performTouchInput { click() }
+            ui.onNodeWithText("保存").performClick()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("保存").fetchSemanticsNodes().isEmpty() }
+            assertEquals(null, runBlocking { library.entry(direction.id)?.directionColor })
+            pressBack()
+        } finally {
+            runBlocking { library.delete(course.id) }
+        }
+    }
 
     @Test fun sharesLessonAndCourseConversationsThroughTheSystemChooser() {
         await("本职工作")

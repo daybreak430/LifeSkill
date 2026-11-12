@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.BootstrapRow
+import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.CollectedCertificateRow
 import com.lifeskill.app.data.PersonalProfileRow
 import com.lifeskill.app.data.SecretBox
@@ -18,6 +19,7 @@ import com.lifeskill.app.model.CertificateStyle
 import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.CollectedCertificate
+import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
@@ -268,6 +270,35 @@ class PersonalStorageTest {
                 assertEquals(3_404_000L, total.costNanos)
                 assertEquals(total, summary.courses["course"])
                 assertEquals(total, summary.lessons["lesson"])
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test fun migratesDirectionColorWithAnAutomaticDefaultAndKeepsChangesAcrossReopen() = runBlocking {
+        val name = "direction-color-upgrade-${UUID.randomUUID()}"
+        val id = "legacy-direction"
+        val secret = SecretBox("lifeskill-tests")
+        try {
+            createOldDatabase(name, 8).use { database ->
+                database.execSQL("""
+                    INSERT INTO entries (id, kind, name, goal, mastery, contentVersion, masteryVersion, position, icon)
+                    VALUES (?, 'DIRECTION', ?, ?, 'UNLIT', 0, 0, 0, 'BOOK')
+                """.trimIndent(), arrayOf(id, secret.seal("旧版方向", "$id:name"), secret.seal("", "$id:goal")))
+            }
+            withDatabase(name) { database ->
+                val library = fixture(database, ScriptedGateway()).library
+                val old = checkNotNull(library.entry(id))
+                assertNull(old.directionColor)
+                val edited = library.save(EntryEdit(id, null, EntryKind.DIRECTION, old.name, icon = old.icon,
+                    directionColor = DirectionColor.BLUE))
+                assertEquals(old.copy(directionColor = DirectionColor.BLUE), edited)
+            }
+            withDatabase(name) { database ->
+                val saved = checkNotNull(fixture(database, ScriptedGateway()).library.entry(id))
+                assertEquals(EntryIcon.BOOK, saved.icon)
+                assertEquals(DirectionColor.BLUE, saved.directionColor)
             }
         } finally {
             context.deleteDatabase(name)

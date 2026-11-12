@@ -36,6 +36,7 @@ internal data class EntryRow(
     val position: Long,
     val icon: String?,
     val shortName: String?,
+    val directionColor: String?,
 )
 
 @Entity(
@@ -214,12 +215,12 @@ internal abstract class SkillDao {
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
         ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class,
         AiUsageRow::class],
-    version = 8,
+    version = 9,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7),
-        AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9),
     ],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {
