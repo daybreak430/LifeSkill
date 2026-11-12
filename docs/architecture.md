@@ -35,9 +35,9 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 **AI 与本地写入。** 模型生成的课程先作为草稿保存，用户确认后才写入课程库。课后练习的题号随消息保存，旧题没有题号时按第 1 题处理。模型判断作答质量，应用校验回复匹配当前题、至少答对两题且最多出三题，并在完成课时的同一事务中复核前置。清空会话或删除归属后，迟到的回复不能重建已删除记录。结业考试由应用核算选择题和总分，模型负责填空判断和反馈。
 
-**用量。** DeepSeek 和 MiniMax 的官方回执转换为统一格式，写入请求用量表。表内保存模型、时间、Token 分项、归属及当次费用估算。Room v6 增加回执总数，兼容仅有总数的回执，旧记录继续按分项求和。先存用量再解析回复正文，避免漏计带回执的补试。课程生成请求先关联草稿，确认添加时在同一事务内转入课程。用量与对话和证书快照分离，删除课程或清空会话后仍可统计支出。
+**用量。** DeepSeek 和 MiniMax 的官方回执转换为统一格式，写入请求用量表。表内保存模型、时间、Token 分项、归属及当次费用估算。Room v6 增加回执总数，兼容仅有总数的回执，旧记录继续按分项求和。先存用量再解析回复正文，避免漏计带回执的补试。联网搜索成功返回结果后单独记费用，搜索证据与对应消息一同加密保存，回复重试复用已有结果。课程生成请求先关联草稿，确认添加时在同一事务内转入课程。用量与对话和证书快照分离，删除课程或清空会话后仍可统计支出。
 
-**数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v7，保留 v1 到 v7 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
+**数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v8，保留 v1 到 v8 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
 
 **证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和领取日期。证书档案独立于课程，删除课程后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书带展示日期，可隐藏和销毁。课程列表的「已领证书」与已领取证书统计均基于未销毁的正式证书。
 

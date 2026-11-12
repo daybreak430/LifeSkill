@@ -60,6 +60,7 @@ import com.lifeskill.app.ai.DeepSeekBalance
 import com.lifeskill.app.ai.DeepSeekBalanceInfo
 import com.lifeskill.app.ai.ModelUsage
 import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.ai.readDeepSeekSearch
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.CertificateTheme
@@ -218,6 +219,34 @@ class MvpFlowTest {
         pressBack()
         ui.waitUntil(8_000) { !imeVisible() }
         ui.onNodeWithText("AI 生成课程").assertIsDisplayed()
+    }
+
+    @Test fun webSearchChipIsOnByDefaultAndCanBeTurnedOff() {
+        await("AI 生成课程")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("联网搜索")
+        val search = ui.onNodeWithText("联网搜索").assertIsDisplayed().assertIsSelected()
+        fixture.ai.enqueueSearch { query ->
+            assertEquals("查最新的前端工具", query)
+            readDeepSeekSearch("""{"results":[{"title":"官方版本说明","url":"https://example.com/releases","summary":"版本已更新。"}]}""")
+        }
+        fixture.ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("版本已更新。"))
+            """{"kind":"message","reply":"已找到近期更新。"}"""
+        }
+        send("查最新的前端工具")
+        showChatReply("联网搜索来源")
+        ui.onNodeWithText("官方版本说明", substring = true).assertIsDisplayed()
+
+        search.performTouchInput { click() }
+        search.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        fixture.ai.enqueue { messages ->
+            assertTrue(messages.none { it.text.contains("本次联网搜索") })
+            """{"kind":"message","reply":"可以继续细化主题。"}"""
+        }
+        send("想学习前端开发")
+        showChatReply("可以继续细化主题。")
+        search.performTouchInput { click() }.assertIsSelected()
     }
 
     @Test fun clearGenerationUsesConfirmationAndStartsFreshWhileReplyIsPending() {

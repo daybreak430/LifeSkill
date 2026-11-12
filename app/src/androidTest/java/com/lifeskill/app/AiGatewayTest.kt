@@ -8,9 +8,11 @@ import com.lifeskill.app.ai.OpenAiGateway
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.UsageTarget
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
@@ -68,6 +70,61 @@ class AiGatewayTest {
         assertEquals("GET", connection.requestMethod)
         assertEquals("Bearer test-key", connection.getRequestProperty("Authorization"))
         assertTrue(connection.disconnected)
+    }
+
+    @Test fun searchesDeepSeekOnceAndReusesResultsWhenTheReplyIsRetried() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext, LifeSkillDatabase::class.java,
+        ).build()
+        try {
+            val search = Response(body = """{"results":[
+                {"title":"官方发布","url":"https://example.com/update","summary":"更新了第 3 节。","date":"2026-11-01"},
+                {"title":"无效来源","url":"javascript:alert(1)","summary":"不应传入模型"}
+            ]}""")
+            val reply = Response(body = """{"choices":[{"message":{"content":"{\"kind\":\"teach\",\"reply\":\"新版更新了第 3 节。\"}"}}],
+                "usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_cache_hit_tokens":0}}""")
+            var searchCalls = 0
+            var modelCalls = 0
+            val gateway = OpenAiGateway { endpoint ->
+                when (endpoint.path) {
+                    "/v1/tools/search" -> {
+                        searchCalls++
+                        search
+                    }
+                    "/chat/completions" -> if (modelCalls++ == 0) Response(status = 503) else reply
+                    else -> error("意外请求：$endpoint")
+                }
+            }
+            val app = fixture(database, gateway)
+            app.library.initialize()
+            val direction = app.library.snapshot().childrenOf(null).first()
+            val course = app.library.save(EntryEdit(null, direction.id, EntryKind.TREE, "规程"))
+            val lesson = app.library.save(EntryEdit(null, course.id, EntryKind.SKILL, "版本更新", "识别新版变化"))
+            val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+            val failure = runCatching { app.conversations.send(scope, "查一下最近变化", webSearch = true) }.exceptionOrNull()
+            assertTrue(failure is RuleViolation)
+            assertEquals(5_000_000L, app.usage.summary.first().lessons.getValue(lesson.id).costNanos)
+            app.conversations.retry(scope)
+            assertEquals(1, searchCalls)
+            assertEquals(2, modelCalls)
+            assertEquals("POST", search.requestMethod)
+            assertFalse(search.instanceFollowRedirects)
+            assertEquals("Bearer instrumentation-fixture", search.getRequestProperty("Authorization"))
+            assertEquals("查一下最近变化 版本更新", JSONObject(search.written.toString("UTF-8")).getString("query"))
+            val prompt = JSONObject(reply.written.toString("UTF-8")).getJSONArray("messages").getJSONObject(0)
+                .getString("content")
+            assertTrue(prompt.contains("更新了第 3 节。"))
+            assertFalse(prompt.contains("javascript:"))
+            val turn = app.conversations.watch(scope).first().last()
+            assertEquals("新版更新了第 3 节。", turn.text)
+            assertTrue(turn.searchSources.orEmpty().contains("https://example.com/update"))
+            assertTrue(app.conversations.exportConversation(lesson.id).markdown.contains("https://example.com/update"))
+            val totals = app.usage.summary.first()
+            assertEquals(120L, totals.lessons.getValue(lesson.id).tokens)
+            assertEquals(totals.lessons.getValue(lesson.id), totals.courses.getValue(course.id))
+        } finally {
+            database.close()
+        }
     }
 
     @Test fun mapsHttpAndNetworkErrors() = runBlocking {

@@ -9,6 +9,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.lifeskill.app.ai.AiGateway
+import com.lifeskill.app.ai.DeepSeekSearch
 import com.lifeskill.app.ai.ModelPricing
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
@@ -16,6 +17,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.time.Instant
+
+private const val DEEPSEEK_SEARCH_COST_NANOS = 5_000_000L
 
 // 用量独立于对话和课程生命周期。清空聊天或删除课程后，历史支出仍计入全局及已领取的证书。
 @Entity(tableName = "ai_usage", indices = [Index("draftId")])
@@ -101,19 +105,34 @@ internal class AiUsageRepository(private val dao: AiUsageDao, private val gatewa
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean,
         target: UsageTarget = UsageTarget(), useJsonMode: Boolean = true,
     ): String = gateway.complete(settings, messages, structured, useJsonMode) { usage ->
-        // 用量回执到达后即落库，即使页面离开、正文无效或对话结果被丢弃。
-        withContext(NonCancellable) {
-            try {
-                dao.insert(AiUsageRow(
-                    courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
-                    generation = target.generation, model = usage.model, createdAt = usage.timestamp.epochSecond,
-                    inputTokens = usage.inputTokens ?: 0, outputTokens = usage.outputTokens ?: 0,
-                    cachedInputTokens = usage.cachedInputTokens, estimatedCostNanos = ModelPricing.estimateNanos(usage),
-                    reportedTotalTokens = usage.reportedTotalTokens,
-                ))
-            } catch (_: SQLiteException) {
-                Log.w("AiUsage", "无法保存本次用量")
-            }
+        record(AiUsageRow(
+            courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
+            generation = target.generation, model = usage.model, createdAt = usage.timestamp.epochSecond,
+            inputTokens = usage.inputTokens ?: 0, outputTokens = usage.outputTokens ?: 0,
+            cachedInputTokens = usage.cachedInputTokens, estimatedCostNanos = ModelPricing.estimateNanos(usage),
+            reportedTotalTokens = usage.reportedTotalTokens,
+        ))
+    }
+
+    suspend fun search(settings: ModelSettings, query: String, target: UsageTarget): DeepSeekSearch {
+        val result = gateway.search(settings, query)
+        if (result.billable) {
+            record(AiUsageRow(
+                courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
+                generation = target.generation, model = "deepseek-search", createdAt = Instant.now().epochSecond,
+                inputTokens = 0, outputTokens = 0, cachedInputTokens = null,
+                estimatedCostNanos = DEEPSEEK_SEARCH_COST_NANOS, reportedTotalTokens = null,
+            ))
+        }
+        return result
+    }
+
+    // 用量回执到达后即落库，即使页面离开、正文无效或对话结果被丢弃。
+    private suspend fun record(row: AiUsageRow) = withContext(NonCancellable) {
+        try {
+            dao.insert(row)
+        } catch (_: SQLiteException) {
+            Log.w("AiUsage", "无法保存本次用量")
         }
     }
 

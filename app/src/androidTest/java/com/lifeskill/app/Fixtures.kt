@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.runner.AndroidJUnitRunner
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.DeepSeekBalance
+import com.lifeskill.app.ai.DeepSeekSearch
 import com.lifeskill.app.ai.ModelUsage
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
@@ -13,6 +14,7 @@ import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.SecretBox
+import org.json.JSONArray
 import java.util.concurrent.ConcurrentLinkedQueue
 
 class LifeSkillTestRunner : AndroidJUnitRunner() {
@@ -35,6 +37,14 @@ internal class ScriptedGateway : AiGateway {
     private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: ModelUsage? = null)
     private val script = ConcurrentLinkedQueue<Reply>()
     private val balanceScript = ConcurrentLinkedQueue<suspend () -> DeepSeekBalance>()
+    private val searchScript = ConcurrentLinkedQueue<(String) -> DeepSeekSearch>()
+
+    fun enqueueSearch(action: (String) -> DeepSeekSearch) {
+        searchScript.add(action)
+    }
+
+    override suspend fun search(settings: ModelSettings, query: String): DeepSeekSearch =
+        searchScript.poll()?.invoke(query) ?: DeepSeekSearch(JSONArray(), billable = false)
 
     fun reply(json: String, usage: ModelUsage? = null) {
         script.add(Reply({ json }, usage))

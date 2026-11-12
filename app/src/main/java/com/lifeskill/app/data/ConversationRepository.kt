@@ -5,6 +5,9 @@ import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
+import com.lifeskill.app.ai.searchInstructions
+import com.lifeskill.app.ai.searchQuery
+import com.lifeskill.app.ai.searchSources
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.ConversationExport
@@ -69,7 +72,8 @@ internal class ConversationRepository(
     }
 
     suspend fun send(
-        scope: ChatScope, text: String, check: Boolean = false, onRequestQueued: (String) -> Unit = {},
+        scope: ChatScope, text: String, check: Boolean = false, webSearch: Boolean = false,
+        onRequestQueued: (String) -> Unit = {},
     ) {
         val input = text.trim()
         if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面做课后练习。")
@@ -78,6 +82,7 @@ internal class ConversationRepository(
         queueAndRespond(
             scope, kind, if (check && input != TutorRules.EXAM_REPLY) "开始课后练习" else input,
             onRequestQueued = onRequestQueued,
+            webSearch = webSearch && !check,
         )
     }
 
@@ -104,6 +109,7 @@ internal class ConversationRepository(
     private suspend fun queueAndRespond(
         scope: ChatScope, kind: TurnKind, input: String, offerId: String? = null,
         onRequestQueued: (String) -> Unit,
+        webSearch: Boolean = false,
     ) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
@@ -137,7 +143,8 @@ internal class ConversationRepository(
                 }
             }
             val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0)
-            dao.insertTurn(turn.row(scope))
+            // 空串标记本条消息需要搜索，成功后换成加密结果，旧消息与普通消息仍为 null。
+            dao.insertTurn(turn.row(scope).copy(searchContext = "".takeIf { webSearch }))
             turn.id
         }
         // 先把待处理消息标识交给界面，成功回复覆盖旧历史时才能立即隐藏重试和撤回操作。
@@ -178,7 +185,7 @@ internal class ConversationRepository(
         if (result.entry.kind == EntryKind.TREE) usage.attachDraft(id, result.entry.id)
         val created = Turn(id, Speaker.ASSISTANT, TurnKind.CREATED, result.summary + resolved.notice,
             row.contentVersion, resultId = result.entry.id)
-        dao.updateTurn(created.row(scope).copy(sequence = row.sequence))
+        dao.updateTurn(created.row(scope).copy(sequence = row.sequence, searchContext = row.searchContext))
     }
 
     private suspend fun respond(scope: ChatScope, requestId: String) {
@@ -224,7 +231,8 @@ internal class ConversationRepository(
             val history = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
                 newTreeHistory(recent, input)
             } else recent
-            Request(owner, input, pending, askedQuestions, reissue,
+            val searchContext = dao.turn(scope.id, requestId)?.searchContext.takeIf { pending == null }
+            Request(owner, input, pending, askedQuestions, reissue, searchContext,
                 listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
         } ?: return
 
@@ -238,21 +246,43 @@ internal class ConversationRepository(
                 generation = context.input.kind == TurnKind.GENERATE_TREE,
             )
         }
+        val searchResults = context.searchContext?.let { saved ->
+            if (!config.supportsWebSearch) throw RuleViolation("请切回 DeepSeek 后重试，或撤回后重新发送。")
+            if (saved.isNotEmpty()) JSONArray(secret.open(saved, "$requestId:search"))
+            else {
+                val query = searchQuery(context.input.text, owner?.name.takeIf { scope.mode == ChatMode.TUTOR })
+                val results = usage.search(config, query, target).results
+                // 搜索成功即保存证据，回复失败时复用这次结果，避免再次付费搜索。
+                val stillPending = database.withTransaction {
+                    val row = dao.recentTurns(scope.id, 1).firstOrNull()?.takeIf { it.id == requestId }
+                        ?: return@withTransaction false
+                    dao.updateTurn(row.copy(searchContext = secret.seal(results.toString(), "$requestId:search")))
+                    true
+                }
+                if (!stillPending) return
+                results
+            }
+        }
+        val messages = if (searchResults == null) context.messages else {
+            val system = context.messages.first()
+            listOf(system.copy(text = "${system.text}\n\n${searchResults.searchInstructions()}")) + context.messages.drop(1)
+        }
+        val sources = searchResults?.searchSources()
         try {
-            val raw = usage.complete(config, context.messages, structured = true, target = target)
-            persistResponse(scope, requestId, context, raw)
+            val raw = usage.complete(config, messages, structured = true, target = target)
+            persistResponse(scope, requestId, context, raw, sources)
         } catch (error: RecoverableReply) {
             // 只补试一次。沿用原请求标识，撤回、重学或已完成的请求无需再发。
             if (lastPending(scope)?.id != requestId) return
-            val system = context.messages.first()
-            val messages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + context.messages.drop(1)
-            val corrected = usage.complete(config, messages, structured = true, target = target,
+            val system = messages.first()
+            val retryMessages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + messages.drop(1)
+            val corrected = usage.complete(config, retryMessages, structured = true, target = target,
                 useJsonMode = !error.retryWithoutJsonMode)
-            persistResponse(scope, requestId, context, corrected)
+            persistResponse(scope, requestId, context, corrected, sources)
         }
     }
 
-    private suspend fun persistResponse(scope: ChatScope, requestId: String, context: Request, raw: String) {
+    private suspend fun persistResponse(scope: ChatScope, requestId: String, context: Request, raw: String, sources: String?) {
         val replyId = "reply:$requestId"
         database.withTransaction {
             // 请求、回复标识固定。并发重试与取消都不能二次落库或复活已删除的内容。
@@ -270,7 +300,7 @@ internal class ConversationRepository(
                 val original = checkNotNull(dao.exercise(scope.id, checkNotNull(context.pending).id))
                 dao.updateTurn(original.copy(kind = TurnKind.MESSAGE.name, exerciseId = null, exerciseNumber = null))
             }
-            dao.insertTurn(turn.row(scope))
+            dao.insertTurn(turn.copy(searchSources = sources).row(scope))
         }
     }
 
@@ -431,17 +461,20 @@ internal class ConversationRepository(
         exerciseId = exerciseId, resultId = resultId,
         choices = choices.takeIf(List<String>::isNotEmpty)?.let { secret.seal(JSONArray(it).toString(), "$id:choices") },
         exerciseNumber = exerciseNumber,
+        searchContext = searchSources?.let { secret.seal(it, "$id:search") },
     )
 
     private fun TurnRow.toTurn(): Turn {
         val body = secret.open(text, "$id:turn")
         val turnKind = TurnKind.valueOf(kind)
+        val sources = searchContext?.takeIf { speaker == Speaker.ASSISTANT.name }
+            ?.let { secret.open(it, "$id:search") }
         if (turnKind == TurnKind.DRAFT) {
             val draft = checkNotNull(AiProtocol.generation(body, savedDraft = true).draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
             val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成课程草稿"
             return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.prepareNewTrees().notice,
-                contentVersion, preview = preview)
+                contentVersion, preview = preview, searchSources = sources)
         }
         if (turnKind == TurnKind.GENERATE_TREE) {
             val data = JSONObject(body)
@@ -453,7 +486,7 @@ internal class ConversationRepository(
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))
             List(values.length()) { index -> values.getString(index) }
-        }.orEmpty(), exerciseNumber = exerciseNumber)
+        }.orEmpty(), exerciseNumber = exerciseNumber, searchSources = sources)
     }
 
     private data class Request(
@@ -462,6 +495,7 @@ internal class ConversationRepository(
         val pending: Exercise?,
         val askedQuestions: List<String>,
         val reissue: Boolean,
+        val searchContext: String?,
         val messages: List<ModelMessage>,
     )
 

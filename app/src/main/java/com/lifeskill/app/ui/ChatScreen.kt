@@ -80,6 +80,7 @@ internal fun ChatScreen(
     val timeline by chat.history.collectAsStateWithLifecycle()
     val history = timeline.turns
     val status by chat.status.collectAsStateWithLifecycle()
+    val webSearchAvailable by chat.webSearchAvailable.collectAsStateWithLifecycle()
     val editor by app.editor.collectAsStateWithLifecycle()
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
@@ -89,6 +90,8 @@ internal fun ChatScreen(
         if (tutor) TutorRules.currentLesson(history.filter { it.contentVersion == owner?.contentVersion }) else emptyList()
     }
     val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
+    var webSearch by rememberSaveable(scope.id) { mutableStateOf(true) }
+    val showWebSearch = webSearchAvailable == true && exercise == null && !locked
     val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     val latestReply = currentLesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }
     val examAvailable = !locked && TutorRules.canStartExam(currentLesson)
@@ -117,11 +120,15 @@ internal fun ChatScreen(
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
     val footerVisible = !status.clearing && !settled &&
         (pending != null || statusMatches && (status.working || status.error != null))
-    val canSend = timeline.loaded && !status.working && pending == null
+    val canSend = timeline.loaded && webSearchAvailable != null && !status.working && pending == null
 
-    fun submit(text: String, check: Boolean = false) {
+    fun submit(text: String, check: Boolean = false, search: Boolean = false) {
         keyboard?.hide()
-        chat.send(text, check)
+        chat.send(text, check, search)
+    }
+
+    LaunchedEffect(pageActive) {
+        if (pageActive) chat.refreshWebSearchAvailability()
     }
 
     fun openDraft(id: String) {
@@ -228,6 +235,11 @@ internal fun ChatScreen(
                         onOpenDraft = if (turn.preview != null) ({ openDraft(turn.id) }) else null,
                         open = { app.open(Route.entry(it)) },
                     )
+                    turn.searchSources?.let { sources ->
+                        Box(Modifier.padding(start = 15.dp, end = 15.dp, top = 6.dp)) {
+                            LessonMarkdown(sources)
+                        }
+                    }
                     if (turn.id == treeOffer?.id) {
                         ChatPill(
                             "生成设置",
@@ -293,8 +305,10 @@ internal fun ChatScreen(
                 draft, { draft = it }, if (tutor) "输入学习问题" else "描述你想学什么", enabled = canSend,
                 errorText = if (exceedsLimit) "每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符" else null,
                 sendEnabled = draft.isNotBlank() && !exceedsLimit && canSend,
+                webSearch = webSearch.takeIf { showWebSearch },
+                onToggleSearch = { webSearch = !webSearch },
                 onSend = {
-                    submit(draft)
+                    submit(draft, search = showWebSearch && webSearch)
                     draft = ""
                 },
             )

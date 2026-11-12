@@ -119,7 +119,7 @@ internal fun ChatPill(
 @Composable
 internal fun AiComposer(
     value: String, onChange: (String) -> Unit, label: String, enabled: Boolean, errorText: String?,
-    sendEnabled: Boolean, onSend: () -> Unit,
+    sendEnabled: Boolean, webSearch: Boolean? = null, onToggleSearch: () -> Unit = {}, onSend: () -> Unit,
 ) {
     val colors = aiColors
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -128,36 +128,52 @@ internal fun AiComposer(
             border = BorderStroke(1.dp, if (errorText != null) MaterialTheme.colorScheme.error else colors.outline),
             shadowElevation = 1.dp,
         ) {
-            Row(
-                Modifier.heightIn(min = 56.dp).padding(start = 15.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicTextField(
-                    value, onChange,
-                    modifier = Modifier.weight(1f).testTag("chat-input").semantics {
-                        contentDescription = label
-                        if (errorText != null) error(errorText)
-                    },
-                    enabled = enabled, minLines = 1, maxLines = 4,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) Ink else Muted),
-                    cursorBrush = SolidColor(colors.accent),
-                    decorationBox = { innerTextField ->
-                        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            if (value.isEmpty()) Text(label, style = MaterialTheme.typography.bodyLarge, color = Muted)
-                            innerTextField()
-                        }
-                    },
-                )
-                IconButton(onSend, Modifier.size(48.dp).semantics { contentDescription = "发送" }, enabled = sendEnabled) {
-                    val fill = if (sendEnabled) Brush.linearGradient(colors.outgoing)
-                    else SolidColor(colors.chip)
-                    Box(Modifier.size(41.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
-                        Mark(Glyph.SEND, if (sendEnabled) Color.White else colors.accent, Modifier.size(20.dp))
+            Column(Modifier.padding(start = 15.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+                Row(
+                    Modifier.heightIn(min = if (webSearch == null) 48.dp else 36.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicTextField(
+                        value, onChange,
+                        modifier = Modifier.weight(1f).testTag("chat-input").semantics {
+                            contentDescription = label
+                            if (errorText != null) error(errorText)
+                        },
+                        enabled = enabled, minLines = 1, maxLines = 4,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) Ink else Muted),
+                        cursorBrush = SolidColor(colors.accent),
+                        decorationBox = { innerTextField ->
+                            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                                if (value.isEmpty()) Text(label, style = MaterialTheme.typography.bodyLarge, color = Muted)
+                                innerTextField()
+                            }
+                        },
+                    )
+                    if (webSearch == null) ChatSendButton(sendEnabled, onSend)
+                }
+                if (webSearch != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        SelectionChip("联网搜索", webSearch, onToggleSearch, enabled = enabled, leadingIcon = {
+                            Mark(Glyph.GLOBE, if (webSearch) colors.accent else Muted, Modifier.size(16.dp))
+                        })
+                        ChatSendButton(sendEnabled, onSend)
                     }
                 }
             }
         }
         errorText?.let { Text(it, Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+@Composable
+private fun ChatSendButton(enabled: Boolean, onSend: () -> Unit) {
+    val colors = aiColors
+    IconButton(onSend, Modifier.size(48.dp).semantics { contentDescription = "发送" }, enabled = enabled) {
+        val fill = if (enabled) Brush.linearGradient(colors.outgoing) else SolidColor(colors.chip)
+        Box(Modifier.size(41.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
+            Mark(Glyph.SEND, if (enabled) Color.White else colors.accent, Modifier.size(20.dp))
+        }
     }
 }

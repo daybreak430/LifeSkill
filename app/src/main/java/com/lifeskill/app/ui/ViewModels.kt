@@ -332,7 +332,10 @@ internal data class ChatHistory(
 
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
+    private val settings = container.settings
     private val _status = MutableStateFlow(ChatStatus())
+    private val _webSearchAvailable = MutableStateFlow<Boolean?>(null)
+    val webSearchAvailable = _webSearchAvailable.asStateFlow()
     private var runningAction: Job? = null
     val status = _status.asStateFlow()
     val history = repository.watch(scope)
@@ -351,8 +354,15 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory(loaded = false))
 
-    fun send(text: String, check: Boolean = false) = runQueued { onQueued ->
-        repository.send(scope, text, check, onQueued)
+    suspend fun refreshWebSearchAvailability() {
+        _webSearchAvailable.value = null
+        _webSearchAvailable.value = withContext(Dispatchers.IO) {
+            runCatching { settings.active().supportsWebSearch }.getOrDefault(false)
+        }
+    }
+
+    fun send(text: String, check: Boolean = false, webSearch: Boolean = false) = runQueued { onQueued ->
+        repository.send(scope, text, check, webSearch, onQueued)
     }
 
     fun generateTree(offerId: String, options: GenerationOptions) = runQueued { onQueued ->

@@ -15,6 +15,8 @@ internal data class ModelSettings(
     val model: String = provider.model,
     val apiKey: String = "",
 ) {
+    val supportsWebSearch get() = provider == Provider.DEEPSEEK && baseUrl.trim().trimEnd('/') == Provider.DEEPSEEK.baseUrl
+
     fun validated(requireKey: Boolean = true): ModelSettings {
         val url = baseUrl.trim().trimEnd('/')
         val uri = runCatching { URI(url) }.getOrNull()

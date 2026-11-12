@@ -24,23 +24,27 @@ internal fun conversationExport(entry: Entry, transcripts: List<LessonTranscript
                     else -> "AI 老师"
                 }
                 appendLine("**$label**")
-                if (turn.text.isNotEmpty() || turn.choices.isNotEmpty()) {
+                if (turn.text.isNotEmpty() || turn.choices.isNotEmpty() || turn.searchSources != null) {
                     appendLine()
                     // 用引用保留每条消息的 Markdown 结构，消息中的标题不会混入课时分节。
-                    if (turn.text.isNotEmpty()) {
-                        turn.text.lineSequence().forEach { line ->
-                            appendLine(if (line.isEmpty()) ">" else "> $line")
-                        }
-                    }
+                    if (turn.text.isNotEmpty()) appendQuoted(turn.text)
                     if (turn.text.isNotEmpty() && turn.choices.isNotEmpty()) appendLine(">")
                     turn.choices.forEachIndexed { index, choice ->
                         appendLine("> - ${choiceAnswer(index, choice).markdownInline()}")
+                    }
+                    turn.searchSources?.let {
+                        if (turn.text.isNotEmpty() || turn.choices.isNotEmpty()) appendLine(">")
+                        appendQuoted(it)
                     }
                 }
             }
         }
     }
     return ConversationExport("$fileName-对话.md", markdown)
+}
+
+private fun StringBuilder.appendQuoted(markdown: String) {
+    markdown.lineSequence().forEach { appendLine(if (it.isEmpty()) ">" else "> $it") }
 }
 
 private fun String.markdownInline(): String = buildString {

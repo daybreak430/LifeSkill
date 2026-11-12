@@ -38,6 +38,9 @@ internal interface AiGateway {
 
     suspend fun balance(settings: ModelSettings): DeepSeekBalance =
         throw RuleViolation("当前服务商不支持余额查询。")
+
+    suspend fun search(settings: ModelSettings, query: String): DeepSeekSearch =
+        throw RuleViolation("当前模型配置不支持联网搜索。")
 }
 
 internal class OpenAiGateway(
@@ -54,18 +57,8 @@ internal class OpenAiGateway(
         val jsonMode = valid.provider == Provider.DEEPSEEK && structured && useJsonMode
         val connection = openConnection(URI("${valid.baseUrl}/chat/completions"))
         try {
-            connection.requestMethod = "POST"
-            connection.instanceFollowRedirects = false
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 85_000
-            connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer ${valid.apiKey}")
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.setRequestProperty("Accept", "application/json")
-            val request = requestBody(valid, messages, structured, jsonMode).toString().toByteArray()
-            connection.setFixedLengthStreamingMode(request.size)
             val startedAt = Instant.now()
-            connection.outputStream.use { it.write(request) }
+            postJson(connection, valid.apiKey, requestBody(valid, messages, structured, jsonMode), 85_000)
             val status = connection.responseCode
             if (status !in 200..299) throw httpError(status)
             val raw = readBody(connection, "AI 响应过长，请缩小本次请求。")
@@ -86,6 +79,41 @@ internal class OpenAiGateway(
         } finally {
             connection.disconnect()
         }
+    }
+
+    override suspend fun search(settings: ModelSettings, query: String): DeepSeekSearch = withContext(Dispatchers.IO) {
+        val valid = settings.validated()
+        if (!valid.supportsWebSearch) throw RuleViolation("当前模型配置不支持联网搜索。")
+        val connection = openConnection(URI("${Provider.DEEPSEEK.baseUrl}/v1/tools/search"))
+        try {
+            val request = JSONObject().put("query", query).put("count", WEB_SEARCH_RESULT_LIMIT)
+            postJson(connection, valid.apiKey, request, 25_000)
+            val status = connection.responseCode
+            if (status != 200) throw RuleViolation("联网搜索失败。${httpError(status).message}")
+            readDeepSeekSearch(readBody(connection, "联网搜索响应过长，请重试。"))
+        } catch (_: SocketTimeoutException) {
+            throw RuleViolation("联网搜索超时，请重试。")
+        } catch (_: SSLException) {
+            throw RuleViolation("无法验证 DeepSeek 搜索的 HTTPS 连接，请检查网络。")
+        } catch (_: IOException) {
+            throw RuleViolation("无法连接 DeepSeek 搜索，请检查网络后重试。")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun postJson(connection: HttpsURLConnection, apiKey: String, payload: JSONObject, readTimeout: Int) {
+        connection.requestMethod = "POST"
+        connection.instanceFollowRedirects = false
+        connection.connectTimeout = 15_000
+        connection.readTimeout = readTimeout
+        connection.doOutput = true
+        connection.setRequestProperty("Authorization", "Bearer $apiKey")
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        connection.setRequestProperty("Accept", "application/json")
+        val bytes = payload.toString().toByteArray(Charsets.UTF_8)
+        connection.setFixedLengthStreamingMode(bytes.size)
+        connection.outputStream.use { it.write(bytes) }
     }
 
     override suspend fun balance(settings: ModelSettings): DeepSeekBalance = withContext(Dispatchers.IO) {

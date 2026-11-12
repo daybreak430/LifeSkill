@@ -66,6 +66,7 @@ data class Turn(
     val preview: GenerationPreview? = null,
     val generationOptions: GenerationOptions? = null,
     val exerciseNumber: Int? = null,
+    val searchSources: String? = null,
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")
