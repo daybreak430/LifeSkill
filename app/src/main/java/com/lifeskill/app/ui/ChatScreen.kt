@@ -101,6 +101,8 @@ internal fun ChatScreen(
     var showClearConversation by rememberSaveable { mutableStateOf(false) }
     var openedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedSourcesId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedSources = history.firstOrNull { it.id == selectedSourcesId }?.searchSources
     val draftTurn = history.firstOrNull { it.id == selectedDraftId && it.preview != null }
     val latestDraft = history.lastOrNull()?.takeIf { it.preview != null }
     val treeOffer = history.lastOrNull()?.takeIf { it.kind == TurnKind.TREE_OFFER }
@@ -212,7 +214,7 @@ internal fun ChatScreen(
                     if (tutor && canSend) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             ChatPill("开始学习", {
-                                submit("请带我开始学习本节课。")
+                                submit(TutorRules.START_REPLY, search = showWebSearch && webSearch)
                             }, glyph = Glyph.SPARK)
                         }
                     }
@@ -225,6 +227,23 @@ internal fun ChatScreen(
                     // 尺寸动画会把气泡阴影裁在消息边界内，列表只保留淡入淡出。
                     Modifier.animateItem(fadeInSpec = tween(170), fadeOutSpec = tween(120), placementSpec = null),
                 ) {
+                    turn.searchSources?.let { sources ->
+                        val links = sources.searchSourceLinks()
+                        if (links.isNotBlank()) {
+                            ChatPill(
+                                "查看来源 · ${links.lineSequence().count()}",
+                                onClick = {
+                                    keyboard?.hide()
+                                    selectedSourcesId = turn.id
+                                },
+                                modifier = Modifier.padding(bottom = 4.dp),
+                                glyph = Glyph.GLOBE, trailingGlyph = Glyph.NEXT,
+                            )
+                        } else {
+                            Text(sources, Modifier.padding(start = 15.dp, bottom = 6.dp),
+                                style = MaterialTheme.typography.labelMedium, color = Muted)
+                        }
+                    }
                     ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
@@ -235,11 +254,6 @@ internal fun ChatScreen(
                         onOpenDraft = if (turn.preview != null) ({ openDraft(turn.id) }) else null,
                         open = { app.open(Route.entry(it)) },
                     )
-                    turn.searchSources?.let { sources ->
-                        Box(Modifier.padding(start = 15.dp, end = 15.dp, top = 6.dp)) {
-                            LessonMarkdown(sources)
-                        }
-                    }
                     if (turn.id == treeOffer?.id) {
                         ChatPill(
                             "生成设置",
@@ -260,7 +274,7 @@ internal fun ChatScreen(
                             ) {
                                 ChatPill(
                                     quickReply,
-                                    onClick = { submit(quickReply) },
+                                    onClick = { submit(quickReply, search = showWebSearch && webSearch) },
                                     enabled = canSend,
                                 )
                                 if (examAvailable && !checkOffered) {
@@ -321,6 +335,9 @@ internal fun ChatScreen(
                 openCelebrationId = null
             }
         }
+    }
+    if (pageActive && selectedSources != null) {
+        SearchSourcesSheet(selectedSources.searchSourceLinks()) { selectedSourcesId = null }
     }
     if (pageActive && showRestart) {
         RestartLessonDialog(

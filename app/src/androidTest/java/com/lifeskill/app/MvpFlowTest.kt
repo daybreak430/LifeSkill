@@ -230,13 +230,42 @@ class MvpFlowTest {
             assertEquals("查最新的前端工具", query)
             readDeepSeekSearch("""{"results":[{"title":"官方版本说明","url":"https://example.com/releases","summary":"版本已更新。"}]}""")
         }
+        val releaseReply = CompletableDeferred<Unit>()
         fixture.ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("版本已更新。"))
-            """{"kind":"message","reply":"已找到近期更新。"}"""
+            releaseReply.await()
+            val reply = (listOf("已找到近期更新。") + List(18) { "本次更新调整了工具的默认配置和文档结构。" })
+                .joinToString("\n\n")
+            JSONObject().put("kind", "message").put("reply", reply).toString()
         }
         send("查最新的前端工具")
-        showChatReply("联网搜索来源")
-        ui.onNodeWithText("官方版本说明", substring = true).assertIsDisplayed()
+        await("正在等待 AI 回复")
+        val anchor = ui.onNodeWithText("查最新的前端工具").assertIsDisplayed()
+        val topBeforeReply = anchor.getUnclippedBoundsInRoot().top
+        releaseReply.complete(Unit)
+        await("查看来源 · 1")
+        assertEquals(topBeforeReply, anchor.getUnclippedBoundsInRoot().top)
+        showChatReply("查看来源 · 1")
+        val sources = ui.onNodeWithText("查看来源 · 1")
+        assertTrue(sources.getUnclippedBoundsInRoot().top < ui.onNodeWithText("已找到近期更新。").getUnclippedBoundsInRoot().top)
+        sources.performTouchInput { click() }
+        await("联网搜索来源")
+        val link = ui.onNodeWithText("官方版本说明", substring = true).assertIsDisplayed()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val filter = IntentFilter(Intent.ACTION_VIEW).apply {
+            addDataScheme("https")
+            addDataAuthority("example.com", null)
+            addDataPath("/releases", PatternMatcher.PATTERN_LITERAL)
+        }
+        val monitor = instrumentation.addMonitor(filter, null, true)
+        try {
+            link.performTouchInput { click() }
+            ui.waitUntil(8_000) { monitor.hits == 1 }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
+        ui.onNodeWithContentDescription("关闭来源").performClick()
+        ui.waitUntil(8_000) { ui.onAllNodesWithText("联网搜索来源").fetchSemanticsNodes().isEmpty() }
 
         search.performTouchInput { click() }
         search.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
@@ -247,6 +276,54 @@ class MvpFlowTest {
         send("想学习前端开发")
         showChatReply("可以继续细化主题。")
         search.performTouchInput { click() }.assertIsSelected()
+    }
+
+    @Test fun startingAndContinuingALessonUseTheSearchToggle() {
+        await("本职工作")
+        val library = fixture.container.library
+        val (direction, course, lesson) = runBlocking {
+            val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "搜索入口验证"))
+            val course = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "资料学习"))
+            val lesson = library.save(EntryEdit(null, course.id, EntryKind.SKILL, "文档规范", "学习版本差异"))
+            Triple(direction, course, lesson)
+        }
+        try {
+            val directionTag = "direction-card-${direction.id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(directionTag))
+            ui.onNodeWithTag(directionTag).performTouchInput { click() }
+            await(course.name)
+            ui.onNode(hasText(course.name) and hasClickAction()).performClick()
+            await("课程大纲")
+            ui.onNodeWithContentDescription(lesson.name).performTouchInput { click() }
+            await("学习目标")
+            ui.onNodeWithText("开始学习").performClick()
+            await("联网搜索")
+            ui.onNodeWithText("联网搜索").assertIsSelected()
+            fixture.ai.enqueueSearch { query ->
+                assertEquals(lesson.name, query)
+                readDeepSeekSearch("""{"results":[{"title":"规范说明","url":"https://example.com/spec","summary":"新版调整了结构。"}]}""")
+            }
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.first().text.contains("新版调整了结构。"))
+                """{"kind":"teach","reply":"先介绍新版结构。"}"""
+            }
+            ui.onNodeWithText("开始学习").performClick()
+            showChatReply("查看来源 · 1")
+            showChatReply(TutorRules.CONTINUE_REPLY)
+
+            fixture.ai.enqueueSearch { query ->
+                assertEquals(lesson.name, query)
+                readDeepSeekSearch("""{"results":[]}""")
+            }
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.first().text.contains("联网搜索没有可用结果"))
+                """{"kind":"teach","reply":"接着讲文档标题。"}"""
+            }
+            ui.onNode(hasText(TutorRules.CONTINUE_REPLY) and hasClickAction()).performClick()
+            showChatReply("本次联网搜索没有返回可用来源。")
+        } finally {
+            runBlocking { library.delete(direction.id) }
+        }
     }
 
     @Test fun clearGenerationUsesConfirmationAndStartsFreshWhileReplyIsPending() {

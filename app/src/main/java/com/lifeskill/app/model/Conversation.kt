@@ -82,6 +82,7 @@ data class Exercise(
 fun choiceAnswer(index: Int, choice: String) = "${'A' + index}. $choice"
 
 object TutorRules {
+    const val START_REPLY = "请带我开始学习本节课。"
     const val CONTINUE_REPLY = "好的，继续"
     const val REISSUE_REPLY = "重新出本题"
     const val EXAM_REPLY = "做课后练习"

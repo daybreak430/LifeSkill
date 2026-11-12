@@ -250,7 +250,13 @@ internal class ConversationRepository(
             if (!config.supportsWebSearch) throw RuleViolation("请切回 DeepSeek 后重试，或撤回后重新发送。")
             if (saved.isNotEmpty()) JSONArray(secret.open(saved, "$requestId:search"))
             else {
-                val query = searchQuery(context.input.text, owner?.name.takeIf { scope.mode == ChatMode.TUTOR })
+                val lessonName = owner?.name.takeIf { scope.mode == ChatMode.TUTOR }
+                // 学习快捷回复只有操作意图，搜索时用课时主题代替固定提示语。
+                val question = when (context.input.text) {
+                    TutorRules.START_REPLY, TutorRules.CONTINUE_REPLY -> lessonName ?: context.input.text
+                    else -> context.input.text
+                }
+                val query = searchQuery(question, lessonName)
                 val results = usage.search(config, query, target).results
                 // 搜索成功即保存证据，回复失败时复用这次结果，避免再次付费搜索。
                 val stillPending = database.withTransaction {
