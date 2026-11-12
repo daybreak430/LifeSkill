@@ -369,8 +369,8 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         repository.generateTree(scope, offerId, options, onQueued)
     }
 
-    fun restartLesson(requirements: String) = runQueued { onQueued ->
-        repository.restartLesson(scope, requirements, onQueued)
+    fun restartLesson(requirements: String, webSearch: Boolean) = runQueued { onQueued ->
+        repository.restartLesson(scope, requirements, webSearch, onQueued)
     }
 
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }

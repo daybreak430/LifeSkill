@@ -61,6 +61,11 @@ internal fun EntryUsageMenu(
                     usage, generation = generation,
                     label = if (entry.kind == EntryKind.TREE) "整门课程" else "本节课",
                 )
+                if (usage != null && usage.searchCalls > 0) {
+                    val calls = NumberFormat.getIntegerInstance().format(usage.searchCalls)
+                    Text("其中联网搜索 $calls 次 · ${formatCost(usage.searchCostNanos)}",
+                        color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
@@ -87,14 +92,16 @@ internal fun AiUsageSummary(
 
 internal fun UsageTotal.displayText(cumulative: Boolean = false): String {
     val count = NumberFormat.getIntegerInstance().format(tokens)
-    val cost = costNanos?.let { nanos ->
-        val yuan = BigDecimal.valueOf(nanos, 9).setScale(4, RoundingMode.HALF_UP)
-        if (nanos > 0 && yuan.signum() == 0) "< ¥0.0001" else "¥${yuan.toPlainString()}"
-    }
+    val cost = costNanos?.let(::formatCost)
     return when {
         cost == null -> "$count Token · 暂无费用估算"
         cumulative -> "$count Token · 预估费用 $cost"
         unpriced > 0 -> "$count Token · 已估 $cost（部分费用未知）"
         else -> "$count Token · 预估 $cost"
     }
+}
+
+private fun formatCost(nanos: Long): String {
+    val yuan = BigDecimal.valueOf(nanos, 9).setScale(4, RoundingMode.HALF_UP)
+    return if (nanos > 0 && yuan.signum() == 0) "< ¥0.0001" else "¥${yuan.toPlainString()}"
 }

@@ -86,11 +86,13 @@ internal class ConversationRepository(
         )
     }
 
-    suspend fun restartLesson(scope: ChatScope, requirements: String, onRequestQueued: (String) -> Unit = {}) {
+    suspend fun restartLesson(
+        scope: ChatScope, requirements: String, webSearch: Boolean = false, onRequestQueued: (String) -> Unit = {},
+    ) {
         if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面重新学习。")
         val input = requirements.trim()
         if (input.length > INPUT_LIMIT) throw RuleViolation("本次学习要求最多 ${INPUT_LIMIT} 个字符。")
-        queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued)
+        queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued, webSearch = webSearch)
     }
 
     suspend fun generateTree(
@@ -251,10 +253,10 @@ internal class ConversationRepository(
             if (saved.isNotEmpty()) JSONArray(secret.open(saved, "$requestId:search"))
             else {
                 val lessonName = owner?.name.takeIf { scope.mode == ChatMode.TUTOR }
-                // 学习快捷回复只有操作意图，搜索时用课时主题代替固定提示语。
+                // 学习快捷回复只有操作意图，未填写重学要求时也用课时主题搜索。
                 val question = when (context.input.text) {
                     TutorRules.START_REPLY, TutorRules.CONTINUE_REPLY -> lessonName ?: context.input.text
-                    else -> context.input.text
+                    else -> context.input.text.ifBlank { lessonName.orEmpty() }
                 }
                 val query = searchQuery(question, lessonName)
                 val results = usage.search(config, query, target).results

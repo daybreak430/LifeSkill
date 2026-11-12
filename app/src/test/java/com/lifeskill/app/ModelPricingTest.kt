@@ -15,7 +15,7 @@ class ModelPricingTest {
         val mixed = UsageTotal(2_400, 3_404_000, unpriced = 1)
         assertEquals("预估费用 ¥0.0034", mixed.displayText(cumulative = true).substringAfter(" · "))
         assertEquals("已估 ¥0.0034（部分费用未知）", mixed.displayText().substringAfter(" · "))
-        assertEquals("暂无费用估算", mixed.copy(costNanos = null).displayText(cumulative = true).substringAfter(" · "))
+        assertEquals("暂无费用估算", mixed.copy(modelCostNanos = null).displayText(cumulative = true).substringAfter(" · "))
     }
 
     @Test fun appliesBeijingTimeAndTheHolidayCalendarToTheReceipt() {

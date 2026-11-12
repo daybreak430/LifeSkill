@@ -278,7 +278,7 @@ class MvpFlowTest {
         search.performTouchInput { click() }.assertIsSelected()
     }
 
-    @Test fun startingAndContinuingALessonUseTheSearchToggle() {
+    @Test fun startingContinuingAndRestartingALessonUseTheSearchToggle() {
         await("本职工作")
         val library = fixture.container.library
         val (direction, course, lesson) = runBlocking {
@@ -290,7 +290,7 @@ class MvpFlowTest {
         try {
             val directionTag = "direction-card-${direction.id}"
             ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(directionTag))
-            ui.onNodeWithTag(directionTag).performTouchInput { click() }
+            ui.onNodeWithTag(directionTag).performClick()
             await(course.name)
             ui.onNode(hasText(course.name) and hasClickAction()).performClick()
             await("课程大纲")
@@ -321,6 +321,43 @@ class MvpFlowTest {
             }
             ui.onNode(hasText(TutorRules.CONTINUE_REPLY) and hasClickAction()).performClick()
             showChatReply("本次联网搜索没有返回可用来源。")
+
+            fixture.ai.enqueueSearch { query ->
+                assertEquals(lesson.name, query)
+                readDeepSeekSearch("""{"results":[{"title":"规范说明","url":"https://example.com/spec","summary":"新版先介绍适用范围。"}]}""")
+            }
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.first().text.contains("新版先介绍适用范围。"))
+                """{"kind":"teach","reply":"重新从适用范围讲起。"}"""
+            }
+            ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+            ui.onNodeWithText("重新学习").performClick()
+            ui.onNodeWithText("开始新一轮").performClick()
+            showChatReply("重新从适用范围讲起。")
+            showChatReply("查看来源 · 1")
+
+            ui.onNodeWithText("联网搜索").performTouchInput { click() }
+            fixture.ai.reply(
+                """{"kind":"teach","reply":"重新从文档结构讲起。"}""",
+                ModelUsage(Provider.DEEPSEEK, "deepseek-flash", Instant.parse("2026-11-11T02:00:00Z"), 1_000, 200, 100),
+            )
+            ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+            ui.onNodeWithText("重新学习").performClick()
+            ui.onNodeWithText("开始新一轮").performClick()
+            showChatReply("重新从文档结构讲起。")
+            ui.onNodeWithText("查看来源 · 1").assertDoesNotExist()
+            ui.onNodeWithText("本次联网搜索没有返回可用来源。").assertDoesNotExist()
+
+            pressBack()
+            await("课程大纲")
+            openAiUsage("整门课程", "1,200 Token · 预估 ¥0.0134")
+            ui.onNodeWithText("其中联网搜索 2 次 · ¥0.0100").assertIsDisplayed()
+            ui.onNodeWithContentDescription("关闭 AI 用量").performTouchInput { click() }
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("整门课程").fetchSemanticsNodes().isEmpty() }
+            ui.onNodeWithContentDescription(lesson.name).performTouchInput { click() }
+            await("学习目标")
+            openAiUsage("本节课", "1,200 Token · 预估 ¥0.0134")
+            ui.onNodeWithText("其中联网搜索 2 次 · ¥0.0100").assertIsDisplayed()
         } finally {
             runBlocking { library.delete(direction.id) }
         }

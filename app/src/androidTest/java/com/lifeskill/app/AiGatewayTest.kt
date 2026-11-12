@@ -81,15 +81,16 @@ class AiGatewayTest {
                 {"title":"官方发布","url":"https://example.com/update","summary":"更新了第 3 节。","date":"2026-11-01"},
                 {"title":"无效来源","url":"javascript:alert(1)","summary":"不应传入模型"}
             ]}""")
-            val reply = Response(body = """{"choices":[{"message":{"content":"{\"kind\":\"teach\",\"reply\":\"新版更新了第 3 节。\"}"}}],
+            val reply = Response(body = """{"created":1794362400,"choices":[{"message":{"content":"{\"kind\":\"teach\",\"reply\":\"新版更新了第 3 节。\"}"}}],
                 "usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_cache_hit_tokens":0}}""")
+            var searchResponse = search
             var searchCalls = 0
             var modelCalls = 0
             val gateway = OpenAiGateway { endpoint ->
                 when (endpoint.path) {
                     "/v1/tools/search" -> {
                         searchCalls++
-                        search
+                        searchResponse
                     }
                     "/chat/completions" -> if (modelCalls++ == 0) Response(status = 503) else reply
                     else -> error("意外请求：$endpoint")
@@ -120,8 +121,33 @@ class AiGatewayTest {
             assertTrue(turn.searchSources.orEmpty().contains("https://example.com/update"))
             assertTrue(app.conversations.exportConversation(lesson.id).markdown.contains("https://example.com/update"))
             val totals = app.usage.summary.first()
-            assertEquals(120L, totals.lessons.getValue(lesson.id).tokens)
-            assertEquals(totals.lessons.getValue(lesson.id), totals.courses.getValue(course.id))
+            val lessonTotal = totals.lessons.getValue(lesson.id)
+            assertEquals(120L, lessonTotal.tokens)
+            assertEquals(360_000L, lessonTotal.modelCostNanos)
+            assertEquals(1L, lessonTotal.searchCalls)
+            assertEquals(5_000_000L, lessonTotal.searchCostNanos)
+            assertEquals(5_360_000L, lessonTotal.costNanos)
+            assertEquals(lessonTotal, totals.courses.getValue(course.id))
+            assertEquals(lessonTotal, totals.total)
+
+            val settings = ModelSettings(Provider.DEEPSEEK, apiKey = "test-key")
+            val generation = UsageTarget(courseId = course.id, generation = true)
+            searchResponse = Response(body = """{"results":[]}""")
+            assertFalse(app.usage.search(settings, "空结果", generation).billable)
+            searchResponse = Response(status = 503)
+            assertTrue(runCatching { app.usage.search(settings, "失败请求", generation) }.exceptionOrNull() is RuleViolation)
+            assertEquals(totals, app.usage.summary.first())
+
+            searchResponse = Response(body = """{"results":[{"url":"javascript:alert(1)"}]}""")
+            assertEquals(0, app.usage.search(settings, "来源被过滤", generation).results.length())
+            val combined = app.usage.summary.first()
+            val courseTotal = combined.courses.getValue(course.id)
+            assertEquals(2L, courseTotal.searchCalls)
+            assertEquals(10_360_000L, courseTotal.costNanos)
+            assertEquals(120L, courseTotal.tokens)
+            assertEquals(lessonTotal, combined.lessons.getValue(lesson.id))
+            assertEquals(5_000_000L, combined.generation.getValue(course.id).costNanos)
+            assertEquals(courseTotal, combined.total)
         } finally {
             database.close()
         }

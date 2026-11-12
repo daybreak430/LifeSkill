@@ -10,8 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.DeepSeekSearch
-import com.lifeskill.app.ai.ModelPricing
 import com.lifeskill.app.ai.ModelMessage
+import com.lifeskill.app.ai.ModelPricing
 import com.lifeskill.app.ai.ModelSettings
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.Instant
 
-private const val DEEPSEEK_SEARCH_COST_NANOS = 5_000_000L
+private const val DEEPSEEK_SEARCH_MODEL = "deepseek-search"
+private const val DEEPSEEK_SEARCH_COST_NANOS = 5_000_000L // ¥5 / 1,000 次有结果的请求。
 
 // 用量独立于对话和课程生命周期。清空聊天或删除课程后，历史支出仍计入全局及已领取的证书。
 @Entity(tableName = "ai_usage", indices = [Index("draftId")])
@@ -43,8 +44,10 @@ internal data class UsageGroup(
     val lessonId: String?,
     val generation: Boolean,
     val tokens: Long,
-    val costNanos: Long?,
+    val modelCostNanos: Long?,
     val unpriced: Int,
+    val searchCalls: Long,
+    val searchCostNanos: Long,
 )
 
 @Dao
@@ -57,7 +60,10 @@ internal interface AiUsageDao {
 
     @Query("""
         SELECT courseId, lessonId, generation, SUM(COALESCE(reportedTotalTokens, inputTokens + outputTokens)) AS tokens,
-            SUM(estimatedCostNanos) AS costNanos, COUNT(*) - COUNT(estimatedCostNanos) AS unpriced
+            SUM(CASE WHEN model != '$DEEPSEEK_SEARCH_MODEL' THEN estimatedCostNanos END) AS modelCostNanos,
+            COUNT(*) - COUNT(estimatedCostNanos) AS unpriced,
+            COUNT(CASE WHEN model = '$DEEPSEEK_SEARCH_MODEL' THEN estimatedCostNanos END) AS searchCalls,
+            COALESCE(SUM(CASE WHEN model = '$DEEPSEEK_SEARCH_MODEL' THEN estimatedCostNanos END), 0) AS searchCostNanos
         FROM ai_usage GROUP BY courseId, lessonId, generation
     """)
     fun watchGroups(): Flow<List<UsageGroup>>
@@ -70,11 +76,23 @@ internal data class UsageTarget(
     val generation: Boolean = false,
 )
 
-internal data class UsageTotal(val tokens: Long, val costNanos: Long?, val unpriced: Int) {
+internal data class UsageTotal(
+    val tokens: Long,
+    val modelCostNanos: Long?,
+    val unpriced: Int,
+    val searchCalls: Long = 0,
+    val searchCostNanos: Long = 0,
+) {
+    val costNanos: Long?
+        get() = if (modelCostNanos == null && searchCalls == 0L) null else (modelCostNanos ?: 0) + searchCostNanos
+
     operator fun plus(other: UsageTotal) = UsageTotal(
         tokens + other.tokens,
-        if (costNanos == null && other.costNanos == null) null else (costNanos ?: 0) + (other.costNanos ?: 0),
+        if (modelCostNanos == null && other.modelCostNanos == null) null
+        else (modelCostNanos ?: 0) + (other.modelCostNanos ?: 0),
         unpriced + other.unpriced,
+        searchCalls + other.searchCalls,
+        searchCostNanos + other.searchCostNanos,
     )
 }
 
@@ -92,7 +110,7 @@ internal class AiUsageRepository(private val dao: AiUsageDao, private val gatewa
         val lessons = mutableMapOf<String, UsageTotal>()
         val generation = mutableMapOf<String, UsageTotal>()
         for (group in groups) {
-            val usage = UsageTotal(group.tokens, group.costNanos, group.unpriced)
+            val usage = UsageTotal(group.tokens, group.modelCostNanos, group.unpriced, group.searchCalls, group.searchCostNanos)
             total = total?.plus(usage) ?: usage
             group.courseId?.let { courses.addUsage(it, usage) }
             group.lessonId?.let { lessons.addUsage(it, usage) }
@@ -119,7 +137,7 @@ internal class AiUsageRepository(private val dao: AiUsageDao, private val gatewa
         if (result.billable) {
             record(AiUsageRow(
                 courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
-                generation = target.generation, model = "deepseek-search", createdAt = Instant.now().epochSecond,
+                generation = target.generation, model = DEEPSEEK_SEARCH_MODEL, createdAt = Instant.now().epochSecond,
                 inputTokens = 0, outputTokens = 0, cachedInputTokens = null,
                 estimatedCostNanos = DEEPSEEK_SEARCH_COST_NANOS, reportedTotalTokens = null,
             ))

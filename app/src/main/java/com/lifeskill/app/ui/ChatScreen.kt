@@ -91,7 +91,8 @@ internal fun ChatScreen(
     }
     val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
     var webSearch by rememberSaveable(scope.id) { mutableStateOf(true) }
-    val showWebSearch = webSearchAvailable == true && exercise == null && !locked
+    val supportsWebSearch = webSearchAvailable == true && !locked
+    val showWebSearch = supportsWebSearch && exercise == null
     val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     val latestReply = currentLesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }
     val examAvailable = !locked && TutorRules.canStartExam(currentLesson)
@@ -186,7 +187,7 @@ internal fun ChatScreen(
                 else -> "AI 生成课程"
             }, owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
-            restartEnabled = !status.working,
+            restartEnabled = !status.working && webSearchAvailable != null,
             onExportConversation = onExportConversation?.let { export -> {
                 keyboard?.hide()
                 export()
@@ -345,7 +346,7 @@ internal fun ChatScreen(
             onStart = { requirements ->
                 showRestart = false
                 keyboard?.hide()
-                chat.restartLesson(requirements)
+                chat.restartLesson(requirements, webSearch = supportsWebSearch && webSearch)
                 draft = ""
             },
         )
