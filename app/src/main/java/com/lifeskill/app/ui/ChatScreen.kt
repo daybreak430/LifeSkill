@@ -68,7 +68,6 @@ import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.choiceAnswer
 import kotlinx.coroutines.flow.first
 
-private val ReplyInset = 42.dp
 private const val CHAT_END = "chat-end"
 private const val CHAT_STATUS = "chat-status"
 private val creationCount = Regex("""([0-9]+) (?:个(方向|技能点)|棵(技能树)|门(课程)|节(课))""")
@@ -229,7 +228,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                                 keyboard?.hide()
                                 selectedOfferId = turn.id
                             },
-                            modifier = Modifier.padding(start = ReplyInset, top = 6.dp),
+                            modifier = Modifier.padding(top = 6.dp),
                             enabled = canSend, trailingGlyph = Glyph.NEXT,
                         )
                     }
@@ -237,7 +236,7 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
                         if (choices.isEmpty() && (exercise == null || exercise.choices.isEmpty())) {
                             val quickReply = if (exercise == null) TutorRules.CONTINUE_REPLY else TutorRules.REISSUE_REPLY
                             FlowRow(
-                                Modifier.padding(start = ReplyInset, top = 4.dp),
+                                Modifier.padding(top = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 ChatPill(
@@ -381,15 +380,12 @@ private fun ChatBubble(
     val created = turn.kind == TurnKind.CREATED
     val colors = aiColors
     val shape = RoundedCornerShape(20.dp, 20.dp, if (user) 12.dp else 20.dp, if (user) 20.dp else 12.dp)
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(
-            start = if (user) 44.dp else 0.dp, end = if (user) 0.dp else 14.dp,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, if (user) Alignment.End else Alignment.Start),
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(start = if (user) 44.dp else 0.dp),
+        contentAlignment = Alignment.TopEnd,
     ) {
-        if (!user) AiCrystal(36.dp)
         Surface(
-            modifier = if (created) Modifier.fillMaxWidth() else Modifier,
+            modifier = if (user) Modifier else Modifier.fillMaxWidth(),
             color = if (user) Color.Transparent else colors.panel,
             shape = shape, shadowElevation = if (user) 0.dp else 2.dp,
         ) {
@@ -530,7 +526,7 @@ private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit)
 @Composable
 private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit, discard: (Turn) -> Unit) {
     Surface(
-        Modifier.fillMaxWidth().padding(start = ReplyInset).animateContentSize(tween(170))
+        Modifier.fillMaxWidth().animateContentSize(tween(170))
             .semantics { liveRegion = LiveRegionMode.Polite },
         shape = ControlShape, color = aiColors.panel,
     ) {

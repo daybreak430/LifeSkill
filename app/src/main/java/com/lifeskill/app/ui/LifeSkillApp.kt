@@ -171,7 +171,8 @@ internal fun LifeSkillApp(
                                     }
                                     Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
                                     Page.DIRECTION -> entry?.let {
-                                        DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, app, addition)
+                                        val issuedCourseIds by container.certificates.issuedCourseIds.collectAsStateWithLifecycle(emptySet())
+                                        DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, issuedCourseIds, app, addition)
                                     }
                                     Page.TREE -> entry?.let {
                                         val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }

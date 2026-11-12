@@ -245,6 +245,10 @@ class MvpFlowTest {
             messages.performScrollToNode(diagramNode)
             val unicode = ui.onNode(diagramNode)
             unicode.assertIsDisplayed()
+            val chatBounds = messages.getUnclippedBoundsInRoot()
+            val diagramBounds = unicode.getUnclippedBoundsInRoot()
+            val unusedWidth = (chatBounds.right - chatBounds.left) - (diagramBounds.right - diagramBounds.left)
+            assertTrue("宽图应占满回复气泡的内容区：$unusedWidth", unusedWidth <= 64.dp)
             ui.onNode(hasTestTag("lesson-diagram") and hasText(ascii)).assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
             unicode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
@@ -595,6 +599,57 @@ class MvpFlowTest {
         }
     }
 
+    @Test fun courseBadgeTracksCertificateCollection() {
+        await("LifeSkill")
+        val container = fixture.container
+        val library = container.library
+        val (direction, tree, lesson) = runBlocking {
+            val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "证书状态测试"))
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "凭证核对"))
+            val lesson = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对金额", "用凭证核对总额"))
+            Triple(direction, tree, lesson)
+        }
+        val profile = runBlocking { container.profiles.current() }
+        try {
+            val attempt = runBlocking {
+                fixture.ai.reply("""{"kind":"teach","reply":"核对总额。"}""")
+                container.conversations.send(ChatScope(ChatMode.TUTOR, lesson.id), "开始学习")
+                library.lightFromAssessment(lesson)
+                fixture.ai.reply(examFixture())
+                container.assessments.startExam(tree.id)
+                val attempt = container.assessments.watchAttempts(tree.id).first().single()
+                fixture.ai.reply(markFixture())
+                container.assessments.submitExam(tree.id, attempt.id, attempt.questions.map { question ->
+                    ExamAnswer(question.correctChoices, "核对金额")
+                })
+                attempt
+            }
+            val cardTag = "direction-card-${direction.id}"
+            ui.onNodeWithTag("learning-directions").performScrollToNode(hasTestTag(cardTag))
+            ui.onNodeWithTag(cardTag).performTouchInput { click() }
+            await(tree.name)
+            ui.onNode(hasText(tree.name) and hasText("上次学习")).assertIsDisplayed()
+            ui.onNodeWithText("已领证书").assertDoesNotExist()
+
+            runBlocking { container.certificates.issue(tree.id, attempt.id, "测试学员") }
+            await("已领证书")
+            val badgedCourse = hasText(tree.name) and hasText("上次学习") and hasText("已领证书")
+            ui.onNode(badgedCourse).assertIsDisplayed()
+            runBlocking { container.certificates.setHidden(tree.id, true) }
+            ui.onNode(badgedCourse).assertIsDisplayed()
+            runBlocking { container.certificates.destroy(tree.id) }
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("已领证书").fetchSemanticsNodes().isEmpty() }
+
+            pressBack()
+            await("LifeSkill")
+        } finally {
+            runBlocking {
+                library.delete(direction.id)
+                container.profiles.save(profile)
+            }
+        }
+    }
+
     @Test fun treeExamUsesSeparatePageAndRevealsChallengesAfterPassing() {
         await("LifeSkill")
         val library = fixture.container.library
@@ -628,7 +683,7 @@ class MvpFlowTest {
             ui.onNodeWithContentDescription("关闭 AI 用量").performTouchInput { click() }
             ui.waitUntil(8_000) { ui.onAllNodesWithText("本节课").fetchSemanticsNodes().isEmpty() }
             ui.onNodeWithText("学习目标").assertIsDisplayed()
-            pressBack()
+            ui.onNodeWithContentDescription("关闭课时详情").performClick()
             await("课程大纲")
             val map = ui.onNodeWithTag("skill-map")
             map.performScrollToNode(hasText("结业考试"))
@@ -720,7 +775,7 @@ class MvpFlowTest {
             ui.onNodeWithTag("tab-personal").performClick()
             await("更名后的学员")
             ui.onNodeWithText("AI 累计用量").assertIsDisplayed()
-            ui.onNodeWithText("3,600 Token · 预估 ¥0.0085").assertIsDisplayed()
+            ui.onNodeWithText("3,600 Token · 预估费用 ¥0.0085").assertIsDisplayed()
             ui.onNodeWithText("查看全部").assertDoesNotExist()
             ui.onNodeWithTag("personal-home").performScrollToNode(hasTestTag("collected-certificate-${tree.id}"))
             ui.onNodeWithTag("collected-certificate-${tree.id}").performTouchInput { click() }

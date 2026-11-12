@@ -3,12 +3,21 @@ package com.lifeskill.app
 import com.lifeskill.app.ai.ModelPricing
 import com.lifeskill.app.ai.ModelUsage
 import com.lifeskill.app.ai.Provider
+import com.lifeskill.app.data.UsageTotal
+import com.lifeskill.app.ui.displayText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Instant
 
 class ModelPricingTest {
+    @Test fun cumulativeUsageShowsTheEstimateWithoutPartialCostCopy() {
+        val mixed = UsageTotal(2_400, 3_404_000, unpriced = 1)
+        assertEquals("预估费用 ¥0.0034", mixed.displayText(cumulative = true).substringAfter(" · "))
+        assertEquals("已估 ¥0.0034（部分费用未知）", mixed.displayText().substringAfter(" · "))
+        assertEquals("暂无费用估算", mixed.copy(costNanos = null).displayText(cumulative = true).substringAfter(" · "))
+    }
+
     @Test fun appliesBeijingTimeAndTheHolidayCalendarToTheReceipt() {
         fun estimate(timestamp: String) = ModelPricing.estimateNanos(
             ModelUsage(Provider.DEEPSEEK, "deepseek-flash", Instant.parse(timestamp), 1_000, 200, 100),

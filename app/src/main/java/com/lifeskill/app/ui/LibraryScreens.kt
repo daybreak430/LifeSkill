@@ -127,7 +127,14 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
 }
 
 @Composable
-internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: String?, app: AppViewModel, addedEntryId: String?) {
+internal fun DirectionScreen(
+    direction: Entry,
+    library: Library,
+    latestTreeId: String?,
+    issuedCourseIds: Set<String>,
+    app: AppViewModel,
+    addedEntryId: String?,
+) {
     val trees = library.childrenOf(direction.id)
     val state = rememberLazyListState()
     val addition = trees.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }?.plus(3)
@@ -171,7 +178,10 @@ internal fun DirectionScreen(direction: Entry, library: Library, latestTreeId: S
             item { LibrarySection("课程", Modifier.padding(top = 12.dp, bottom = 2.dp)) }
             if (trees.isEmpty()) item { LibraryEmpty("暂无课程", Glyph.TREE) }
             items(trees, key = Entry::id) { tree ->
-                SkillTreeCard(tree, library.progress(tree.id), tree.id == latestTreeId, Modifier.animateItem()) {
+                SkillTreeCard(
+                    tree, library.progress(tree.id), latest = tree.id == latestTreeId,
+                    certificateIssued = tree.id in issuedCourseIds, modifier = Modifier.animateItem(),
+                ) {
                     app.open(Route.entry(tree))
                 }
             }

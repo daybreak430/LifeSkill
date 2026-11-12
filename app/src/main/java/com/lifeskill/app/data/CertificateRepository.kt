@@ -13,6 +13,7 @@ import com.lifeskill.app.model.ProfileAvatar
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.validatedNickname
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
@@ -29,6 +30,9 @@ internal class CertificateRepository(
     val certificates = dao.watchCertificates()
         .map { rows -> rows.mapNotNull { it.state().issued }.sortedBy { it.isSample } }
         .flowOn(Dispatchers.IO)
+    val issuedCourseIds = certificates
+        .map { issued -> issued.asSequence().filterNot { it.isSample }.map(CollectedCertificate::treeId).toSet() }
+        .distinctUntilChanged()
 
     fun watchCertificate(treeId: String) = dao.watchCertificate(treeId)
         .map { it?.state() ?: CertificateState() }

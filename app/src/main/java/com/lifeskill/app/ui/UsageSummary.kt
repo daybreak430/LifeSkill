@@ -69,11 +69,12 @@ internal fun AiUsageSummary(
     modifier: Modifier = Modifier,
     color: Color = Muted,
     generation: UsageTotal? = null,
-    label: String = "AI 用量",
+    cumulative: Boolean = false,
+    label: String = if (cumulative) "AI 累计用量" else "AI 用量",
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = color, style = MaterialTheme.typography.labelMedium)
-        Text(usage?.displayText() ?: "暂无用量记录", color = color, style = MaterialTheme.typography.bodyMedium)
+        Text(usage?.displayText(cumulative) ?: "暂无用量记录", color = color, style = MaterialTheme.typography.bodyMedium)
         if (generation != null) {
             Text("其中生成和补充课时：${generation.displayText()}",
                 color = color, style = MaterialTheme.typography.bodySmall)
@@ -81,7 +82,7 @@ internal fun AiUsageSummary(
     }
 }
 
-private fun UsageTotal.displayText(): String {
+internal fun UsageTotal.displayText(cumulative: Boolean = false): String {
     val count = NumberFormat.getIntegerInstance().format(tokens)
     val cost = costNanos?.let { nanos ->
         val yuan = BigDecimal.valueOf(nanos, 9).setScale(4, RoundingMode.HALF_UP)
@@ -89,6 +90,7 @@ private fun UsageTotal.displayText(): String {
     }
     return when {
         cost == null -> "$count Token · 暂无费用估算"
+        cumulative -> "$count Token · 预估费用 $cost"
         unpriced > 0 -> "$count Token · 已估 $cost（部分费用未知）"
         else -> "$count Token · 预估 $cost"
     }

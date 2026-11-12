@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -306,7 +307,14 @@ internal fun entryTint(entry: Entry): Color {
 }
 
 @Composable
-internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun SkillTreeCard(
+    tree: Entry,
+    progress: Progress,
+    latest: Boolean,
+    certificateIssued: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Surface(
         onClick = onClick, color = Panel, contentColor = Ink,
         shape = PanelShape, modifier = modifier.fillMaxWidth().panelShadow(),
@@ -318,7 +326,15 @@ internal fun SkillTreeCard(tree: Entry, progress: Progress, latest: Boolean, mod
             val tint = entryTint(tree)
             Emblem(tree.displayIcon.glyph, tint = tint, background = tint.copy(alpha = .12f), diameter = 44.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (latest) StudyBookmark()
+                if (latest || certificateIssued) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (latest) CourseBadge("上次学习")
+                        if (certificateIssued) CourseBadge("已领证书")
+                    }
+                }
                 Text(tree.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (progress.total > 0) SegmentedProgress(progress)
                 Text(
@@ -341,10 +357,10 @@ internal fun LibraryEmpty(title: String, glyph: Glyph) {
 private val Progress.label get() = "已完成 $lit / $total 节"
 
 @Composable
-private fun StudyBookmark() {
+private fun CourseBadge(label: String) {
     Surface(shape = CircleShape, color = GoldGround) {
         Text(
-            "上次学习", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
