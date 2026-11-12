@@ -14,6 +14,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
+private const val FIREWORK_LAUNCH_FRACTION = .22f
+
 private data class Firework(
     val center: Offset, val start: Float, val end: Float, val radius: Float, val color: Color, val rays: List<Offset>,
 )
@@ -25,6 +27,10 @@ private val fireworks = listOf(
     firework(.81f, .72f, .36f, .81f, .22f, Color(0xFFFFCB89)),
     firework(.55f, .16f, .53f, 1f, .27f, Color(0xFFA3F0D8)),
 )
+
+internal val fireworkBurstProgress = fireworks.map { burst ->
+    burst.start + (burst.end - burst.start) * FIREWORK_LAUNCH_FRACTION
+}
 
 private fun firework(x: Float, y: Float, start: Float, end: Float, radius: Float, color: Color): Firework {
     val random = Random((x * 1000).toInt())
@@ -53,7 +59,7 @@ internal fun CelebrationFireworks(modifier: Modifier, progress: () -> Float, opa
 private fun DrawScope.drawFirework(burst: Firework, phase: Float, opacity: Float) {
     val origin = Offset(size.width * burst.center.x, size.height * burst.center.y)
     val reach = size.minDimension * burst.radius
-    val launch = .22f
+    val launch = FIREWORK_LAUNCH_FRACTION
     if (phase < launch) {
         val rise = phase / launch
         val tip = origin + Offset(0f, reach * (1f - rise))

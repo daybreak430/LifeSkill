@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -53,6 +55,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 
@@ -60,6 +64,13 @@ internal const val MAP_UNLOCK_DELAY_MS = 200L
 internal const val MAP_UNLOCK_DURATION_MS = 1050
 internal const val MAP_LOCK_RELEASE_AT = .88f
 internal const val CELEBRATION_DURATION_MS = 3_000
+private const val BADGE_REVEAL_START = .025f
+
+private val celebrationHaptics = listOf(BADGE_REVEAL_START to HapticFeedbackType.Confirm) +
+    fireworkBurstProgress.mapIndexed { index, progress ->
+        progress to if (index == fireworkBurstProgress.lastIndex) HapticFeedbackType.SegmentTick
+        else HapticFeedbackType.SegmentFrequentTick
+    }
 
 private val CelebrationGold = Color(0xFFFFDEA0)
 private val CelebrationMint = Color(0xFFAFEAD1)
@@ -96,18 +107,30 @@ internal fun SkillCelebration(key: String, skill: Entry, onClose: () -> Unit) {
 }
 
 @Composable
-private fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
+internal fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
     var played by rememberSaveable(key) { mutableStateOf(false) }
     val clock = remember(key) { Animatable(if (played) 1f else 0f) }
     val showFireworks by remember(clock) { derivedStateOf { clock.value < 1f } }
     val exit = remember(key) { Animatable(0f) }
     var closing by remember(key) { mutableStateOf(false) }
     val close = rememberUpdatedState(onClose)
+    val haptics by rememberUpdatedState(LocalHapticFeedback.current)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(key) {
         // 同一次点亮在旋转屏幕后直接恢复徽章，避免重放整段烟花。
         if (!played) {
             played = true
-            clock.animateTo(1f, tween(CELEBRATION_DURATION_MS, easing = LinearEasing))
+            var nextCue = 0
+            clock.animateTo(1f, tween(CELEBRATION_DURATION_MS, easing = LinearEasing)) {
+                val before = nextCue
+                while (nextCue < celebrationHaptics.size && value >= celebrationHaptics[nextCue].first) nextCue++
+                // 动画跳帧只反馈最近一拍，直接跳到终帧或退出时不补发触感。
+                if (nextCue > before && value < 1f && !closing &&
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                ) {
+                    haptics.performHapticFeedback(celebrationHaptics[nextCue - 1].second)
+                }
+            }
         }
     }
     LaunchedEffect(key, closing) {
@@ -170,7 +193,7 @@ private fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) {
 private fun CelebrationBadge(icon: EntryIcon, progress: () -> Float) {
     Box(
         Modifier.size(116.dp).graphicsLayer {
-            val reveal = FastOutSlowInEasing.transform(motionPhase(progress(), .025f, .20f))
+            val reveal = FastOutSlowInEasing.transform(motionPhase(progress(), BADGE_REVEAL_START, .20f))
             val settle = FastOutSlowInEasing.transform(motionPhase(progress(), .20f, .34f))
             scaleX = .74f + .34f * reveal - .08f * settle
             scaleY = scaleX
