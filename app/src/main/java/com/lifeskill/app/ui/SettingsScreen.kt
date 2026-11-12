@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -20,10 +22,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -32,8 +38,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeskill.app.BuildConfig
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.AppearanceMode
+
+private const val LATEST_RELEASE_URL = "https://github.com/daybreak430/LifeSkill/releases/latest"
 
 @Composable
 internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
@@ -126,6 +135,46 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                     }
                 }
             }
+            AppVersionCard()
+        }
+    }
+}
+
+@Composable
+private fun AppVersionCard() {
+    val uriHandler = LocalUriHandler.current
+    var openFailed by remember { mutableStateOf(false) }
+    SettingsCard("关于 LifeSkill") {
+        Text("当前版本 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = Muted)
+        Surface(
+            onClick = {
+                openFailed = try {
+                    uriHandler.openUri(LATEST_RELEASE_URL)
+                    false
+                } catch (_: IllegalArgumentException) {
+                    true
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = ControlShape,
+            color = Ground,
+        ) {
+            Row(
+                Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("查看发布版本", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = Gold)
+                Mark(Glyph.NEXT, Gold, Modifier.size(16.dp))
+            }
+        }
+        if (openFailed) {
+            Text(
+                "无法打开发布页面，请确认设备上有可用的浏览器。",
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

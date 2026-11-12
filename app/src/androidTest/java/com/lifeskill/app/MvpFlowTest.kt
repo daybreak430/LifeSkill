@@ -1,6 +1,9 @@
 package com.lifeskill.app
 
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.os.PatternMatcher
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
@@ -85,6 +88,32 @@ import kotlin.math.abs
 class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
+
+    @Test fun settingsShowsInstalledVersionAndOpensLatestRelease() {
+        await("本职工作")
+        openSettings()
+        val context = ui.activity
+        val installedVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        val releaseAction = ui.onNode(hasText("查看发布版本") and hasClickAction())
+        releaseAction.performScrollTo().assertIsDisplayed().assertIsEnabled()
+        ui.onNodeWithText("当前版本 $installedVersion").assertIsDisplayed()
+
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val filter = IntentFilter(Intent.ACTION_VIEW).apply {
+            addDataScheme("https")
+            addDataAuthority("github.com", null)
+            addDataPath("/daybreak430/LifeSkill/releases/latest", PatternMatcher.PATTERN_LITERAL)
+        }
+        val monitor = instrumentation.addMonitor(filter, null, true)
+        try {
+            releaseAction.performTouchInput { click() }
+            ui.waitUntil(8_000) { monitor.hits == 1 }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
+        pressBack()
+        ui.onNodeWithTag("personal-home").assertIsDisplayed()
+    }
 
     @Test fun appearanceSelectionUpdatesSystemBarsAndSavesLocally() {
         val settings = AppearanceSettings(ui.activity.applicationContext)
