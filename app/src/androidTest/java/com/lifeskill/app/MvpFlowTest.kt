@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.PatternMatcher
+import android.provider.OpenableColumns
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
@@ -50,6 +51,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
+import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -85,6 +87,7 @@ import org.junit.runner.RunWith
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
@@ -92,7 +95,7 @@ class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
 
-    @Test fun exportsLessonAndCourseConversationsThroughTheSavePicker() {
+    @Test fun sharesLessonAndCourseConversationsThroughTheSystemChooser() {
         await("本职工作")
         val container = fixture.container
         val library = container.library
@@ -129,7 +132,7 @@ class MvpFlowTest {
             await("开始新一轮")
             ui.onNodeWithText("取消").performClick()
             ui.waitUntil(8_000) { ui.onAllNodesWithText("开始新一轮").fetchSemanticsNodes().isEmpty() }
-            val lessonDocument = exportConversationFromMenu()
+            val lessonDocument = shareConversationFromMenu("核对_来源-对话.md")
             assertTrue(lessonDocument.startsWith("# 核对/来源\n"))
             assertTrue(lessonDocument.contains("> ## 原始小标题\n>\n> ${fence}text\n> 来源 A\n> $fence"))
             assertTrue(lessonDocument.contains("> - A. 原始凭证\n> - B. 空白表"))
@@ -137,7 +140,7 @@ class MvpFlowTest {
 
             ui.onNodeWithContentDescription("返回").performClick()
             await("课程大纲")
-            val courseDocument = exportConversationFromMenu()
+            val courseDocument = shareConversationFromMenu("对话导出-对话.md")
             val firstSection = courseDocument.indexOf("## 核对/来源\n")
             val secondSection = courseDocument.indexOf("## 核对金额\n")
             assertTrue(courseDocument.startsWith("# 对话导出\n"))
@@ -1678,22 +1681,37 @@ class MvpFlowTest {
         fixture.container.library.snapshot().entries.single { it.name == name }.icon
     }
 
-    private fun exportConversationFromMenu(): String {
-        val destination = File.createTempFile("conversation-", ".md", ui.activity.cacheDir)
+    private fun shareConversationFromMenu(fileName: String): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val filter = IntentFilter(Intent.ACTION_CREATE_DOCUMENT).apply { addDataType("text/markdown") }
-        val result = Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(destination)))
-        val monitor = instrumentation.addMonitor(filter, result, true)
+        val openedChooser = AtomicReference<Intent>()
+        val monitor = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                if (intent.action != Intent.ACTION_CHOOSER) return null
+                openedChooser.set(intent)
+                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrumentation.addMonitor(monitor)
         try {
             ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
             ui.onNodeWithText("导出对话").performClick()
-            ui.waitUntil(8_000) { destination.length() > 0 }
-            await("对话已导出。")
-            assertEquals(1, monitor.hits)
-            return destination.readText(Charsets.UTF_8)
+            ui.waitUntil(8_000) { openedChooser.get() != null }
+            val chooser = checkNotNull(openedChooser.get())
+            val send = checkNotNull(IntentCompat.getParcelableExtra(chooser, Intent.EXTRA_INTENT, Intent::class.java))
+            val uri = checkNotNull(IntentCompat.getParcelableExtra(send, Intent.EXTRA_STREAM, Uri::class.java))
+            assertEquals(Intent.ACTION_SEND, send.action)
+            assertEquals("text/markdown", send.type)
+            assertEquals("content", uri.scheme)
+            assertEquals(uri, send.clipData?.getItemAt(0)?.uri)
+            assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, chooser.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val resolver = ui.activity.contentResolver
+            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null).use { cursor ->
+                assertTrue(cursor?.moveToFirst() == true)
+                assertEquals(fileName, checkNotNull(cursor).getString(0))
+            }
+            return checkNotNull(resolver.openInputStream(uri)).bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             instrumentation.removeMonitor(monitor)
-            destination.delete()
         }
     }
 

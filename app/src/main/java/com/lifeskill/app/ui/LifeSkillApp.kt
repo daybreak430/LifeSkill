@@ -1,8 +1,8 @@
 package com.lifeskill.app.ui
 
+import android.content.ClipData
+import android.content.Intent
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -92,11 +92,21 @@ internal fun LifeSkillApp(
     val usage by container.usage.summary.collectAsStateWithLifecycle(UsageSummary())
     val snackbar = remember { SnackbarHostState() }
     val stateHolder = rememberSaveableStateHolder()
-    val resolver = LocalContext.current.applicationContext.contentResolver
-    val exportDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) {
-        app.finishConversationExport(it, resolver)
+    val context = LocalContext.current
+    val conversationShare by app.conversationShare.collectAsStateWithLifecycle()
+    fun exportConversation(entryId: String) = app.prepareConversationShare(entryId, context.applicationContext)
+    LaunchedEffect(conversationShare) {
+        val uri = conversationShare ?: return@LaunchedEffect
+        app.openConversationShare(uri) {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/markdown"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri("对话 Markdown 文件", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(send, "分享对话"))
+        }
     }
-    fun exportConversation(entryId: String) = app.prepareConversationExport(entryId) { exportDocument.launch(it) }
 
     BackHandler(enabled = route.page != Page.HOME) { app.back() }
     LaunchedEffect(notice) {

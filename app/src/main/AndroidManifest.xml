@@ -10,6 +10,15 @@
         android:roundIcon="@mipmap/ic_lifeskill"
         android:theme="@style/Theme.LifeSkill"
         android:usesCleartextTraffic="false">
+        <provider
+            android:name=".data.ConversationShareProvider"
+            android:authorities="${applicationId}.conversation-share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/conversation_share_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
