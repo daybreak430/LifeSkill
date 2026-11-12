@@ -1,6 +1,8 @@
 package com.lifeskill.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -89,6 +92,11 @@ internal fun LifeSkillApp(
     val usage by container.usage.summary.collectAsStateWithLifecycle(UsageSummary())
     val snackbar = remember { SnackbarHostState() }
     val stateHolder = rememberSaveableStateHolder()
+    val resolver = LocalContext.current.applicationContext.contentResolver
+    val exportDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) {
+        app.finishConversationExport(it, resolver)
+    }
+    fun exportConversation(entryId: String) = app.prepareConversationExport(entryId) { exportDocument.launch(it) }
 
     BackHandler(enabled = route.page != Page.HOME) { app.back() }
     LaunchedEffect(notice) {
@@ -177,7 +185,8 @@ internal fun LifeSkillApp(
                                     Page.TREE -> entry?.let {
                                         val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
                                         SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition,
-                                            assessments[it.id] ?: TreeAssessmentSummary(), usage.courses[it.id], usage.generation[it.id])
+                                            assessments[it.id] ?: TreeAssessmentSummary(), usage.courses[it.id], usage.generation[it.id],
+                                            onExportConversation = { exportConversation(it.id) })
                                     }
                                     Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app, usage.lessons[it.id]) }
                                     Page.SETTINGS -> {
@@ -191,7 +200,9 @@ internal fun LifeSkillApp(
                                     Page.GENERATE, Page.TUTOR -> {
                                         val mode = if (displayedRoute.page == Page.GENERATE) ChatMode.GENERATE else ChatMode.TUTOR
                                         val scope = ChatScope(mode, displayedRoute.id)
-                                        ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active)
+                                        val onExport = scope.ownerId?.takeIf { mode == ChatMode.TUTOR }
+                                            ?.let { id -> { exportConversation(id) } }
+                                        ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active, onExport)
                                     }
                                     Page.EXAM -> entry?.let {
                                         ExamScreen(it, displayedLibrary.examAvailable(it.id), app,

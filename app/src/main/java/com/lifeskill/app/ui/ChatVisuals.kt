@@ -45,7 +45,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun AiChatHeader(
     title: String, subtitle: String?, onBack: () -> Unit,
-    onRestart: (() -> Unit)?, restartEnabled: Boolean, onClearConversation: (() -> Unit)?,
+    onRestart: (() -> Unit)?, restartEnabled: Boolean, onExportConversation: (() -> Unit)?,
+    onClearConversation: (() -> Unit)?,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -61,10 +62,7 @@ internal fun AiChatHeader(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
-        if (onRestart != null) {
-            GlyphButton(Glyph.RESTART, "重新学习", onRestart, enabled = restartEnabled, background = aiColors.panel)
-        }
-        if (onClearConversation != null) {
+        if (onRestart != null || onExportConversation != null || onClearConversation != null) {
             var expanded by remember { mutableStateOf(false) }
             Box {
                 GlyphButton(Glyph.MORE, "更多操作", { expanded = true }, background = aiColors.panel)
@@ -72,10 +70,24 @@ internal fun AiChatHeader(
                     expanded = expanded, onDismissRequest = { expanded = false },
                     shape = ControlShape, containerColor = Panel,
                 ) {
-                    DropdownMenuItem(text = { Text("清空当前会话") }, onClick = {
-                        expanded = false
-                        onClearConversation()
-                    })
+                    if (onExportConversation != null) {
+                        DropdownMenuItem(text = { Text("导出对话") }, onClick = {
+                            expanded = false
+                            onExportConversation()
+                        })
+                    }
+                    if (onRestart != null) {
+                        DropdownMenuItem(text = { Text("重新学习") }, enabled = restartEnabled, onClick = {
+                            expanded = false
+                            onRestart()
+                        })
+                    }
+                    if (onClearConversation != null) {
+                        DropdownMenuItem(text = { Text("清空当前会话") }, onClick = {
+                            expanded = false
+                            onClearConversation()
+                        })
+                    }
                 }
             }
         }

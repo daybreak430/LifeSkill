@@ -7,6 +7,7 @@ import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.ConversationExport
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Exercise
@@ -14,6 +15,7 @@ import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.GenerationPreview
+import com.lifeskill.app.model.LessonTranscript
 import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.SkippedPrerequisiteTier
@@ -22,6 +24,7 @@ import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.conversationExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -43,6 +46,27 @@ internal class ConversationRepository(
     fun watch(scope: ChatScope) = dao.watchTurns(scope.id)
         .map { turns -> turns.map { it.toTurn() } }
         .flowOn(Dispatchers.IO)
+
+    suspend fun exportConversation(entryId: String): ConversationExport = withContext(Dispatchers.IO) {
+        val (entry, lessons, turns) = database.withTransaction {
+            // 标题、课时顺序和消息取自同一份数据库快照，避免导出时的编辑打乱分节。
+            val snapshot = library.snapshot()
+            val entry = snapshot.byId[entryId] ?: throw RuleViolation("课程或课时已删除。")
+            val lessons = when (entry.kind) {
+                EntryKind.SKILL -> listOf(entry)
+                EntryKind.TREE -> snapshot.childrenOf(entry.id)
+                EntryKind.DIRECTION -> throw RuleViolation("请在课程或课时内导出对话。")
+            }
+            Triple(entry, lessons, dao.tutorTurnsForExport(entry.id).groupBy(TurnRow::chatId))
+        }
+        val transcripts = lessons.mapNotNull { lesson ->
+            turns[ChatScope(ChatMode.TUTOR, lesson.id).id]?.let { rows ->
+                LessonTranscript(lesson.name, rows.map { it.toTurn() })
+            }
+        }
+        if (transcripts.isEmpty()) throw RuleViolation("暂无对话可导出。")
+        conversationExport(entry, transcripts)
+    }
 
     suspend fun send(
         scope: ChatScope, text: String, check: Boolean = false, onRequestQueued: (String) -> Unit = {},

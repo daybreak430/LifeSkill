@@ -79,7 +79,7 @@ import kotlin.math.abs
 internal fun SkillTreeScreen(
     tree: Entry, library: Library, latestStudySkillId: String?, app: AppViewModel,
     unlock: SkillUnlock?, active: Boolean, addedEntryId: String?, assessment: TreeAssessmentSummary,
-    usage: UsageTotal?, generationUsage: UsageTotal?,
+    usage: UsageTotal?, generationUsage: UsageTotal?, onExportConversation: () -> Unit,
 ) {
     val skills = library.childrenOf(tree.id)
     val progress = library.progress(tree.id)
@@ -97,7 +97,7 @@ internal fun SkillTreeScreen(
                 library.byId[tree.parentId]?.name.orEmpty(), Modifier.weight(1f).padding(start = 8.dp),
                 style = MaterialTheme.typography.labelLarge, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            EntryUsageMenu(tree, app, usage, generationUsage)
+            EntryUsageMenu(tree, app, usage, generationUsage, onExportConversation)
         }
         Text(
             tree.name, Modifier.padding(horizontal = 20.dp), style = LibraryTitle,

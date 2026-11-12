@@ -1,5 +1,7 @@
 package com.lifeskill.app.ui
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +16,7 @@ import com.lifeskill.app.data.AppearanceMode
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.ConversationExport
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
@@ -42,6 +45,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.IOException
+
+private const val EXPORT_ENTRY_KEY = "conversationExportEntryId"
 
 internal enum class Page {
     HOME, ME, PROFILE_EDIT, DIRECTION, TREE, SKILL, GENERATE, TUTOR, SETTINGS, EXAM, DIAGNOSTIC, FEYNMAN,
@@ -106,6 +112,8 @@ internal class AppViewModel(
     val deleting = _deleting.asStateFlow()
     private val _notice = MutableStateFlow<String?>(null)
     val notice = _notice.asStateFlow()
+    private var exportJob: Job? = null
+    private var pendingExport: ConversationExport? = null
     private val _loadError = MutableStateFlow<String?>(null)
     val loadError = _loadError.asStateFlow()
     private val _unlocks = MutableStateFlow<List<SkillUnlock>>(emptyList())
@@ -286,6 +294,42 @@ internal class AppViewModel(
 
     fun consumeNotice(text: String) {
         if (_notice.value == text) _notice.value = null
+    }
+
+    fun prepareConversationExport(entryId: String, chooseDestination: (String) -> Unit) {
+        if (exportJob?.isActive == true || state.get<String>(EXPORT_ENTRY_KEY) != null) return
+        exportJob = viewModelScope.launch {
+            try {
+                val document = container.conversations.exportConversation(entryId)
+                // 状态里只保存来源标识，旋转保留内存快照，进程恢复后按来源重新读取。
+                pendingExport = document
+                state[EXPORT_ENTRY_KEY] = entryId
+                chooseDestination(document.fileName)
+            } catch (error: Exception) {
+                pendingExport = null
+                state.remove<String>(EXPORT_ENTRY_KEY)
+                _notice.value = readable(error, "无法开始导出，请重试。")
+            }
+        }
+    }
+
+    fun finishConversationExport(destination: Uri?, resolver: ContentResolver) {
+        val entryId = state.remove<String>(EXPORT_ENTRY_KEY) ?: return
+        val prepared = pendingExport
+        pendingExport = null
+        if (destination == null) return
+        exportJob = viewModelScope.launch {
+            try {
+                val document = prepared ?: container.conversations.exportConversation(entryId)
+                withContext(Dispatchers.IO) {
+                    val output = resolver.openOutputStream(destination, "wt") ?: throw IOException()
+                    output.bufferedWriter(Charsets.UTF_8).use { it.write(document.markdown) }
+                }
+                _notice.value = "对话已导出。"
+            } catch (error: Exception) {
+                _notice.value = readable(error, "无法保存对话文件，请重试。")
+            }
+        }
     }
 }
 

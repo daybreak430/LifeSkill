@@ -32,9 +32,12 @@ import java.text.NumberFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EntryUsageMenu(entry: Entry, app: AppViewModel, usage: UsageTotal?, generation: UsageTotal? = null) {
+internal fun EntryUsageMenu(
+    entry: Entry, app: AppViewModel, usage: UsageTotal?, generation: UsageTotal? = null,
+    onExportConversation: (() -> Unit)? = null,
+) {
     var showingUsage by rememberSaveable(entry.id) { mutableStateOf(false) }
-    EntryMenu(entry, app, onShowUsage = { showingUsage = true })
+    EntryMenu(entry, app, onShowUsage = { showingUsage = true }, onExportConversation = onExportConversation)
     if (showingUsage) {
         ModalBottomSheet(
             onDismissRequest = { showingUsage = false },

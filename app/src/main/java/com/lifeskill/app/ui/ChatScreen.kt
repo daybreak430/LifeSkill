@@ -73,7 +73,10 @@ private const val CHAT_STATUS = "chat-status"
 private val creationCount = Regex("""([0-9]+) (?:个(方向|技能点)|棵(技能树)|门(课程)|节(课))""")
 
 @Composable
-internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean) {
+internal fun ChatScreen(
+    scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean,
+    onExportConversation: (() -> Unit)?,
+) {
     val timeline by chat.history.collectAsStateWithLifecycle()
     val history = timeline.turns
     val status by chat.status.collectAsStateWithLifecycle()
@@ -175,6 +178,10 @@ internal fun ChatScreen(scope: ChatScope, library: Library, app: AppViewModel, c
             }, owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
             restartEnabled = !status.working,
+            onExportConversation = onExportConversation?.let { export -> {
+                keyboard?.hide()
+                export()
+            } },
             onClearConversation = if (!tutor) ({
                 keyboard?.hide()
                 showClearConversation = true

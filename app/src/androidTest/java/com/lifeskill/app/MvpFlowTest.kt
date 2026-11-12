@@ -1,8 +1,11 @@
 package com.lifeskill.app
 
+import android.app.Activity
+import android.app.Instrumentation
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.PatternMatcher
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Offset
@@ -88,6 +91,64 @@ import kotlin.math.abs
 class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
+
+    @Test fun exportsLessonAndCourseConversationsThroughTheSavePicker() {
+        await("本职工作")
+        val container = fixture.container
+        val library = container.library
+        val (tree, first, second) = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first()
+            val tree = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "对话导出"))
+            val first = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对/来源", "找出资料来源"))
+            val second = library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "核对金额", "查找原始金额"))
+            library.save(EntryEdit(null, tree.id, EntryKind.SKILL, "未学习课时", "阅读凭证"))
+            Triple(tree, first, second)
+        }
+        try {
+            val fence = "```"
+            val markdown = "## 原始小标题\n\n${fence}text\n来源 A\n$fence"
+            runBlocking {
+                fixture.ai.reply("""{"kind":"teach","reply":"第二节内容。"}""")
+                container.conversations.send(ChatScope(ChatMode.TUTOR, second.id), "第二节提问")
+                val lesson = ChatScope(ChatMode.TUTOR, first.id)
+                fixture.ai.reply("""{"kind":"offer_check","reply":"可以做练习。"}""")
+                container.conversations.send(lesson, "第一节提问")
+                fixture.ai.reply("""{"kind":"exercise","question":"查哪份材料？","choices":["原始凭证","空白表"]}""")
+                container.conversations.send(lesson, "", check = true)
+                fixture.ai.reply(JSONObject().put("kind", "off_topic").put("reply", "回到本节。").toString())
+                container.conversations.send(lesson, "先复习")
+                fixture.ai.reply(JSONObject().put("kind", "teach").put("reply", markdown).toString())
+                container.conversations.send(lesson, "请展示格式")
+                assertEquals("核对_来源-对话.md", container.conversations.exportConversation(first.id).fileName)
+            }
+            await("继续学习")
+            ui.onNodeWithText("继续学习").performTouchInput { click() }
+            await("AI 老师")
+            ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+            ui.onNodeWithText("重新学习").assertIsDisplayed().performClick()
+            await("开始新一轮")
+            ui.onNodeWithText("取消").performClick()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("开始新一轮").fetchSemanticsNodes().isEmpty() }
+            val lessonDocument = exportConversationFromMenu()
+            assertTrue(lessonDocument.startsWith("# 核对/来源\n"))
+            assertTrue(lessonDocument.contains("> ## 原始小标题\n>\n> ${fence}text\n> 来源 A\n> $fence"))
+            assertTrue(lessonDocument.contains("> - A. 原始凭证\n> - B. 空白表"))
+            assertTrue(!lessonDocument.contains("第二节提问"))
+
+            ui.onNodeWithContentDescription("返回").performClick()
+            await("课程大纲")
+            val courseDocument = exportConversationFromMenu()
+            val firstSection = courseDocument.indexOf("## 核对/来源\n")
+            val secondSection = courseDocument.indexOf("## 核对金额\n")
+            assertTrue(courseDocument.startsWith("# 对话导出\n"))
+            assertTrue(firstSection > 0 && secondSection > firstSection)
+            assertTrue(courseDocument.substring(firstSection, secondSection).contains("第一节提问"))
+            assertTrue(courseDocument.substring(secondSection).contains("第二节提问"))
+            assertTrue(!courseDocument.contains("未学习课时"))
+        } finally {
+            runBlocking { library.delete(tree.id) }
+        }
+    }
 
     @Test fun settingsShowsInstalledVersionAndOpensReleaseList() {
         await("本职工作")
@@ -1590,7 +1651,8 @@ class MvpFlowTest {
             assertTrue(messages.last().text.contains("改用账单举例"))
             """{"kind":"teach","reply":"从核对账单开始讲。"}"""
         }
-        ui.onNodeWithContentDescription("重新学习").performTouchInput { click() }
+        ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+        ui.onNodeWithText("重新学习").performClick()
         await("开始新一轮")
         await("将删除本节的旧学习对话，无法恢复。已完成的进度会保留。")
         ui.onNodeWithTag("restart-requirements").performTextInput("改用账单举例")
@@ -1601,7 +1663,8 @@ class MvpFlowTest {
         examReply.assertDoesNotExist()
         ui.onNodeWithText("练习通过", substring = true).assertDoesNotExist()
         masteryCheck.assertDoesNotExist()
-        ui.onNodeWithContentDescription("重新学习").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+        ui.onNodeWithText("重新学习").performClick()
         await("开始新一轮")
         ui.onNodeWithText("取消").performClick()
         await("从核对账单开始讲。")
@@ -1613,6 +1676,25 @@ class MvpFlowTest {
 
     private fun iconOf(name: String): EntryIcon? = runBlocking {
         fixture.container.library.snapshot().entries.single { it.name == name }.icon
+    }
+
+    private fun exportConversationFromMenu(): String {
+        val destination = File.createTempFile("conversation-", ".md", ui.activity.cacheDir)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val filter = IntentFilter(Intent.ACTION_CREATE_DOCUMENT).apply { addDataType("text/markdown") }
+        val result = Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(destination)))
+        val monitor = instrumentation.addMonitor(filter, result, true)
+        try {
+            ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
+            ui.onNodeWithText("导出对话").performClick()
+            ui.waitUntil(8_000) { destination.length() > 0 }
+            await("对话已导出。")
+            assertEquals(1, monitor.hits)
+            return destination.readText(Charsets.UTF_8)
+        } finally {
+            instrumentation.removeMonitor(monitor)
+            destination.delete()
+        }
     }
 
     private fun send(text: String) {
