@@ -900,7 +900,7 @@ class RepositoryTest {
         Unit
     }
 
-    @Test fun importsDocumentTextAndRoutesImageToVisionOrLocalOcr() = runBlocking {
+    @Test fun importsDocumentTextAndRoutesImagesToBothVisionModels() = runBlocking {
         val directory = File(context.cacheDir, "conversation-shares/${UUID.randomUUID()}").apply { mkdirs() }
         fun uri(file: File) = FileProvider.getUriForFile(context, "${context.packageName}.conversation-share", file)
         try {
@@ -947,10 +947,19 @@ class RepositoryTest {
                 TREE_OFFER
             }
             container.conversations.send(scope, "", files = listOf(draft))
-            val ocr = container.attachments.addToMessage(scope.id, ModelMessage("user", ""), listOf(draft.attachment),
+            val miniMax = container.attachments.addToMessage(scope.id, ModelMessage("user", ""), listOf(draft.attachment),
                 ModelSettings(Provider.MINIMAX), required = true)
-            assertTrue(ocr.images.isEmpty())
-            assertTrue(ocr.text.contains("READ THE INVOICE"))
+            assertTrue(miniMax.images.single().startsWith("data:image/jpeg;base64,"))
+
+            val custom = ModelSettings(Provider.CUSTOM, "https://example.com/v1", "custom-model", "test-key")
+            container.settings.save(custom)
+            val message = ModelMessage("user", "按刚才的说明继续")
+            val history = container.attachments.addToMessage(scope.id, message, listOf(draft.attachment),
+                custom, required = false)
+            assertEquals(message, history)
+            val saved = container.conversations.watch(scope).first()
+            expectRule { container.conversations.send(scope, "", files = listOf(draft)) }
+            assertEquals(saved, container.conversations.watch(scope).first())
         } finally {
             directory.deleteRecursively()
         }

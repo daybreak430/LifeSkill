@@ -55,6 +55,25 @@ class AiGatewayTest {
         assertTrue(connection.disconnected)
     }
 
+    @Test fun sendsImagesAsMultimodalContentForBothPresets() = runBlocking {
+        val image = "data:image/jpeg;base64,c2FtcGxl"
+        for (provider in listOf(Provider.DEEPSEEK, Provider.MINIMAX)) {
+            val connection = Response(body = """{"choices":[{"message":{"content":"收到图片"}}]}""")
+            val gateway = OpenAiGateway { endpoint ->
+                assertEquals("${provider.baseUrl}/chat/completions", endpoint.toString())
+                connection
+            }
+            val settings = ModelSettings(provider, apiKey = "test-key")
+            val messages = listOf(ModelMessage("user", "请解读图片", listOf(image)))
+            assertEquals("收到图片", gateway.complete(settings, messages, structured = true))
+            val request = JSONObject(connection.written.toByteArray().decodeToString())
+            val content = request.getJSONArray("messages").getJSONObject(0).getJSONArray("content")
+            assertEquals("请解读图片", content.getJSONObject(0).getString("text"))
+            assertEquals("image_url", content.getJSONObject(1).getString("type"))
+            assertEquals(image, content.getJSONObject(1).getJSONObject("image_url").getString("url"))
+        }
+    }
+
     @Test fun readsDeepSeekBalanceFromTheDedicatedEndpoint() = runBlocking {
         val connection = Response(
             body = """{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"110.00","granted_balance":"10.00","topped_up_balance":"100.00"}]}""",

@@ -12,8 +12,8 @@ android {
         applicationId = "com.lifeskill.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 76
-        versionName = "0.14.18"
+        versionCode = 77
+        versionName = "0.14.19"
         testInstrumentationRunner = "com.lifeskill.app.LifeSkillTestRunner"
     }
 
@@ -50,7 +50,6 @@ dependencies {
     implementation("org.commonmark:commonmark:0.32.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.32.0")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     ksp("androidx.room:room-compiler:2.8.5")
 
     testImplementation("junit:junit:4.13.2")

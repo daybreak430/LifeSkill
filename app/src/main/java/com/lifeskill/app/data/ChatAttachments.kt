@@ -9,9 +9,6 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.util.Xml
 import androidx.exifinterface.media.ExifInterface
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.model.CHAT_ATTACHMENT_BYTES
@@ -22,9 +19,8 @@ import com.lifeskill.app.model.RuleViolation
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,8 +28,8 @@ import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+
+internal const val IMAGE_ATTACHMENT_MODEL_REQUIRED = "请在模型设置中选择 DeepSeek 或 MiniMax 后发送图片。"
 
 internal data class AttachmentDraft(val attachment: ChatAttachment, val bytes: ByteArray, val text: String? = null)
 
@@ -112,7 +108,12 @@ internal class ChatAttachments(
         val textPerFile = CHAT_ATTACHMENT_TEXT_LIMIT / attachments.size
         for (attachment in attachments) {
             val material = JSONObject().put("name", attachment.name)
-            if (attachment.isImage && config.supportsImages) {
+            if (attachment.isImage) {
+                // 切换到纯文本模型后，跳过历史图片，仍可继续对话和读取同一条消息里的文档。
+                if (!config.supportsImages) {
+                    if (required) throw RuleViolation(IMAGE_ATTACHMENT_MODEL_REQUIRED)
+                    continue
+                }
                 val draft = load(chatId, attachment)
                 val bitmap = attachmentBitmap(draft.bytes, 1800) ?: throw RuleViolation("无法读取图片「${attachment.name}」。")
                 val data = ByteArrayOutputStream()
@@ -125,22 +126,18 @@ internal class ChatAttachments(
                 }
                 images += "data:image/jpeg;base64," + Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP)
             } else {
-                val content = if (attachment.isImage) {
-                    try {
-                        recognize(load(chatId, attachment).bytes).take(CHAT_ATTACHMENT_TEXT_LIMIT)
-                    } catch (error: RuleViolation) {
-                        if (required) throw error
-                        ""
-                    }
-                } else readText(chatId, attachment.id).orEmpty()
+                val content = readText(chatId, attachment.id).orEmpty()
                 if (content.isBlank() && required) {
-                    throw RuleViolation("未能从「${attachment.name}」识别文字。可用 DeepSeek Flash 直接读图，或换一张清晰图片。")
+                    throw RuleViolation("未能读取「${attachment.name}」的正文，请重新添加文件。")
                 }
                 val excerpt = content.take(textPerFile)
                 material.put("text", excerpt)
                 if (excerpt.length < content.length) material.put("partial", true)
             }
             materials.put(material)
+        }
+        if (materials.length() == 0) {
+            return@withContext message.copy(text = message.text.ifBlank { "（这条历史消息的图片无法由当前模型读取。）" })
         }
         val prompt = message.text.ifBlank { "请结合我发送的附件继续当前任务。" }
         message.copy(
@@ -164,19 +161,6 @@ internal class ChatAttachments(
                 if (text.length >= CHAT_ATTACHMENT_TEXT_LIMIT) break
             }
             text.trim().take(CHAT_ATTACHMENT_TEXT_LIMIT).toString()
-        }
-    }
-
-    private suspend fun recognize(bytes: ByteArray): String {
-        val bitmap = attachmentBitmap(bytes, 2000) ?: return ""
-        val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-        return suspendCancellableCoroutine { continuation ->
-            recognizer.process(InputImage.fromBitmap(bitmap, 0)).addOnCompleteListener { task ->
-                recognizer.close()
-                bitmap.recycle()
-                if (task.isSuccessful) continuation.resume(task.result.text)
-                else continuation.resumeWithException(RuleViolation("本机文字识别失败，请重新选择图片。"))
-            }
         }
     }
 

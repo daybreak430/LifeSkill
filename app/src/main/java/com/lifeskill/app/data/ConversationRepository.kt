@@ -86,6 +86,9 @@ internal class ConversationRepository(
             throw RuleViolation("请输入内容或添加附件。文字最多 ${INPUT_LIMIT} 个字符。")
         }
         if (files.size > CHAT_ATTACHMENT_LIMIT || check && files.isNotEmpty()) throw RuleViolation("本次无法添加这些附件。")
+        if (files.any { it.attachment.isImage } && !withContext(Dispatchers.IO) { settings.active().supportsImages }) {
+            throw RuleViolation(IMAGE_ATTACHMENT_MODEL_REQUIRED)
+        }
         val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
         queueAndRespond(
             scope, kind, if (check && input != TutorRules.EXAM_REPLY) "开始课后练习" else input,
