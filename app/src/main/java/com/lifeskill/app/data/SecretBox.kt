@@ -28,19 +28,23 @@ internal class SecretBox(private val alias: String) {
             }.generateKey()
     }
 
-    fun seal(value: String, purpose: String): String {
+    fun seal(value: String, purpose: String): String =
+        Base64.encodeToString(sealBytes(value.toByteArray(), purpose), Base64.NO_WRAP)
+
+    fun sealBytes(value: ByteArray, purpose: String): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key)
         cipher.updateAAD(purpose.toByteArray())
-        return Base64.encodeToString(cipher.iv + cipher.doFinal(value.toByteArray()), Base64.NO_WRAP)
+        return cipher.iv + cipher.doFinal(value)
     }
 
-    fun open(value: String, purpose: String): String {
-        val bytes = Base64.decode(value, Base64.NO_WRAP)
+    fun open(value: String, purpose: String): String = openBytes(Base64.decode(value, Base64.NO_WRAP), purpose).decodeToString()
+
+    fun openBytes(bytes: ByteArray, purpose: String): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, bytes, 0, NONCE_LENGTH))
         cipher.updateAAD(purpose.toByteArray())
-        return cipher.doFinal(bytes, NONCE_LENGTH, bytes.size - NONCE_LENGTH).decodeToString()
+        return cipher.doFinal(bytes, NONCE_LENGTH, bytes.size - NONCE_LENGTH)
     }
 
     private companion object {

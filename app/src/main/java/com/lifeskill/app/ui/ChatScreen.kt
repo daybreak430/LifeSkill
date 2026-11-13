@@ -1,5 +1,6 @@
 package com.lifeskill.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -57,6 +59,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
+import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
@@ -83,6 +87,10 @@ internal fun ChatScreen(
     val status by chat.status.collectAsStateWithLifecycle()
     val webSearchAvailable by chat.webSearchAvailable.collectAsStateWithLifecycle()
     val editor by app.editor.collectAsStateWithLifecycle()
+    val attachmentDrafts by chat.attachmentDrafts.collectAsStateWithLifecycle()
+    val attachmentStatus by chat.attachmentStatus.collectAsStateWithLifecycle()
+    var attachmentsExpanded by rememberSaveable(scope.id) { mutableStateOf(false) }
+    var attachmentPreview by remember(scope) { mutableStateOf<ChatAttachment?>(null) }
     val owner = library.byId[scope.ownerId]
     val tutor = scope.mode == ChatMode.TUTOR
     val locked = tutor && owner != null && library.skillState(owner.id) == SkillState.LOCKED
@@ -113,6 +121,7 @@ internal fun ChatScreen(
     var selectedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
     val exceedsLimit = draft.trim().length > ConversationRepository.INPUT_LIMIT
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     val listState = rememberLazyListState()
     var historyPositionInitialized by rememberSaveable { mutableStateOf(false) }
     var lastSeenMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -125,11 +134,17 @@ internal fun ChatScreen(
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
     val footerVisible = !status.clearing && !settled &&
         (pending != null || statusMatches && (status.working || status.error != null))
-    val canSend = timeline.loaded && webSearchAvailable != null && !status.working && pending == null
+    val canSend = timeline.loaded && webSearchAvailable != null && !status.working && pending == null && !attachmentStatus.loading
+    BackHandler(pageActive && attachmentsExpanded) { attachmentsExpanded = false }
 
     fun submit(text: String, check: Boolean = false, search: Boolean = false) {
         keyboard?.hide()
         chat.send(text, check, search)
+    }
+
+    fun previewAttachment(item: ChatAttachment) {
+        keyboard?.hide()
+        attachmentPreview = item
     }
 
     LaunchedEffect(pageActive) {
@@ -251,7 +266,8 @@ internal fun ChatScreen(
                                 style = MaterialTheme.typography.labelMedium, color = Muted)
                         }
                     }
-                    ChatBubble(
+                    ChatAttachmentStrip(turn.attachments, chat::loadAttachment, ::previewAttachment)
+                    if (turn.text.isNotEmpty() || turn.attachments.isEmpty()) ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
                         choices = choices,
@@ -300,8 +316,8 @@ internal fun ChatScreen(
                 item(key = CHAT_STATUS) {
                     // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
                     ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry) { turn ->
-                        if (turn.kind == TurnKind.MESSAGE) draft = turn.text
-                        chat.discard(turn)
+                        if (turn.kind == TurnKind.MESSAGE) chat.editPending(turn) { draft = turn.text }
+                        else chat.discard(turn)
                     }
                 }
             }
@@ -323,18 +339,38 @@ internal fun ChatScreen(
                 )
             }
             AiComposer(
-                draft, { draft = it }, if (tutor) "输入学习问题" else "描述你想学什么", enabled = canSend,
+                draft, { draft = it; attachmentsExpanded = false },
+                if (tutor) "输入学习问题" else "描述你想学什么", enabled = canSend && !locked,
                 errorText = if (exceedsLimit) "每条消息最多 ${ConversationRepository.INPUT_LIMIT} 个字符" else null,
-                sendEnabled = draft.isNotBlank() && !exceedsLimit && canSend,
+                sendEnabled = (draft.isNotBlank() || attachmentDrafts.isNotEmpty()) && !exceedsLimit && canSend && !locked,
                 webSearch = webSearch.takeIf { showWebSearch },
                 onToggleSearch = { webSearch = !webSearch },
                 onSend = {
-                    submit(draft, search = showWebSearch && webSearch)
-                    draft = ""
+                    keyboard?.hide()
+                    attachmentsExpanded = false
+                    chat.send(draft, webSearch = showWebSearch && webSearch, includeAttachments = true) { draft = "" }
+                },
+                attachmentsExpanded = attachmentsExpanded,
+                attachEnabled = canSend && !locked && (attachmentsExpanded || attachmentDrafts.size < CHAT_ATTACHMENT_LIMIT),
+                onToggleAttachments = {
+                    if (!attachmentsExpanded) {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                    }
+                    attachmentsExpanded = !attachmentsExpanded
+                },
+                attachmentStrip = {
+                    ChatAttachmentStrip(attachmentDrafts.map { it.attachment }, chat::loadAttachment, ::previewAttachment,
+                        onRemove = { chat.removeAttachment(it.id) })
                 },
             )
+            ChatAttachmentSources(chat, attachmentsExpanded, { attachmentsExpanded = false }, canSend && !locked)
+            val attachmentMessage = if (attachmentStatus.loading) "正在读取附件…" else attachmentStatus.message
+            attachmentMessage?.let { Text(it, Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                color = Muted, style = MaterialTheme.typography.bodySmall) }
         }
     }
+    if (pageActive) attachmentPreview?.let { ChatAttachmentPreview(it, chat) { attachmentPreview = null } }
     if (pageActive && owner != null) {
         celebration?.let { id ->
             SkillCelebration(id, owner) {
@@ -356,6 +392,8 @@ internal fun ChatScreen(
                 showRestart = false
                 keyboard?.hide()
                 chat.restartLesson(requirements, webSearch = supportsWebSearch && webSearch)
+                chat.clearAttachments()
+                attachmentsExpanded = false
                 draft = ""
             },
         )
@@ -366,6 +404,8 @@ internal fun ChatScreen(
             onConfirm = {
                 showClearConversation = false
                 draft = ""
+                chat.clearAttachments()
+                attachmentsExpanded = false
                 selectedDraftId = null
                 selectedOfferId = null
                 openedDraftId = latestDraft?.id ?: openedDraftId

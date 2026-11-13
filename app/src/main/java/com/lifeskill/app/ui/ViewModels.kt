@@ -12,10 +12,13 @@ import com.lifeskill.app.ai.DeepSeekBalance
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.data.EntryEdit
+import com.lifeskill.app.data.AttachmentDraft
 import com.lifeskill.app.data.AppearanceMode
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.data.cacheConversationShare
 import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
+import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
@@ -333,6 +336,12 @@ internal data class ChatHistory(
 
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
+    private val attachmentStore = container.attachments
+    private val _attachmentDrafts = MutableStateFlow<List<AttachmentDraft>>(emptyList())
+    val attachmentDrafts = _attachmentDrafts.asStateFlow()
+    private val _attachmentStatus = MutableStateFlow(AttachmentStatus())
+    val attachmentStatus = _attachmentStatus.asStateFlow()
+    private var importingAttachments: Job? = null
     private val settings = container.settings
     private val _status = MutableStateFlow(ChatStatus())
     private val _webSearchAvailable = MutableStateFlow<Boolean?>(null)
@@ -362,8 +371,57 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         }
     }
 
-    fun send(text: String, check: Boolean = false, webSearch: Boolean = false) = runQueued { onQueued ->
-        repository.send(scope, text, check, webSearch, onQueued)
+    fun addAttachments(uris: List<Uri>, camera: Boolean = false, onFinished: () -> Unit = {}) {
+        if (uris.isEmpty() || _attachmentStatus.value.loading) {
+            onFinished()
+            return
+        }
+        val slots = CHAT_ATTACHMENT_LIMIT - _attachmentDrafts.value.size
+        _attachmentStatus.value = AttachmentStatus(loading = true)
+        importingAttachments = viewModelScope.launch {
+            try {
+                var notice = "每条消息最多添加 ${CHAT_ATTACHMENT_LIMIT} 个附件。".takeIf { uris.size > slots }
+                for (uri in uris.take(slots)) {
+                    try {
+                        _attachmentDrafts.value += attachmentStore.import(uri, camera)
+                    } catch (error: Exception) {
+                        notice = readable(error, "无法读取附件。")
+                    }
+                }
+                _attachmentStatus.value = AttachmentStatus(message = notice)
+            } finally {
+                onFinished()
+            }
+        }
+    }
+
+    fun removeAttachment(id: String) {
+        _attachmentDrafts.value = _attachmentDrafts.value.filterNot { it.attachment.id == id }
+        _attachmentStatus.value = _attachmentStatus.value.copy(message = null)
+    }
+
+    fun showAttachmentMessage(message: String) {
+        _attachmentStatus.value = _attachmentStatus.value.copy(message = message)
+    }
+
+    fun clearAttachments() {
+        importingAttachments?.cancel()
+        _attachmentDrafts.value = emptyList()
+        _attachmentStatus.value = AttachmentStatus()
+    }
+
+    suspend fun loadAttachment(attachment: ChatAttachment): AttachmentDraft =
+        _attachmentDrafts.value.firstOrNull { it.attachment.id == attachment.id } ?: attachmentStore.load(scope.id, attachment)
+
+    fun send(text: String, check: Boolean = false, webSearch: Boolean = false,
+        includeAttachments: Boolean = false, onSent: () -> Unit = {},
+    ) = runQueued { onQueued ->
+        val files = if (includeAttachments) _attachmentDrafts.value else emptyList()
+        repository.send(scope, text, check, webSearch, files) { id ->
+            onQueued(id)
+            if (includeAttachments) clearAttachments()
+            onSent()
+        }
     }
 
     fun generateTree(offerId: String, options: GenerationOptions) = runQueued { onQueued ->
@@ -376,6 +434,13 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
 
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
     fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }
+    fun editPending(turn: Turn, onRestored: () -> Unit) = run(requestId = turn.id) {
+        val restored = turn.attachments.map { attachmentStore.load(scope.id, it) }
+        repository.discardPending(scope, turn.id)
+        _attachmentDrafts.value = restored
+        _attachmentStatus.value = AttachmentStatus()
+        onRestored()
+    }
     fun clearConversation() = run(clearing = true) { repository.clearGeneration(scope) }
     fun confirmDraft(id: String, destination: GenerationDestination) = run(addingDraft = true) {
         repository.confirmDraft(scope, id, destination)
@@ -423,6 +488,8 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         }
     }
 }
+
+internal data class AttachmentStatus(val loading: Boolean = false, val message: String? = null)
 
 internal data class SettingsStatus(
     val config: ModelSettings? = null,

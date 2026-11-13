@@ -67,6 +67,7 @@ data class Turn(
     val generationOptions: GenerationOptions? = null,
     val exerciseNumber: Int? = null,
     val searchSources: String? = null,
+    val attachments: List<ChatAttachment> = emptyList(),
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")
@@ -116,7 +117,7 @@ object TutorRules {
     fun validateVerdict(reply: TurnKind, exerciseId: String?, pending: Exercise?, input: Turn) {
         if (reply != TurnKind.PASSED && reply != TurnKind.RETRY && reply != TurnKind.NEXT_EXERCISE) return
         if (pending == null || exerciseId != pending.id || input.kind != TurnKind.MESSAGE ||
-            input.text.isBlank() || input.text == CONTINUE_REPLY || input.text == REISSUE_REPLY ||
+            input.text.isBlank() && input.attachments.isEmpty() || input.text == CONTINUE_REPLY || input.text == REISSUE_REPLY ||
             input.text == EXAM_REPLY || input.text == LEGACY_EXAM_REPLY
         ) {
             throw RuleViolation("AI 的评估没有对应当前练习，请重试。")

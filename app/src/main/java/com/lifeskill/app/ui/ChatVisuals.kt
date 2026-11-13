@@ -158,6 +158,8 @@ internal fun ChatPill(
 internal fun AiComposer(
     value: String, onChange: (String) -> Unit, label: String, enabled: Boolean, errorText: String?,
     sendEnabled: Boolean, webSearch: Boolean? = null, onToggleSearch: () -> Unit = {}, onSend: () -> Unit,
+    attachmentsExpanded: Boolean = false, attachEnabled: Boolean = false, onToggleAttachments: (() -> Unit)? = null,
+    attachmentStrip: @Composable () -> Unit = {},
 ) {
     val colors = aiColors
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -167,6 +169,7 @@ internal fun AiComposer(
             shadowElevation = 1.dp,
         ) {
             Column(Modifier.padding(start = 15.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+                attachmentStrip()
                 Row(
                     Modifier.heightIn(min = if (webSearch == null) 48.dp else 36.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -187,7 +190,10 @@ internal fun AiComposer(
                             }
                         },
                     )
-                    if (webSearch == null) ChatSendButton(sendEnabled, onSend)
+                    if (webSearch == null) {
+                        if (onToggleAttachments != null) ChatAttachmentButton(attachmentsExpanded, attachEnabled, onToggleAttachments)
+                        ChatSendButton(sendEnabled, onSend)
+                    }
                 }
                 if (webSearch != null) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -195,13 +201,29 @@ internal fun AiComposer(
                         SelectionChip("联网搜索", webSearch, onToggleSearch, enabled = enabled, leadingIcon = {
                             Mark(Glyph.GLOBE, if (webSearch) colors.accent else Muted, Modifier.size(16.dp))
                         })
-                        ChatSendButton(sendEnabled, onSend)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (onToggleAttachments != null) ChatAttachmentButton(attachmentsExpanded, attachEnabled, onToggleAttachments)
+                            ChatSendButton(sendEnabled, onSend)
+                        }
                     }
                 }
             }
         }
         errorText?.let { Text(it, Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+@Composable
+private fun ChatAttachmentButton(expanded: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val label = if (expanded) "收起附件选项" else "添加附件"
+    IconButton(onClick, Modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled) {
+        val tint = if (enabled) aiColors.accent else Muted
+        Surface(Modifier.size(34.dp), shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, tint)) {
+            Box(contentAlignment = Alignment.Center) {
+                Mark(if (expanded) Glyph.CLOSE else Glyph.ADD, tint, Modifier.size(18.dp))
+            }
+        }
     }
 }
 

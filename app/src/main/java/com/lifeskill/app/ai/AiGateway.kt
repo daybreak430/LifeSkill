@@ -12,7 +12,7 @@ import java.time.Instant
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLException
 
-internal data class ModelMessage(val role: String, val text: String)
+internal data class ModelMessage(val role: String, val text: String, val images: List<String> = emptyList())
 
 internal data class DeepSeekBalance(
     val isAvailable: Boolean,
@@ -148,7 +148,17 @@ internal class OpenAiGateway(
             put("model", settings.model)
             put("stream", false)
             put("messages", JSONArray().apply {
-                messages.forEach { put(JSONObject().put("role", it.role).put("content", it.text)) }
+                for (message in messages) {
+                    val content = if (message.images.isEmpty()) message.text else JSONArray().apply {
+                        check(settings.supportsImages && message.role == "user")
+                        put(JSONObject().put("type", "text").put("text", message.text))
+                        for (image in message.images) {
+                            put(JSONObject().put("type", "image_url")
+                                .put("image_url", JSONObject().put("url", image).put("detail", "high")))
+                        }
+                    }
+                    put(JSONObject().put("role", message.role).put("content", content))
+                }
             })
             when (settings.provider) {
                 Provider.DEEPSEEK -> {

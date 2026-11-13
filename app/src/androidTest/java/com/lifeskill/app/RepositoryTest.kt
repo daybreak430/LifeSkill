@@ -1,22 +1,30 @@
 package com.lifeskill.app
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import androidx.core.content.FileProvider
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.lifeskill.app.ai.RecoverableReply
+import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
-import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.data.ChatRow
+import com.lifeskill.app.data.AttachmentDraft
 import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.LocalSettings
 import com.lifeskill.app.data.SecretBox
 import com.lifeskill.app.data.TurnRow
 import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
@@ -49,7 +57,15 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import java.io.File
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class RepositoryTest {
@@ -835,6 +851,108 @@ class RepositoryTest {
             }
         } finally {
             context.deleteDatabase(file)
+        }
+        Unit
+    }
+
+    @Test fun attachmentsSurviveDatabaseReopenAndRetryAndAreRemovedByRestart() = runBlocking {
+        val file = "attachments-${UUID.randomUUID()}.db"
+        val attachment = ChatAttachment(UUID.randomUUID().toString(), "学习资料.txt", "text/plain")
+        val material = "保留原始记录，核对时间戳。"
+        val bytes = ByteArray(512 * 1024) { (it % 233).toByte() }
+        try {
+            val scope = withDiskDatabase(file) { disk ->
+                val saved = fixture(disk, ai)
+                saved.library.initialize()
+                val direction = saved.library.snapshot().childrenOf(null).first()
+                val course = saved.library.save(EntryEdit(null, direction.id, EntryKind.TREE, "附件测试"))
+                val lesson = saved.library.save(EntryEdit(null, course.id, EntryKind.SKILL, "资料学习", "核对资料"))
+                val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+                ai.enqueue { messages ->
+                    assertTrue(messages.last().text.contains(material))
+                    throw RuleViolation("模拟服务暂时不可用")
+                }
+                expectRule { saved.conversations.send(scope, "", files = listOf(AttachmentDraft(attachment, bytes, material))) }
+                assertEquals(3, disk.skills().attachmentPartCount(scope.id, attachment.id))
+                assertFalse(checkNotNull(disk.skills().attachmentPart(scope.id, attachment.id, 0))
+                    .contentEquals(bytes.copyOfRange(0, 192 * 1024)))
+                scope
+            }
+            withDiskDatabase(file) { disk ->
+                val reopened = fixture(disk, ai)
+                val pending = reopened.conversations.watch(scope).first().single()
+                assertEquals(listOf(attachment), pending.attachments)
+                assertTrue(bytes.contentEquals(reopened.attachments.load(scope.id, attachment).bytes))
+                ai.enqueue { messages ->
+                    assertTrue(messages.last().text.contains(material))
+                    """{"kind":"teach","reply":"先核对资料的时间戳。"}"""
+                }
+                reopened.conversations.retry(scope, pending.id)
+                assertTrue(reopened.conversations.exportConversation(checkNotNull(scope.ownerId)).markdown
+                    .contains("附件：学习资料.txt"))
+                ai.reply("""{"kind":"teach","reply":"我们从第一节开始。"}""")
+                reopened.conversations.restartLesson(scope, "")
+                assertEquals(0, disk.skills().attachmentPartCount(scope.id, attachment.id))
+            }
+        } finally {
+            context.deleteDatabase(file)
+        }
+        Unit
+    }
+
+    @Test fun importsDocumentTextAndRoutesImageToVisionOrLocalOcr() = runBlocking {
+        val directory = File(context.cacheDir, "conversation-shares/${UUID.randomUUID()}").apply { mkdirs() }
+        fun uri(file: File) = FileProvider.getUriForFile(context, "${context.packageName}.conversation-share", file)
+        try {
+            val pdf = File(directory, "资料.pdf")
+            PDFBoxResourceLoader.init(context)
+            PDDocument().use { document ->
+                val page = PDPage()
+                document.addPage(page)
+                PDPageContentStream(document, page).use { stream ->
+                    stream.beginText()
+                    stream.setFont(PDType1Font.HELVETICA, 20f)
+                    stream.newLineAtOffset(30f, 720f)
+                    stream.showText("Read the invoice")
+                    stream.endText()
+                }
+                document.save(pdf)
+            }
+            assertEquals("Read the invoice", container.attachments.import(uri(pdf), camera = false).text)
+
+            val docx = File(directory, "资料.docx")
+            ZipOutputStream(docx.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("word/document.xml"))
+                zip.write("""<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+                    <w:p><w:r><w:t>逐条核对原件。</w:t></w:r></w:p></w:body></w:document>""".toByteArray())
+                zip.closeEntry()
+            }
+            assertEquals("逐条核对原件。", container.attachments.import(uri(docx), camera = false).text)
+
+            val image = File(directory, "资料.png")
+            val bitmap = Bitmap.createBitmap(800, 180, Bitmap.Config.ARGB_8888)
+            try {
+                Canvas(bitmap).apply {
+                    drawColor(Color.WHITE)
+                    drawText("READ THE INVOICE", 24f, 105f, Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 58f })
+                }
+                image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            } finally {
+                bitmap.recycle()
+            }
+            val draft = container.attachments.import(uri(image), camera = false)
+            val scope = ChatScope(ChatMode.GENERATE)
+            ai.enqueue { messages ->
+                assertTrue(messages.last().images.single().startsWith("data:image/jpeg;base64,"))
+                TREE_OFFER
+            }
+            container.conversations.send(scope, "", files = listOf(draft))
+            val ocr = container.attachments.addToMessage(scope.id, ModelMessage("user", ""), listOf(draft.attachment),
+                ModelSettings(Provider.MINIMAX), required = true)
+            assertTrue(ocr.images.isEmpty())
+            assertTrue(ocr.text.contains("READ THE INVOICE"))
+        } finally {
+            directory.deleteRecursively()
         }
         Unit
     }

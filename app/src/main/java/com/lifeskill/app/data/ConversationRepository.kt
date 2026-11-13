@@ -3,11 +3,14 @@ package com.lifeskill.app.data
 import androidx.room.withTransaction
 import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.ModelMessage
+import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.ai.searchInstructions
 import com.lifeskill.app.ai.searchQuery
 import com.lifeskill.app.ai.searchSources
+import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
+import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.ConversationExport
@@ -41,6 +44,7 @@ internal class ConversationRepository(
     private val settings: SettingsStore,
     private val usage: AiUsageRepository,
     private val secret: SecretBox,
+    private val attachments: ChatAttachments,
 ) {
     private val dao = database.skills()
 
@@ -73,16 +77,21 @@ internal class ConversationRepository(
 
     suspend fun send(
         scope: ChatScope, text: String, check: Boolean = false, webSearch: Boolean = false,
+        files: List<AttachmentDraft> = emptyList(),
         onRequestQueued: (String) -> Unit = {},
     ) {
         val input = text.trim()
         if (check && scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面做课后练习。")
-        if (!check && input.length !in 1..INPUT_LIMIT) throw RuleViolation("请输入 1–${INPUT_LIMIT} 个字符。")
+        if (!check && (input.length > INPUT_LIMIT || input.isEmpty() && files.isEmpty())) {
+            throw RuleViolation("请输入内容或添加附件。文字最多 ${INPUT_LIMIT} 个字符。")
+        }
+        if (files.size > CHAT_ATTACHMENT_LIMIT || check && files.isNotEmpty()) throw RuleViolation("本次无法添加这些附件。")
         val kind = if (check) TurnKind.CHECK else TurnKind.MESSAGE
         queueAndRespond(
             scope, kind, if (check && input != TutorRules.EXAM_REPLY) "开始课后练习" else input,
             onRequestQueued = onRequestQueued,
-            webSearch = webSearch && !check,
+            webSearch = webSearch && !check && input.isNotEmpty(),
+            files = files,
         )
     }
 
@@ -112,6 +121,7 @@ internal class ConversationRepository(
         scope: ChatScope, kind: TurnKind, input: String, offerId: String? = null,
         onRequestQueued: (String) -> Unit,
         webSearch: Boolean = false,
+        files: List<AttachmentDraft> = emptyList(),
     ) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
@@ -144,9 +154,10 @@ internal class ConversationRepository(
                     }
                 }
             }
-            val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0)
+            val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0, attachments = files.map { it.attachment })
             // 空串标记本条消息需要搜索，成功后换成加密结果，旧消息与普通消息仍为 null。
             dao.insertTurn(turn.row(scope).copy(searchContext = "".takeIf { webSearch }))
+            for (file in files) attachments.save(turn.id, file)
             turn.id
         }
         // 先把待处理消息标识交给界面，成功回复覆盖旧历史时才能立即隐藏重试和撤回操作。
@@ -235,10 +246,11 @@ internal class ConversationRepository(
             } else recent
             val searchContext = dao.turn(scope.id, requestId)?.searchContext.takeIf { pending == null }
             Request(owner, input, pending, askedQuestions, reissue, searchContext,
-                listOf(ModelMessage("system", prompt)) + messageWindow(scope.mode, history))
+                ModelMessage("system", prompt), history)
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
+        val history = messageWindow(scope, context.history, config)
         val owner = context.owner
         val target = when (owner?.kind) {
             EntryKind.SKILL -> UsageTarget(courseId = owner.parentId, lessonId = owner.id)
@@ -271,10 +283,9 @@ internal class ConversationRepository(
                 results
             }
         }
-        val messages = if (searchResults == null) context.messages else {
-            val system = context.messages.first()
-            listOf(system.copy(text = "${system.text}\n\n${searchResults.searchInstructions()}")) + context.messages.drop(1)
-        }
+        val system = if (searchResults == null) context.system else
+            context.system.copy(text = "${context.system.text}\n\n${searchResults.searchInstructions()}")
+        val messages = listOf(system) + history
         val sources = searchResults?.searchSources()
         try {
             val raw = usage.complete(config, messages, structured = true, target = target)
@@ -460,12 +471,14 @@ internal class ConversationRepository(
         }
     }
 
-    private fun messageWindow(mode: ChatMode, recent: List<Turn>): List<ModelMessage> {
+    private suspend fun messageWindow(
+        scope: ChatScope, recent: List<Turn>, config: ModelSettings,
+    ): List<ModelMessage> {
         val messages = recent.map {
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
             val text = when {
-                mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
-                mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
+                scope.mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
+                scope.mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
                 it.kind == TurnKind.CHECK -> "【App 发起课后练习】请出本节课后练习的第 1 题。"
                 it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按本节学习目标重新组织这节课。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
@@ -474,10 +487,18 @@ internal class ConversationRepository(
             ModelMessage(role, text)
         }
         var remaining = CONTEXT_CHARS
-        return messages.takeLastWhile {
+        val window = messages.takeLastWhile {
             remaining -= it.text.length
             remaining >= 0
         }.dropWhile { it.role != "user" }
+        // 保留最近一条资料消息的附件，供后续提问和「确认生成」使用，避免反复附带整段历史原件。
+        val attachmentTurn = recent.indexOfLast { it.attachments.isNotEmpty() }
+        val index = attachmentTurn - (recent.size - window.size)
+        if (attachmentTurn < 0 || index !in window.indices) return window
+        return window.toMutableList().apply {
+            this[index] = attachments.addToMessage(scope.id, this[index], recent[attachmentTurn].attachments,
+                config, required = attachmentTurn == recent.lastIndex)
+        }
     }
 
     private fun Turn.row(scope: ChatScope) = TurnRow(
@@ -487,6 +508,11 @@ internal class ConversationRepository(
         choices = choices.takeIf(List<String>::isNotEmpty)?.let { secret.seal(JSONArray(it).toString(), "$id:choices") },
         exerciseNumber = exerciseNumber,
         searchContext = searchSources?.let { secret.seal(it, "$id:search") },
+        attachments = attachments.takeIf { it.isNotEmpty() }?.let { files ->
+            val metadata = JSONArray()
+            files.forEach { metadata.put(JSONObject().put("id", it.id).put("name", it.name).put("mimeType", it.mimeType)) }
+            secret.seal(metadata.toString(), "$id:attachments")
+        },
     )
 
     private fun TurnRow.toTurn(): Turn {
@@ -511,7 +537,14 @@ internal class ConversationRepository(
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))
             List(values.length()) { index -> values.getString(index) }
-        }.orEmpty(), exerciseNumber = exerciseNumber, searchSources = sources)
+        }.orEmpty(), exerciseNumber = exerciseNumber, searchSources = sources,
+            attachments = attachments?.let {
+                val metadata = JSONArray(secret.open(it, "$id:attachments"))
+                List(metadata.length()) { index ->
+                    val file = metadata.getJSONObject(index)
+                    ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"))
+                }
+            }.orEmpty())
     }
 
     private data class Request(
@@ -521,7 +554,8 @@ internal class ConversationRepository(
         val askedQuestions: List<String>,
         val reissue: Boolean,
         val searchContext: String?,
-        val messages: List<ModelMessage>,
+        val system: ModelMessage,
+        val history: List<Turn>,
     )
 
     companion object {

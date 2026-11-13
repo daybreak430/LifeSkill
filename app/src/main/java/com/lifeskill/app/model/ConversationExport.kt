@@ -24,10 +24,13 @@ internal fun conversationExport(entry: Entry, transcripts: List<LessonTranscript
                     else -> "AI 老师"
                 }
                 appendLine("**$label**")
-                if (turn.text.isNotEmpty() || turn.choices.isNotEmpty() || turn.searchSources != null) {
+                if (turn.text.isNotEmpty() || turn.choices.isNotEmpty() || turn.searchSources != null ||
+                    turn.attachments.isNotEmpty()
+                ) {
                     appendLine()
                     // 用引用保留每条消息的 Markdown 结构，消息中的标题不会混入课时分节。
                     if (turn.text.isNotEmpty()) appendQuoted(turn.text)
+                    for (attachment in turn.attachments) appendLine("> 附件：${attachment.name.markdownInline()}")
                     if (turn.text.isNotEmpty() && turn.choices.isNotEmpty()) appendLine(">")
                     turn.choices.forEachIndexed { index, choice ->
                         appendLine("> - ${choiceAnswer(index, choice).markdownInline()}")

@@ -88,7 +88,18 @@ internal data class TurnRow(
     val choices: String?,
     val exerciseNumber: Int? = null,
     val searchContext: String? = null,
+    val attachments: String? = null,
 )
+
+@Entity(
+    tableName = "chat_attachment_parts",
+    primaryKeys = ["attachmentId", "part"],
+    foreignKeys = [ForeignKey(
+        entity = TurnRow::class, parentColumns = ["id"], childColumns = ["turnId"], onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("turnId")],
+)
+internal data class ChatAttachmentPart(val attachmentId: String, val part: Int, val turnId: String, val data: ByteArray)
 
 internal data class LibraryRows(val entries: List<EntryRow>, val edges: List<EdgeRow>)
 
@@ -144,6 +155,23 @@ internal abstract class SkillDao {
 
     @Query("SELECT * FROM turns WHERE chatId = :chatId ORDER BY sequence")
     abstract fun watchTurns(chatId: String): Flow<List<TurnRow>>
+
+    @Insert
+    abstract suspend fun insertAttachmentPart(part: ChatAttachmentPart)
+
+    @Query("""
+        SELECT data FROM chat_attachment_parts
+        JOIN turns ON turns.id = chat_attachment_parts.turnId
+        WHERE turns.chatId = :chatId AND attachmentId = :id AND part = :part
+    """)
+    abstract suspend fun attachmentPart(chatId: String, id: String, part: Int): ByteArray?
+
+    @Query("""
+        SELECT COUNT(*) FROM chat_attachment_parts
+        JOIN turns ON turns.id = chat_attachment_parts.turnId
+        WHERE turns.chatId = :chatId AND attachmentId = :id AND part >= 0
+    """)
+    abstract suspend fun attachmentPartCount(chatId: String, id: String): Int
 
     @Query("""
         SELECT turns.* FROM turns
@@ -214,13 +242,14 @@ internal abstract class SkillDao {
 @Database(
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
         ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class,
-        AiUsageRow::class],
-    version = 9,
+        AiUsageRow::class, ChatAttachmentPart::class],
+    version = 10,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7),
         AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10),
     ],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {

@@ -186,6 +186,7 @@ internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
 internal enum class Glyph {
     TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, LOCK,
     WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, GLOBE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS, RESTART, PERSON,
+    PHOTO, ATTACHMENT,
 }
 
 @Composable
@@ -223,6 +224,14 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
                 line(16.5, 5.5, 21.5, 5.5)
             }
             Glyph.ADD -> { line(5, 12, 19, 12); line(12, 5, 12, 19) }
+            Glyph.PHOTO -> {
+                path(4, 4, 20, 4, 20, 20, 4, 20, close = true)
+                path(4, 16, 9, 11, 13, 15, 16, 12, 20, 16)
+                circle(15, 8, 1f)
+            }
+            Glyph.ATTACHMENT -> {
+                path(14, 6, 9, 6, 9, 17, 12, 20, 16, 17, 16, 4, 12, 2, 6, 5, 6, 18, 11, 22, 17, 20)
+            }
             Glyph.BACK -> { path(11, 5, 4, 12, 11, 19); line(4, 12, 20, 12) }
             Glyph.NEXT -> path(9, 5, 16, 12, 9, 19)
             Glyph.SETTINGS -> {

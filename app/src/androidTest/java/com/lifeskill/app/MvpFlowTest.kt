@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.PatternMatcher
 import android.provider.OpenableColumns
 import android.view.KeyEvent
+import androidx.core.content.FileProvider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -99,6 +100,55 @@ import kotlin.math.abs
 class MvpFlowTest {
     @get:Rule val ui = createAndroidComposeRule<MainActivity>()
     private val fixture get() = ui.activity.application as FixtureApplication
+
+    @Test fun documentPickerPreviewsRemovesSendsAndReopensAnAttachment() {
+        await("本职工作")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("描述你想学什么")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val folder = File(context.cacheDir, "conversation-shares").apply { mkdirs() }
+        val document = File(folder, "学习提纲.md").apply { writeText("先练习核对凭证，再汇总每笔账目。") }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.conversation-share", document)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val monitor = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? =
+                if (intent.action == Intent.ACTION_OPEN_DOCUMENT) {
+                    Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri))
+                } else null
+        }
+        instrumentation.addMonitor(monitor)
+        try {
+            fun pickDocument() {
+                ui.onNodeWithContentDescription("添加附件").performTouchInput { click() }
+                ui.onNodeWithText("拍照").assertIsDisplayed()
+                ui.onNodeWithText("相册").assertIsDisplayed()
+                ui.onNodeWithText("文件").performTouchInput { click() }
+                await(document.name)
+            }
+            pickDocument()
+            ui.onNodeWithContentDescription("移除 ${document.name}").performTouchInput { click() }
+            ui.onNodeWithText(document.name).assertDoesNotExist()
+            pickDocument()
+            ui.onNodeWithText(document.name).performClick()
+            await("先练习核对凭证，再汇总每笔账目。")
+            ui.onNodeWithText("关闭").performClick()
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.last().text.contains("先练习核对凭证"))
+                """{"kind":"offer_tree","reply":"可以规划凭证核对课程。"}"""
+            }
+            ui.onNodeWithContentDescription("发送").performTouchInput { click() }
+            showChatReply("可以规划凭证核对课程。")
+            ui.onNodeWithContentDescription("移除 ${document.name}").assertDoesNotExist()
+            ui.onNodeWithTag("chat-messages").performScrollToNode(hasText(document.name))
+            ui.onNodeWithText(document.name).performClick()
+            await("先练习核对凭证，再汇总每笔账目。")
+            pressBack()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("保存原件").fetchSemanticsNodes().isEmpty() }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+            document.delete()
+        }
+    }
 
     @Test fun directionColorChangesItsIconAndProgressTogether() {
         await("本职工作")

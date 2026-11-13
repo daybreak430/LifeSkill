@@ -16,6 +16,8 @@ internal data class ModelSettings(
     val apiKey: String = "",
 ) {
     val supportsWebSearch get() = provider == Provider.DEEPSEEK && baseUrl.trim().trimEnd('/') == Provider.DEEPSEEK.baseUrl
+    val supportsImages get() = supportsWebSearch && model.trim().lowercase() in
+        setOf("deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp")
 
     fun validated(requireKey: Boolean = true): ModelSettings {
         val url = baseUrl.trim().trimEnd('/')

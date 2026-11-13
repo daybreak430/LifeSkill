@@ -3,6 +3,7 @@ package com.lifeskill.app
 import android.app.Application
 import android.content.Context
 import androidx.room.Room
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.AndroidJUnitRunner
 import com.lifeskill.app.ai.AiGateway
 import com.lifeskill.app.ai.DeepSeekBalance
@@ -31,7 +32,8 @@ class FixtureApplication : LifeSkillApplication() {
 }
 
 internal fun fixture(database: LifeSkillDatabase, ai: AiGateway): AppContainer =
-    AppContainer(database, SecretBox("lifeskill-tests"), FixtureSettings(), ai)
+    AppContainer(database, SecretBox("lifeskill-tests"), FixtureSettings(), ai,
+        InstrumentationRegistry.getInstrumentation().targetContext)
 
 internal class ScriptedGateway : AiGateway {
     private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: ModelUsage? = null)

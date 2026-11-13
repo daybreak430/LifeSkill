@@ -7,6 +7,8 @@
 | Kyant Backdrop 1.0.6、Shapes 1.2.0 | 液态玻璃底栏及底层形状支持 | 发布物 POM 标记为 Apache-2.0，仓库保留[许可证副本](app/src/main/assets/licenses/kyant-apache-2.0.txt) |
 | commonmark-java、commonmark-ext-gfm-tables 0.32.0 | 教学消息的 Markdown 和表格解析 | BSD-2-Clause，[版权与许可证原文](docs/licenses/commonmark-bsd-2-clause.txt)来自发布 JAR |
 | AndroidX Activity、Compose、Material 3、Lifecycle、Room | 界面、状态和本地存储 | 发布物采用 Apache-2.0，具体声明随各 AndroidX 发布物提供 |
+| PdfBox-Android | 读取 PDF 文字 | [Apache-2.0](https://github.com/TomRoush/PdfBox-Android/blob/master/LICENSE) |
+| Google ML Kit 中文文字识别 | 在设备上识别附件图片中的文字 | [ML Kit 使用条款](https://developers.google.com/ml-kit/terms) |
 | Kotlin 标准库、kotlinx.coroutines | Kotlin 运行时和协程 | 发布物采用 Apache-2.0，具体声明随发布物提供 |
 
 以下命令显示发布版本的直接和传递依赖。
