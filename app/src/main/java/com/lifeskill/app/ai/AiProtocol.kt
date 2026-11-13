@@ -65,7 +65,9 @@ internal data class PreparedGeneration(val draft: GenerationDraft, val ignored: 
 internal data class GenerationReply(
     val reply: String, val draft: GenerationDraft? = null, val kind: TurnKind = TurnKind.MESSAGE,
 )
-internal data class TutorReply(val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>)
+internal data class TutorReply(
+    val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>, val imageQuery: String? = null,
+)
 
 internal object AiProtocol {
     private const val LEGACY_TREE_LIMIT = 6
@@ -295,7 +297,7 @@ internal object AiProtocol {
         .toString()
 
     fun tutor(raw: String): TutorReply = parse(raw) { json ->
-        json.only("kind", "reply", "exerciseId", "choices", "question")
+        json.only("kind", "reply", "exerciseId", "choices", "question", "imageQuery")
         val kind = tutorKinds[json.text("kind", 32)] ?: invalid()
         val asksQuestion = kind == TurnKind.EXERCISE || kind == TurnKind.NEXT_EXERCISE
         val reply = if (asksQuestion) {
@@ -318,7 +320,8 @@ internal object AiProtocol {
                     "围栏首行使用 flowchart TD，再按当前 JSON 格式输出。",
             )
         }
-        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices)
+        val imageQuery = (json.opt("imageQuery") as? String)?.takeIf { kind in TutorRules.teachingReplyKinds }
+        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery)
     }
 
     private fun containsAsciiFlow(markdown: String): Boolean = fencedBlocks.findAll(markdown).any { block ->

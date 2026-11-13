@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.data.ConversationRepository
+import com.lifeskill.app.data.AttachmentDraft
 import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
@@ -266,7 +267,7 @@ internal fun ChatScreen(
                                 style = MaterialTheme.typography.labelMedium, color = Muted)
                         }
                     }
-                    ChatAttachmentStrip(turn.attachments, chat::loadAttachment, ::previewAttachment, sent = true)
+                    ChatAttachmentStrip(turn.attachments.filter { it.imageCredit == null }, chat::loadAttachment, ::previewAttachment, sent = true)
                     if (turn.text.isNotEmpty() || turn.attachments.isEmpty()) ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
@@ -276,6 +277,8 @@ internal fun ChatScreen(
                         onAnswer = { submit(it) },
                         onOpenDraft = if (turn.preview != null) ({ openDraft(turn.id) }) else null,
                         open = { app.open(Route.entry(it)) },
+                        loadAttachment = chat::loadAttachment,
+                        previewAttachment = ::previewAttachment,
                     )
                     if (turn.id == treeOffer?.id) {
                         ChatPill(
@@ -449,6 +452,8 @@ private fun ChatBubble(
     onAnswer: (String) -> Unit,
     onOpenDraft: (() -> Unit)?,
     open: (Entry) -> Unit,
+    loadAttachment: suspend (ChatAttachment) -> AttachmentDraft,
+    previewAttachment: (ChatAttachment) -> Unit,
 ) {
     if (turn.kind == TurnKind.RESTART) {
         Column(
@@ -504,6 +509,9 @@ private fun ChatBubble(
                 if (badge != null) {
                     Text(badge, color = colors.accent, style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(bottom = 5.dp))
+                }
+                turn.attachments.filter { it.imageCredit != null }.forEach { image ->
+                    LessonIllustration(image, loadAttachment) { previewAttachment(image) }
                 }
                 SelectionContainer {
                     if (user) {

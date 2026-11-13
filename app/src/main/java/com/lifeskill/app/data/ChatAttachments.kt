@@ -122,15 +122,8 @@ internal class ChatAttachments(
                 }
                 val draft = load(chatId, attachment)
                 val bitmap = attachmentBitmap(draft.bytes, 1800) ?: throw RuleViolation("无法读取图片「${attachment.name}」。")
-                val data = ByteArrayOutputStream()
-                try {
-                    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 85, data)) {
-                        throw RuleViolation("无法处理图片「${attachment.name}」。")
-                    }
-                } finally {
-                    bitmap.recycle()
-                }
-                images += "data:image/jpeg;base64," + Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP)
+                val jpeg = bitmap.toJpeg() ?: throw RuleViolation("无法处理图片「${attachment.name}」。")
+                images += jpeg.imageDataUrl()
                 material.put("imageNumber", images.size)
             } else {
                 val content = readText(chatId, attachment.id).orEmpty()
@@ -182,6 +175,15 @@ internal class ChatAttachments(
         const val DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }
+
+internal fun Bitmap.toJpeg(): ByteArray? = try {
+    val output = ByteArrayOutputStream()
+    if (compress(Bitmap.CompressFormat.JPEG, 85, output)) output.toByteArray() else null
+} finally {
+    recycle()
+}
+
+internal fun ByteArray.imageDataUrl(): String = "data:image/jpeg;base64," + Base64.encodeToString(this, Base64.NO_WRAP)
 
 internal fun attachmentBitmap(bytes: ByteArray, maxSide: Int): Bitmap? {
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -69,11 +69,15 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.CertificateTheme
 import com.lifeskill.app.data.EntryEdit
+import com.lifeskill.app.data.LessonImage
+import com.lifeskill.app.data.LessonImageSearch
+import com.lifeskill.app.data.toJpeg
 import com.lifeskill.app.data.AppearanceMode
 import com.lifeskill.app.data.AppearanceSettings
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.EntryKind
+import com.lifeskill.app.model.ImageCredit
 import com.lifeskill.app.model.ExamAnswer
 import com.lifeskill.app.model.AvatarPreset
 import com.lifeskill.app.model.PersonalProfile
@@ -705,6 +709,62 @@ class MvpFlowTest {
             assertEquals(listOf(1, 2), exercises.map { it.exerciseNumber })
         } finally {
             runBlocking { library.delete(tree.id) }
+        }
+    }
+
+    @Test fun teachesWithOneSourcedImageAndFallsBackWhenSearchIsEmpty() {
+        await("本职工作")
+        val library = fixture.container.library
+        val (direction, lesson) = runBlocking {
+            val direction = library.save(EntryEdit(null, null, EntryKind.DIRECTION, "摄影练习"))
+            val course = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "商品图课程"))
+            direction to library.save(EntryEdit(null, course.id, EntryKind.SKILL, "商品图构图", "观察拍摄角度、光线与比例"))
+        }
+        val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+        val credit = ImageCredit("白底香水瓶", "https://commons.wikimedia.org/wiki/File:Sample.jpg", "示例作者", "CC BY 4.0",
+            "https://creativecommons.org/licenses/by/4.0/")
+        val jpeg = checkNotNull(Bitmap.createBitmap(32, 24, Bitmap.Config.ARGB_8888).toJpeg())
+        try {
+            fixture.imageSearch = LessonImageSearch { query ->
+                assertEquals("perfume bottle white background", query)
+                listOf(LessonImage(credit, jpeg))
+            }
+            fixture.ai.reply("""{"kind":"teach","reply":"构图时比较主体占比。"}""")
+            runBlocking { fixture.container.conversations.send(scope, "如何给商品构图？") }
+            await("继续学习")
+            ui.onNodeWithText("继续学习").performTouchInput { click() }
+            await("构图时比较主体占比。")
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.first().text.contains("imageQuery"))
+                assertTrue(messages.any { it.text.contains("构图时比较主体占比。") })
+                """{"kind":"teach","reply":"可以用香水瓶举例。","imageQuery":"perfume bottle white background"}"""
+            }
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.last().images.single().startsWith("data:image/jpeg;base64,"))
+                """{"image":1,"reply":"瓶身正面清晰，画面四周有留白。"}"""
+            }
+            send("给个案例看看")
+            showChatReply("瓶身正面清晰，画面四周有留白。")
+            ui.onNodeWithText("维基共享资源", substring = true).assertIsDisplayed()
+            ui.onNodeWithTag("lesson-illustration").assertIsDisplayed().performTouchInput { click() }
+            ui.onNodeWithText("关闭").performTouchInput { click() }
+            ui.activityRule.scenario.recreate()
+            showChatReply("瓶身正面清晰，画面四周有留白。")
+            ui.onNodeWithTag("lesson-illustration").assertIsDisplayed()
+            assertEquals(credit, runBlocking { fixture.container.conversations.watch(scope).first().last().attachments.single().imageCredit })
+
+            fixture.imageSearch = LessonImageSearch { emptyList() }
+            fixture.ai.reply("""{"kind":"teach","reply":"用一张侧光商品图理解阴影。"}""")
+            fixture.ai.enqueue { messages ->
+                assertTrue(messages.last().text.contains("瓶身正面清晰，画面四周有留白。"))
+                """{"imageQuery":"side lighting product photography"}"""
+            }
+            send("再给我一张参考图")
+            showChatReply("这次没找到合适的图片，先用文字案例说明。")
+            assertTrue(runBlocking { fixture.container.conversations.watch(scope).first().last().attachments.isEmpty() })
+        } finally {
+            fixture.imageSearch = LessonImageSearch { emptyList() }
+            runBlocking { library.delete(direction.id) }
         }
     }
 

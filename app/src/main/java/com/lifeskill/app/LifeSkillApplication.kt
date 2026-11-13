@@ -8,6 +8,8 @@ import com.lifeskill.app.ai.OpenAiGateway
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.data.CertificateRepository
 import com.lifeskill.app.data.ChatAttachments
+import com.lifeskill.app.data.CommonsImages
+import com.lifeskill.app.data.LessonImageSearch
 import com.lifeskill.app.data.AiUsageRepository
 import com.lifeskill.app.data.ConversationRepository
 import com.lifeskill.app.data.LibraryRepository
@@ -33,11 +35,12 @@ internal class AppContainer(
     val settings: SettingsStore,
     val gateway: AiGateway,
     context: Context,
+    imageSearch: LessonImageSearch = CommonsImages(),
 ) {
     val library = LibraryRepository(database, secret)
     val usage = AiUsageRepository(database.usage(), gateway)
     val attachments = ChatAttachments(context.applicationContext, database.skills(), secret)
-    val conversations = ConversationRepository(database, library, settings, usage, secret, attachments)
+    val conversations = ConversationRepository(database, library, settings, usage, secret, attachments, imageSearch)
     val assessments = TreeAssessmentRepository(database, library, settings, usage, secret)
     val profiles = ProfileRepository(database, secret)
     val certificates = CertificateRepository(database, library, profiles, secret)

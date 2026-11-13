@@ -30,7 +30,12 @@ internal fun conversationExport(entry: Entry, transcripts: List<LessonTranscript
                     appendLine()
                     // 用引用保留每条消息的 Markdown 结构，消息中的标题不会混入课时分节。
                     if (turn.text.isNotEmpty()) appendQuoted(turn.text)
-                    for (attachment in turn.attachments) appendLine("> 附件：${attachment.name.markdownInline()}")
+                    for (attachment in turn.attachments) {
+                        val credit = attachment.imageCredit
+                        if (credit == null) appendLine("> 附件：${attachment.name.markdownInline()}")
+                        else appendLine("> 图片案例：[${credit.title.markdownInline()}](<${credit.sourceUrl}>) · " +
+                            listOf(credit.author, credit.license).filter(String::isNotBlank).joinToString(" · ") { it.markdownInline() })
+                    }
                     if (turn.text.isNotEmpty() && turn.choices.isNotEmpty()) appendLine(">")
                     turn.choices.forEachIndexed { index, choice ->
                         appendLine("> - ${choiceAnswer(index, choice).markdownInline()}")

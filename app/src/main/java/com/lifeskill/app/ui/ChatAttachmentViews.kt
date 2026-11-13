@@ -45,6 +45,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.FileProvider
@@ -52,6 +55,7 @@ import com.lifeskill.app.data.AttachmentDraft
 import com.lifeskill.app.data.attachmentBitmap
 import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
 import com.lifeskill.app.model.ChatAttachment
+import com.lifeskill.app.model.ImageCredit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -193,6 +197,44 @@ private fun AttachmentThumbnail(
 }
 
 @Composable
+internal fun LessonIllustration(item: ChatAttachment, load: suspend (ChatAttachment) -> AttachmentDraft, open: () -> Unit) {
+    val credit = checkNotNull(item.imageCredit)
+    val preview by produceState<AttachmentPreview?>(null, item.id) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                AttachmentPreview(bitmap = attachmentBitmap(load(item).bytes, 960))
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                AttachmentPreview()
+            }
+        }
+    }
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        val bitmap = preview?.bitmap
+        if (bitmap != null) {
+            Surface(open, Modifier.fillMaxWidth().testTag("lesson-illustration"), shape = ControlShape, color = Raised) {
+                Image(bitmap.asImageBitmap(), credit.title, Modifier.fillMaxWidth().heightIn(max = 280.dp),
+                    contentScale = ContentScale.Fit)
+            }
+        } else if (preview != null) {
+            Text("图片暂无法显示", color = Muted, style = MaterialTheme.typography.labelMedium)
+        }
+        IllustrationCredit(credit)
+    }
+}
+
+@Composable
+private fun IllustrationCredit(credit: ImageCredit) {
+    Text(buildAnnotatedString {
+        withLink(LinkAnnotation.Url(credit.sourceUrl)) { append("维基共享资源") }
+        if (credit.author.isNotBlank()) append(" · ${credit.author}")
+        append(" · ")
+        val license = credit.licenseUrl
+        if (license != null) withLink(LinkAnnotation.Url(license)) { append(credit.license) } else append(credit.license)
+    }, color = aiColors.accent, style = MaterialTheme.typography.labelMedium)
+}
+
+@Composable
 internal fun ChatAttachmentPreview(attachment: ChatAttachment, chat: ChatViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -228,13 +270,17 @@ internal fun ChatAttachmentPreview(attachment: ChatAttachment, chat: ChatViewMod
             Column(Modifier.heightIn(max = if (attachment.isImage) 520.dp else 400.dp).verticalScroll(rememberScrollState())) {
                 val bitmap = preview?.bitmap
                 if (bitmap != null) {
-                    Image(bitmap.asImageBitmap(), attachment.name, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
+                    Image(bitmap.asImageBitmap(), attachment.imageCredit?.title ?: attachment.name,
+                        Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
                 } else Text(if (preview == null) "正在读取…" else preview?.text ?: "无法显示图片。")
+                attachment.imageCredit?.let { IllustrationCredit(it) }
                 saveMessage?.let { Text(it, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = { TextButton(onDismiss) { Text("关闭") } },
-        dismissButton = { TextButton({ saveOriginal.launch(attachment.name) }, enabled = preview != null) { Text("保存原件") } },
+        dismissButton = if (attachment.imageCredit == null) ({
+            TextButton({ saveOriginal.launch(attachment.name) }, enabled = preview != null) { Text("保存原件") }
+        }) else null,
     )
 }
 

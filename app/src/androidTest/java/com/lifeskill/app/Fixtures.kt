@@ -14,6 +14,7 @@ import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.Provider
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.data.LifeSkillDatabase
+import com.lifeskill.app.data.LessonImageSearch
 import com.lifeskill.app.data.SecretBox
 import org.json.JSONArray
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -25,15 +26,18 @@ class LifeSkillTestRunner : AndroidJUnitRunner() {
 
 class FixtureApplication : LifeSkillApplication() {
     internal val ai = ScriptedGateway()
+    internal var imageSearch = LessonImageSearch { emptyList() }
     internal override fun createContainer(): AppContainer {
         val database = Room.inMemoryDatabaseBuilder(this, LifeSkillDatabase::class.java).build()
-        return fixture(database, ai)
+        return fixture(database, ai, LessonImageSearch { imageSearch.find(it) })
     }
 }
 
-internal fun fixture(database: LifeSkillDatabase, ai: AiGateway): AppContainer =
+internal fun fixture(
+    database: LifeSkillDatabase, ai: AiGateway, imageSearch: LessonImageSearch = LessonImageSearch { emptyList() },
+): AppContainer =
     AppContainer(database, SecretBox("lifeskill-tests"), FixtureSettings(), ai,
-        InstrumentationRegistry.getInstrumentation().targetContext)
+        InstrumentationRegistry.getInstrumentation().targetContext, imageSearch)
 
 internal class ScriptedGateway : AiGateway {
     private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: ModelUsage? = null)

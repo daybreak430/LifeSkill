@@ -6,6 +6,7 @@ import com.lifeskill.app.ai.ModelMessage
 import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
+import com.lifeskill.app.ai.TutorReply
 import com.lifeskill.app.ai.searchInstructions
 import com.lifeskill.app.ai.searchQuery
 import com.lifeskill.app.ai.searchSources
@@ -22,6 +23,7 @@ import com.lifeskill.app.model.GenerationDestination
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.GenerationPreview
+import com.lifeskill.app.model.ImageCredit
 import com.lifeskill.app.model.LessonTranscript
 import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
@@ -46,8 +48,10 @@ internal class ConversationRepository(
     private val usage: AiUsageRepository,
     private val secret: SecretBox,
     private val attachments: ChatAttachments,
+    imageSearch: LessonImageSearch,
 ) {
     private val dao = database.skills()
+    private val illustrations = LessonIllustrations(imageSearch, usage)
 
     fun watchLatestStudySkillId() = dao.watchLatestStudySkillId()
 
@@ -270,6 +274,10 @@ internal class ConversationRepository(
                 generation = context.input.kind == TurnKind.GENERATE_TREE,
             )
         }
+        val canIllustrate = scope.mode == ChatMode.TUTOR && context.pending == null &&
+            context.input.kind == TurnKind.MESSAGE && context.input.attachments.isEmpty() &&
+            context.input.text !in setOf(TutorRules.START_REPLY, TutorRules.CONTINUE_REPLY) &&
+            context.searchContext != null && config.supportsWebSearch && config.supportsImages
         val searchResults = context.searchContext?.let { saved ->
             if (!config.supportsWebSearch) throw RuleViolation("请切回 DeepSeek 后重试，或撤回后重新发送。")
             if (saved.isNotEmpty()) JSONArray(secret.open(saved, "$requestId:search"))
@@ -293,13 +301,31 @@ internal class ConversationRepository(
                 results
             }
         }
-        val system = if (searchResults == null) context.system else
-            context.system.copy(text = "${context.system.text}\n\n${searchResults.searchInstructions()}")
+        val system = context.system.copy(text = buildString {
+            append(context.system.text)
+            if (canIllustrate) append("\n\n$LESSON_IMAGE_REQUEST")
+            if (searchResults != null) append("\n\n${searchResults.searchInstructions()}")
+        })
         val messages = listOf(system) + history
         val sources = searchResults?.searchSources()
+        suspend fun save(raw: String) {
+            val tutor = if (scope.mode == ChatMode.TUTOR) AiProtocol.tutor(raw) else null
+            val example = if (canIllustrate && tutor != null && tutor.kind in TutorRules.teachingReplyKinds &&
+                (tutor.imageQuery != null || asksForLessonImage(context.input.text)) && lastPending(scope)?.id == requestId
+            ) {
+                val queryContext = if (tutor.imageQuery == null) {
+                    // 模型漏填关键词时，仅对明确的看图式追问补做检索规划。
+                    JSONObject().put("lesson", owner?.name).put("goal", owner?.goal)
+                        .put("recent", JSONArray(history.takeLast(4).map { it.text.take(1_500) }))
+                        .put("question", context.input.text).toString()
+                } else null
+                illustrations.illustrate(tutor, context.input.text, config, target, queryContext)
+            } else null
+            persistResponse(scope, requestId, context, raw, sources, tutor, example)
+        }
         try {
             val raw = usage.complete(config, messages, structured = true, target = target)
-            persistResponse(scope, requestId, context, raw, sources)
+            save(raw)
         } catch (error: RecoverableReply) {
             // 只补试一次。沿用原请求标识，撤回、重学或已完成的请求无需再发。
             if (lastPending(scope)?.id != requestId) return
@@ -308,7 +334,7 @@ internal class ConversationRepository(
             try {
                 val corrected = usage.complete(config, retryMessages, structured = true, target = target,
                     useJsonMode = !error.retryWithoutJsonMode)
-                persistResponse(scope, requestId, context, corrected, sources)
+                save(corrected)
             } catch (_: RecoverableReply) {
                 throw RuleViolation(if (scope.mode == ChatMode.GENERATE) "这次没能生成可用的内容，请重试。"
                     else if (context.pending != null) "这次没能完成评估，已保留你的答案。"
@@ -317,7 +343,10 @@ internal class ConversationRepository(
         }
     }
 
-    private suspend fun persistResponse(scope: ChatScope, requestId: String, context: Request, raw: String, sources: String?) {
+    private suspend fun persistResponse(
+        scope: ChatScope, requestId: String, context: Request, raw: String, sources: String?,
+        tutor: TutorReply?, example: IllustratedLesson?,
+    ) {
         val replyId = "reply:$requestId"
         database.withTransaction {
             // 请求、回复标识固定。并发重试与取消都不能二次落库或复活已删除的内容。
@@ -328,14 +357,21 @@ internal class ConversationRepository(
             }
             val turn = when (scope.mode) {
                 ChatMode.GENERATE -> generationTurn(raw, current, replyId, context.input)
-                ChatMode.TUTOR -> tutorTurn(raw, context, replyId)
+                ChatMode.TUTOR -> tutorTurn(checkNotNull(tutor), context, replyId)
             }
             if (context.reissue) {
                 // 旧题保留在对话里，但只有替换后的题参与本轮题序和判分。
                 val original = checkNotNull(dao.exercise(scope.id, checkNotNull(context.pending).id))
                 dao.updateTurn(original.copy(kind = TurnKind.MESSAGE.name, exerciseId = null, exerciseNumber = null))
             }
-            dao.insertTurn(turn.copy(searchSources = sources).row(scope))
+            val image = example?.image
+            val reply = turn.copy(
+                text = example?.text ?: turn.text, searchSources = sources,
+                attachments = listOfNotNull(image?.attachment),
+            )
+            dao.insertTurn(reply.row(scope))
+            // 案例和图片原子写入，撤回或清空后不会留下孤立文件。
+            image?.let { attachments.save(replyId, it) }
         }
     }
 
@@ -394,8 +430,7 @@ internal class ConversationRepository(
         return Turn(id, Speaker.ASSISTANT, TurnKind.DRAFT, raw, version, resultId = owner?.id)
     }
 
-    private suspend fun tutorTurn(raw: String, context: Request, id: String): Turn {
-        val reply = AiProtocol.tutor(raw)
+    private suspend fun tutorTurn(reply: TutorReply, context: Request, id: String): Turn {
         if (!context.reissue) {
             try {
                 TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
@@ -502,7 +537,7 @@ internal class ConversationRepository(
             remaining >= 0
         }.dropWhile { it.role != "user" }
         if (window.isEmpty()) return window
-        val attachmentTurn = recent.indexOfLast { it.attachments.isNotEmpty() }
+        val attachmentTurn = recent.indexOfLast { it.speaker == Speaker.USER && it.attachments.isNotEmpty() }
         if (courseFiles.isNotEmpty()) {
             // 连续提议可能收窄文本历史。资料单独汇总，供补充要求和确认生成复用。
             val supplied = courseFiles.takeLast(COURSE_ATTACHMENT_LIMIT)
@@ -536,6 +571,10 @@ internal class ConversationRepository(
             files.forEach {
                 val file = JSONObject().put("id", it.id).put("name", it.name).put("mimeType", it.mimeType)
                 if (it.partial) file.put("partial", true)
+                it.imageCredit?.let { credit ->
+                    file.put("credit", JSONObject().put("title", credit.title).put("sourceUrl", credit.sourceUrl)
+                        .put("author", credit.author).put("license", credit.license).put("licenseUrl", credit.licenseUrl))
+                }
                 metadata.put(file)
             }
             secret.seal(metadata.toString(), "$id:attachments")
@@ -575,8 +614,12 @@ internal class ConversationRepository(
                 val metadata = JSONArray(secret.open(it, "$id:attachments"))
                 List(metadata.length()) { index ->
                     val file = metadata.getJSONObject(index)
+                    val credit = file.optJSONObject("credit")?.let { image ->
+                        ImageCredit(image.getString("title"), image.getString("sourceUrl"), image.getString("author"),
+                            image.getString("license"), image.optString("licenseUrl").takeIf { !image.isNull("licenseUrl") })
+                    }
                     ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"),
-                        file.optBoolean("partial"))
+                        file.optBoolean("partial"), credit)
                 }
             }.orEmpty())
     }

@@ -4,7 +4,7 @@ LifeSkill 是一款原生 Android 学习应用。你可以按学习方向整理�
 
 ## 安装
 
-LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.14.24，本地签名安装包路径为 `release/LifeSkill-0.14.24-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
+LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.14.25，本地签名安装包路径为 `release/LifeSkill-0.14.25-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
 
 手动管理课程无需模型账户。要使用 AI 功能，在「我的 → 设置 → 模型设置」填入自己的服务商 API Key。自定义服务使用 HTTPS Base URL、模型名和 API Key。详见 [使用指南](docs/user-guide.md)。
 
@@ -37,4 +37,4 @@ Debug 构建使用本机调试签名。如果设备已装同包名、不同签�
 - [MVP 技术设计](docs/mvp.md)记录完整业务规则和实现决策。
 - [第三方依赖与素材声明](THIRD_PARTY_NOTICES.md)列出主要依赖及其许可来源。
 
-课程、学习进度、聊天记录、个人资料和证书保存在设备上。调用 AI 时，当前任务所需内容会发送给所选模型服务，并使用该服务商账户的额度。卸载或清除应用数据会删除本地记录。
+课程、学习进度、聊天记录、个人资料和证书保存在设备上。调用 AI 时，当前任务所需内容会发送给所选模型服务，并使用该服务商账户的额度。联网查找图片案例时，公共主题关键词会发送给维基共享资源。卸载或清除应用数据会删除本地记录。
