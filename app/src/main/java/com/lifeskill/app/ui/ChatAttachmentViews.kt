@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,9 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,7 +74,7 @@ internal fun ChatAttachmentSources(chat: ChatViewModel, expanded: Boolean, onClo
     val documents = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { chat.addAttachments(it) }
 
     if (!expanded) return
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         AttachmentSource("拍照", Glyph.CAMERA, Modifier.weight(1f), enabled) {
             try {
                 val directory = File(context.cacheDir, "chat-camera").apply { mkdirs() }
@@ -102,8 +109,8 @@ private fun cameraUri(context: Context, file: File): Uri =
 @Composable
 private fun AttachmentSource(label: String, glyph: Glyph, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
     Surface(onClick, modifier, enabled = enabled, shape = ControlShape, color = aiColors.panel) {
-        Column(Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.padding(vertical = 15.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Mark(glyph, aiColors.accent, Modifier.size(22.dp))
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
@@ -116,44 +123,75 @@ internal fun ChatAttachmentStrip(
     load: suspend (ChatAttachment) -> AttachmentDraft,
     onPreview: (ChatAttachment) -> Unit,
     onRemove: ((ChatAttachment) -> Unit)? = null,
+    sent: Boolean = false,
 ) {
     if (attachments.isEmpty()) return
-    LazyRow(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    val bounds = if (sent) Modifier.padding(start = 44.dp).testTag("sent-attachments") else
+        Modifier.testTag("draft-attachments")
+    LazyRow(
+        Modifier.fillMaxWidth().then(bounds).padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, if (sent) Alignment.End else Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         items(attachments, key = ChatAttachment::id) { item ->
-            Surface(shape = ControlShape, color = aiColors.panel) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(onClick = { onPreview(item) }, shape = ControlShape, color = aiColors.chip) {
-                        Row(Modifier.widthIn(min = 92.dp, max = 174.dp).heightIn(min = 48.dp).padding(6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (item.isImage) {
-                                val bitmap by produceState<Bitmap?>(null, item.id) {
-                                    value = withContext(Dispatchers.IO) {
-                                        try {
-                                            attachmentBitmap(load(item).bytes, 100)
-                                        } catch (error: Exception) {
-                                            if (error is CancellationException) throw error
-                                            null
-                                        }
-                                    }
-                                }
-                                Box(Modifier.size(36.dp).clip(ControlShape), contentAlignment = Alignment.Center) {
-                                    bitmap?.let { Image(it.asImageBitmap(), null, Modifier.matchParentSize(),
-                                        contentScale = ContentScale.Crop) }
-                                        ?: Mark(Glyph.PHOTO, aiColors.accent, Modifier.size(18.dp))
-                                }
-                            } else {
+            Box {
+                Surface(
+                    onClick = { onPreview(item) }, shape = ControlShape, color = aiColors.chip,
+                    modifier = Modifier.testTag("attachment-card-${item.id}"),
+                ) {
+                    if (item.isImage) {
+                        AttachmentThumbnail(item, load, Modifier.size(if (sent) 112.dp else 84.dp))
+                    } else {
+                        Row(
+                            Modifier.widthIn(min = 124.dp, max = if (sent) 236.dp else 208.dp)
+                                .heightIn(min = if (sent) 62.dp else 84.dp)
+                                .padding(start = 10.dp, end = if (onRemove == null) 12.dp else 46.dp, top = 8.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(30.dp).clip(ControlShape).background(aiColors.panel),
+                                contentAlignment = Alignment.Center) {
                                 Mark(Glyph.ATTACHMENT, aiColors.accent, Modifier.size(18.dp))
                             }
                             Text(item.name, style = MaterialTheme.typography.labelMedium, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    if (onRemove != null) {
-                        GlyphButton(Glyph.CLOSE, "移除 ${item.name}", { onRemove(item) }, background = aiColors.panel)
+                }
+                if (onRemove != null) {
+                    IconButton(
+                        onClick = { onRemove(item) },
+                        modifier = Modifier.align(Alignment.TopEnd).size(48.dp)
+                            .semantics { contentDescription = "移除 ${item.name}" },
+                    ) {
+                        Box(Modifier.size(24.dp).clip(CircleShape).background(Color(0xB3232D34)),
+                            contentAlignment = Alignment.Center) {
+                            Mark(Glyph.CLOSE, Color.White, Modifier.size(14.dp))
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AttachmentThumbnail(
+    item: ChatAttachment, load: suspend (ChatAttachment) -> AttachmentDraft, modifier: Modifier,
+) {
+    val bitmap by produceState<Bitmap?>(null, item.id) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                attachmentBitmap(load(item).bytes, 384)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                null
+            }
+        }
+    }
+    Box(modifier.semantics { contentDescription = item.name }, contentAlignment = Alignment.Center) {
+        bitmap?.let {
+            Image(it.asImageBitmap(), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        } ?: Mark(Glyph.PHOTO, aiColors.accent, Modifier.size(24.dp))
     }
 }
 
@@ -187,9 +225,10 @@ internal fun ChatAttachmentPreview(attachment: ChatAttachment, chat: ChatViewMod
         }
     }
     AlertDialog(
-        onDismissRequest = onDismiss, title = { Text(attachment.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        onDismissRequest = onDismiss,
+        title = if (attachment.isImage) null else ({ Text(attachment.name, maxLines = 2, overflow = TextOverflow.Ellipsis) }),
         text = {
-            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = if (attachment.isImage) 520.dp else 400.dp).verticalScroll(rememberScrollState())) {
                 val bitmap = preview?.bitmap
                 if (bitmap != null) {
                     Image(bitmap.asImageBitmap(), attachment.name, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)

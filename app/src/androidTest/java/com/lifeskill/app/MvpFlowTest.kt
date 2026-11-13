@@ -108,21 +108,43 @@ class MvpFlowTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val folder = File(context.cacheDir, "conversation-shares").apply { mkdirs() }
         val document = File(folder, "学习提纲.md").apply { writeText("先练习核对凭证，再汇总每笔账目。") }
+        val image = File(folder, "配图.png")
+        Bitmap.createBitmap(180, 240, Bitmap.Config.ARGB_8888).let { bitmap ->
+            bitmap.eraseColor(0xFF639E92.toInt())
+            image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.conversation-share", document)
+        val imageUri = FileProvider.getUriForFile(context, "${context.packageName}.conversation-share", image)
+        var pickedUri = uri
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val monitor = object : Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? =
                 if (intent.action == Intent.ACTION_OPEN_DOCUMENT) {
-                    Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri))
+                    Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(pickedUri))
                 } else null
         }
         instrumentation.addMonitor(monitor)
         try {
-            fun pickDocument() {
+            fun openFilePicker() {
                 ui.onNodeWithContentDescription("添加附件").performTouchInput { click() }
                 ui.onNodeWithText("拍照").assertIsDisplayed()
                 ui.onNodeWithText("相册").assertIsDisplayed()
                 ui.onNodeWithText("文件").performTouchInput { click() }
+            }
+            pickedUri = imageUri
+            openFilePicker()
+            val removeImage = ui.onNodeWithContentDescription("移除 ${image.name}")
+            ui.waitUntil(8_000) { ui.onAllNodesWithTag("draft-attachments").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithText(image.name).assertDoesNotExist()
+            val imageCard = ui.onNodeWithContentDescription(image.name).getUnclippedBoundsInRoot()
+            val imageRemove = removeImage.getUnclippedBoundsInRoot()
+            assertTrue(imageCard.right - imageCard.left >= 80.dp && imageCard.bottom - imageCard.top >= 80.dp)
+            assertTrue(imageRemove.right <= imageCard.right && imageRemove.left >= imageCard.left)
+            removeImage.performTouchInput { click() }
+            pickedUri = uri
+            fun pickDocument() {
+                openFilePicker()
                 await(document.name)
             }
             pickDocument()
@@ -140,6 +162,10 @@ class MvpFlowTest {
             showChatReply("可以规划凭证核对课程。")
             ui.onNodeWithContentDescription("移除 ${document.name}").assertDoesNotExist()
             ui.onNodeWithTag("chat-messages").performScrollToNode(hasText(document.name))
+            val attachments = ui.onNodeWithTag("sent-attachments").getUnclippedBoundsInRoot()
+            val storedAttachment = ui.onNodeWithText(document.name).getUnclippedBoundsInRoot()
+            assertTrue(storedAttachment.left > attachments.left + (attachments.right - attachments.left) / 3)
+            assertTrue(attachments.right - storedAttachment.right <= 14.dp)
             ui.onNodeWithText(document.name).performClick()
             await("先练习核对凭证，再汇总每笔账目。")
             pressBack()
@@ -147,6 +173,7 @@ class MvpFlowTest {
         } finally {
             instrumentation.removeMonitor(monitor)
             document.delete()
+            image.delete()
         }
     }
 

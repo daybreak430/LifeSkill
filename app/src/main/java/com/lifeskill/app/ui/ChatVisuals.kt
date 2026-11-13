@@ -162,11 +162,19 @@ internal fun AiComposer(
     attachmentStrip: @Composable () -> Unit = {},
 ) {
     val colors = aiColors
+    val supportsAttachments = onToggleAttachments != null
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = colors.panel,
-            border = BorderStroke(1.dp, if (errorText != null) MaterialTheme.colorScheme.error else colors.outline),
-            shadowElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(if (supportsAttachments) 24.dp else 20.dp),
+            color = colors.panel,
+            border = BorderStroke(
+                1.dp, when {
+                    errorText != null -> MaterialTheme.colorScheme.error
+                    supportsAttachments -> colors.outline.copy(alpha = .38f)
+                    else -> colors.outline
+                },
+            ),
+            shadowElevation = if (supportsAttachments) 0.dp else 1.dp,
         ) {
             Column(Modifier.padding(start = 15.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
                 attachmentStrip()
@@ -217,23 +225,24 @@ internal fun AiComposer(
 @Composable
 private fun ChatAttachmentButton(expanded: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val label = if (expanded) "收起附件选项" else "添加附件"
-    IconButton(onClick, Modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled) {
-        val tint = if (enabled) aiColors.accent else Muted
-        Surface(Modifier.size(34.dp), shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, tint)) {
-            Box(contentAlignment = Alignment.Center) {
-                Mark(if (expanded) Glyph.CLOSE else Glyph.ADD, tint, Modifier.size(18.dp))
-            }
-        }
-    }
+    val colors = aiColors
+    val fill = colors.chip.copy(alpha = if (enabled && expanded) 1f else .6f)
+    ChatComposerButton(if (expanded) Glyph.CLOSE else Glyph.ADD, label, enabled, onClick,
+        SolidColor(fill), if (enabled) colors.accent else Muted)
 }
 
 @Composable
 private fun ChatSendButton(enabled: Boolean, onSend: () -> Unit) {
     val colors = aiColors
-    IconButton(onSend, Modifier.size(48.dp).semantics { contentDescription = "发送" }, enabled = enabled) {
-        val fill = if (enabled) Brush.linearGradient(colors.outgoing) else SolidColor(colors.chip)
+    val fill = if (enabled) Brush.linearGradient(colors.outgoing) else SolidColor(colors.chip)
+    ChatComposerButton(Glyph.SEND, "发送", enabled, onSend, fill, if (enabled) Color.White else colors.accent)
+}
+
+@Composable
+private fun ChatComposerButton(glyph: Glyph, label: String, enabled: Boolean, onClick: () -> Unit, fill: Brush, tint: Color) {
+    IconButton(onClick, Modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled) {
         Box(Modifier.size(41.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
-            Mark(Glyph.SEND, if (enabled) Color.White else colors.accent, Modifier.size(20.dp))
+            Mark(glyph, tint, Modifier.size(20.dp))
         }
     }
 }

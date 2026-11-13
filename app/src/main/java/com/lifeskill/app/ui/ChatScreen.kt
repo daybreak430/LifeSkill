@@ -266,7 +266,7 @@ internal fun ChatScreen(
                                 style = MaterialTheme.typography.labelMedium, color = Muted)
                         }
                     }
-                    ChatAttachmentStrip(turn.attachments, chat::loadAttachment, ::previewAttachment)
+                    ChatAttachmentStrip(turn.attachments, chat::loadAttachment, ::previewAttachment, sent = true)
                     if (turn.text.isNotEmpty() || turn.attachments.isEmpty()) ChatBubble(
                         turn = turn,
                         result = library.byId[turn.resultId],
