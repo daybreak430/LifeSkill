@@ -180,7 +180,7 @@ internal fun LifeSkillApp(
                         Box(Modifier.fillMaxSize().routeInput(active)) {
                             stateHolder.SaveableStateProvider(displayedRoute.encode()) {
                                 when (displayedRoute.page) {
-                                    Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition)
+                                    Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition, active)
                                     Page.ME -> {
                                         val statistics = remember(displayedLibrary, assessments) {
                                             LearningStatistics.from(displayedLibrary, assessments)

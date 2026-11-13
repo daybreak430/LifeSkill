@@ -1,6 +1,7 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -75,6 +76,8 @@ private val CertificateNight = Color(0xFF0B1E26)
 private val CertificatePaper = Color(0xFFFFF3DA)
 private val CertificateGold = Color(0xFFD0A65E)
 private val CertificateInk = Color(0xFF214437)
+private val CertificateViewerEnter = CubicBezierEasing(.18f, .72f, .25f, 1f)
+private val CertificateViewerExit = CubicBezierEasing(.4f, 0f, .6f, 1f)
 
 internal data class CertificateViewerControls(
     val status: AssessmentStatus, val destroy: () -> Unit, val toggleVisibility: (() -> Unit)? = null,
@@ -84,11 +87,11 @@ internal data class CertificateViewerControls(
 @Composable
 internal fun IssuedCertificateDialog(
     certificate: CollectedCertificate, controls: CertificateViewerControls,
-    usage: UsageTotal?, onClose: () -> Unit,
+    usage: UsageTotal?, animateViewer: Boolean = false, onClose: () -> Unit,
 ) {
     ExamCertificateDialog(certificate.treeName, certificate.style, certificate.recipient, certificate.avatar,
         controls = controls, collectedAt = certificate.collectedAt, isSample = certificate.isSample, usage = usage,
-        onClose = onClose)
+        animateViewer = animateViewer, onClose = onClose)
 }
 
 @Composable
@@ -96,7 +99,7 @@ internal fun ExamCertificateDialog(
     treeName: String, style: CertificateStyle, recipient: String?, avatar: ProfileAvatar, collected: Boolean = false,
     status: AssessmentStatus = AssessmentStatus(), onCollect: ((String?) -> Unit)? = null,
     controls: CertificateViewerControls? = null, collectedAt: OffsetDateTime? = null, isSample: Boolean = false,
-    usage: UsageTotal? = null,
+    usage: UsageTotal? = null, animateViewer: Boolean = false,
     onClose: () -> Unit,
 ) {
     val viewing = onCollect == null
@@ -110,18 +113,30 @@ internal fun ExamCertificateDialog(
     var drag by remember { mutableFloatStateOf(0f) }
     val opening = remember { Animatable(if (opened) 1f else 0f) }
     val exit = remember { Animatable(0f) }
+    var viewerOpened by rememberSaveable { mutableStateOf(false) }
+    val viewer = remember { Animatable(if (viewerOpened || !animateViewer) 1f else 0f) }
     val certificateScroll = rememberScrollState()
     val close by rememberUpdatedState(onClose)
     val showEnvelope by remember { derivedStateOf { opening.value < .86f } }
     val showCertificate by remember { derivedStateOf { opening.value > .32f } }
     val canCollect by remember { derivedStateOf { opening.value >= 1f } }
+    val viewerActionsReady by remember { derivedStateOf { viewer.value >= .85f } }
 
     // 同一条时间轴先翻开封口，再抽出证书。重建页面时直接恢复已拆开的状态。
     LaunchedEffect(opened) {
         if (opened) opening.animateTo(1f, tween(720))
     }
-    LaunchedEffect(exiting) {
-        if (exiting) {
+    LaunchedEffect(exiting, animateViewer) {
+        if (animateViewer) {
+            // 打开与关闭共用纸面进度，刚打开就返回时从当前画面收拢。
+            if (exiting) {
+                viewer.animateTo(0f, tween(230, easing = CertificateViewerExit))
+                close()
+            } else {
+                viewerOpened = true
+                viewer.animateTo(1f, tween(360, easing = CertificateViewerEnter))
+            }
+        } else if (exiting) {
             exit.animateTo(1f, tween(240))
             close()
         }
@@ -156,13 +171,14 @@ internal fun ExamCertificateDialog(
         }
         Box(
             Modifier.fillMaxSize().testTag("exam-certificate")
-                .drawBehind { drawRect(CertificateNight.copy(alpha = .90f * (1f - exit.value))) }
+                .drawBehind { drawRect(CertificateNight.copy(alpha = .90f * viewer.value * (1f - exit.value))) }
                 .safeDrawingPadding().imePadding().padding(horizontal = 24.dp, vertical = 12.dp)
                 .graphicsLayer {
-                    alpha = 1f - exit.value
-                    scaleX = 1f - .07f * exit.value
+                    val remaining = 1f - viewer.value
+                    alpha = (1f - exit.value) * motionPhase(viewer.value, 0f, .76f)
+                    scaleX = 1f - .11f * remaining - .07f * exit.value
                     scaleY = scaleX
-                    translationY = 32.dp.toPx() * exit.value
+                    translationY = 18.dp.toPx() * remaining + 32.dp.toPx() * exit.value
                 },
             contentAlignment = Alignment.Center,
         ) {
@@ -223,21 +239,29 @@ internal fun ExamCertificateDialog(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CertificateCard(treeName, style, recipient ?: DEFAULT_PROFILE_NAME, avatar, collectedAt, isSample)
-                    if (!isSample) AiUsageSummary(
-                        usage, Modifier.padding(horizontal = 8.dp).testTag("certificate-ai-usage"), color = CertificatePaper,
-                    )
-                    if (controls != null) {
-                        CertificateViewerActions(controls, exiting, { confirmingDestruction = true }) { closing = true }
-                    } else if (onCollect != null) {
-                        if (requested && status.error != null) AssessmentStatusText(status)
-                        Action("领取证书", Glyph.CHECK, {
-                            if (recipient == null) {
-                                enteringNickname = true
-                            } else {
-                                requested = true
-                                onCollect.invoke(null)
+                    Column(
+                        if (animateViewer) Modifier.graphicsLayer { alpha = motionPhase(viewer.value, .66f, 1f) } else Modifier,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        if (!isSample) AiUsageSummary(
+                            usage, Modifier.padding(horizontal = 8.dp).testTag("certificate-ai-usage"), color = CertificatePaper,
+                        )
+                        if (controls != null) {
+                            CertificateViewerActions(controls, exiting || !viewerActionsReady, { confirmingDestruction = true }) {
+                                closing = true
                             }
-                        }, Modifier.fillMaxWidth(), primary = true, enabled = canCollect && !exiting && !status.busy)
+                        }
+                        if (onCollect != null) {
+                            if (requested && status.error != null) AssessmentStatusText(status)
+                            Action("领取证书", Glyph.CHECK, {
+                                if (recipient == null) {
+                                    enteringNickname = true
+                                } else {
+                                    requested = true
+                                    onCollect.invoke(null)
+                                }
+                            }, Modifier.fillMaxWidth(), primary = true, enabled = canCollect && !exiting && !status.busy)
+                        }
                     }
                 }
             }

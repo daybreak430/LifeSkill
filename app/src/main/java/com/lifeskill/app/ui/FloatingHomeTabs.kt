@@ -72,7 +72,7 @@ internal fun FloatingHomeTabs(page: Page, backdrop: Backdrop, dark: Boolean, sel
         label = "标签选中胶囊",
     )
     BoxWithConstraints(
-        modifier.padding(horizontal = 24.dp, vertical = 10.dp).widthIn(max = 284.dp).fillMaxWidth()
+        modifier.padding(horizontal = 24.dp, vertical = 10.dp).widthIn(max = 248.dp).fillMaxWidth()
             .then(glass).border(1.dp, edge, shape),
     ) {
         val tabWidth = (maxWidth - 10.dp) / 2

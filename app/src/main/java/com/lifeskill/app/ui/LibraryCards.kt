@@ -92,7 +92,7 @@ internal fun directionCardHeight(): Dp {
 
 @Composable
 internal fun HomeStudyCard(
-    study: HomeStudy?, modifier: Modifier = Modifier, onAction: () -> Unit,
+    study: HomeStudy?, tiltEnabled: Boolean, modifier: Modifier = Modifier, onAction: () -> Unit,
 ) {
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
@@ -123,7 +123,8 @@ internal fun HomeStudyCard(
                 .background(colors.heroLayer, heroShape))
         }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(top = 15.dp).homeCardBeam(cornerRadius).clip(heroShape)
+            Modifier.fillMaxWidth().padding(top = 15.dp).homeCardTilt(tiltEnabled)
+                .homeCardBeam(cornerRadius).clip(heroShape)
                 .background(Brush.linearGradient(colors.hero)).border(1.dp, colors.heroRim, heroShape),
         ) {
             val wideArt = maxWidth >= 328.dp && fontScale < 1.3f

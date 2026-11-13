@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +47,10 @@ import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.homeStudy
 import kotlinx.coroutines.flow.first
 
+private const val HOME_STUDY_CARD_KEY = "home-study"
+
 @Composable
-internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel, addedEntryId: String?) {
+internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel, addedEntryId: String?, active: Boolean) {
     val directions = library.childrenOf(null)
     val study = remember(library, latestSkill) { library.homeStudy(latestSkill) }
     val columnWidth = 148.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
@@ -55,6 +58,16 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
     val gap = 12.dp
     val cardHeight = directionCardHeight()
     val state = rememberLazyGridState()
+    val studyCardAtRest by remember(state) {
+        derivedStateOf {
+            !state.isScrollInProgress && state.layoutInfo.let { info ->
+                info.visibleItemsInfo.any { item ->
+                    item.key == HOME_STUDY_CARD_KEY && item.offset.y >= info.viewportStartOffset &&
+                        item.offset.y + item.size.height <= info.viewportEndOffset
+                }
+            }
+        }
+    }
     val addition = directions.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }
         ?.plus(if (study == null) 3 else 4)
     RevealAddition(
@@ -80,8 +93,8 @@ internal fun HomeScreen(library: Library, latestSkill: Entry?, app: AppViewModel
         item(key = "home-header", span = { GridItemSpan(maxLineSpan) }) {
             Text("LifeSkill", Modifier.fillMaxWidth(), style = LibraryTitle)
         }
-        item(key = "home-study", span = { GridItemSpan(maxLineSpan) }) {
-            HomeStudyCard(study, Modifier.animateItem()) {
+        item(key = HOME_STUDY_CARD_KEY, span = { GridItemSpan(maxLineSpan) }) {
+            HomeStudyCard(study, active && studyCardAtRest, Modifier.animateItem()) {
                 when (study?.state) {
                     null -> app.open(Route(Page.GENERATE))
                     HomeStudyState.COMPLETED -> app.open(Route.entry(study.tree))

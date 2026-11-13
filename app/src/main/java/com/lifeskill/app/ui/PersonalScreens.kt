@@ -141,7 +141,7 @@ internal fun PersonalScreen(
                 certificateStatus, destroy = { model.destroyCertificate(selected.treeId) },
                 toggleVisibility = { model.setCertificateHidden(selected.treeId, !selected.hidden) }, hidden = selected.hidden,
             )
-            IssuedCertificateDialog(selected, controls, usage.courses[selected.treeId]) {
+            IssuedCertificateDialog(selected, controls, usage.courses[selected.treeId], animateViewer = true) {
                 selectedId = null
                 model.clearCertificateStatus()
             }
