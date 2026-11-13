@@ -136,6 +136,12 @@ UI 开发规范：
 \- 准备 push 前必须同步审阅 `README.md`、`AGENTS.md` 与 `docs/` 下受影响文档，确保版本、架构、产品说明、决策和验收基线与实现一致。
 \- 保持文档与实际代码状态一致。
 
+## 发布规范
+
+- 每次发布 Android 新版本，按[贡献指南](CONTRIBUTING.md#构建发布包)签名并验证覆盖升级，将 APK 保存到 `release/LifeSkill-<版本>-release.apk`。
+- 同次发布须在 GitHub Releases 创建或更新 `v<版本>`，让标签指向构建 APK 的源码提交，并上传同名签名 APK 作为发布附件。
+- 发布完成前核对 GitHub Release 已发布、附件可下载，且附件的 SHA-256 与本地 APK 一致。在交付说明中附上 Release 链接。
+
 最终完成标准：
 
 一个开发任务完成必须满足：
