@@ -372,6 +372,10 @@ class MvpFlowTest {
         await("深度思考")
         val thinking = ui.onNodeWithText("深度思考").assertIsDisplayed()
         val search = ui.onNodeWithText("联网搜索").assertIsSelected()
+        val searchBounds = search.fetchSemanticsNode().boundsInRoot
+        val thinkingBounds = thinking.fetchSemanticsNode().boundsInRoot
+        assertTrue(searchBounds.left < thinkingBounds.left)
+        assertEquals(searchBounds.center.y, thinkingBounds.center.y, 1f)
         thinking.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
         thinking.performTouchInput { click() }.assertIsSelected()
         search.assertIsSelected().performTouchInput { click() }

@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -49,6 +52,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 internal fun String.searchSourceLinks(): String = substringAfter("\n\n", missingDelimiterValue = "")
@@ -209,10 +213,35 @@ internal fun AiComposer(
                     }
                 }
                 if (hasTools) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (deepThinking != null) ComposerTool("深度思考", Glyph.THINK, deepThinking, enabled, onToggleDeepThinking)
+                    val toolScroll = rememberScrollState()
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f).drawWithCache {
+                                val fadeWidth = minOf(24.dp.toPx(), size.width / 3)
+                                val left = Brush.horizontalGradient(listOf(colors.panel, colors.panel.copy(alpha = 0f)),
+                                    endX = fadeWidth)
+                                val right = Brush.horizontalGradient(listOf(colors.panel.copy(alpha = 0f), colors.panel),
+                                    startX = size.width - fadeWidth, endX = size.width)
+                                val leftToRight = layoutDirection == LayoutDirection.Ltr
+                                onDrawWithContent {
+                                    drawContent()
+                                    // 渐隐只覆盖可滑动的开关区域，附件和发送按钮始终保留独立触控区域。
+                                    if (fadeWidth > 0f) {
+                                        val fadeSize = Size(fadeWidth, size.height)
+                                        if (if (leftToRight) toolScroll.canScrollBackward else toolScroll.canScrollForward) {
+                                            drawRect(left, size = fadeSize)
+                                        }
+                                        if (if (leftToRight) toolScroll.canScrollForward else toolScroll.canScrollBackward) {
+                                            drawRect(right, topLeft = Offset(size.width - fadeWidth, 0f), size = fadeSize)
+                                        }
+                                    }
+                                }
+                            }.horizontalScroll(toolScroll).padding(end = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             if (webSearch != null) ComposerTool("联网搜索", Glyph.GLOBE, webSearch, enabled, onToggleSearch)
+                            if (deepThinking != null) ComposerTool("深度思考", Glyph.THINK, deepThinking, enabled, onToggleDeepThinking)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (onToggleAttachments != null) ChatAttachmentButton(attachmentsExpanded, attachEnabled, onToggleAttachments)
