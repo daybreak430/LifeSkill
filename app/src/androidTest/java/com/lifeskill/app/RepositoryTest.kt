@@ -615,6 +615,65 @@ class RepositoryTest {
         assertEquals(33, updated.childrenOf(newTree.id).size)
     }
 
+    @Test fun documentCourseKeepsMultipleUploadsAndUsesSourceNotesAfterClearingPlanningChat() = runBlocking {
+        val scope = ChatScope(ChatMode.GENERATE)
+        val conversations = container.conversations
+        val firstText = "第一章 适用范围与交接职责"
+        val secondText = "第三章 异常须在 30 分钟内上报"
+        val first = AttachmentDraft(ChatAttachment(UUID.randomUUID().toString(), "交接规程.md", "text/markdown"),
+            firstText.toByteArray(), firstText)
+        val second = AttachmentDraft(ChatAttachment(UUID.randomUUID().toString(), "异常处置.txt", "text/plain", partial = true),
+            secondText.toByteArray(), secondText)
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("先梳理目录、主要章节"))
+            assertTrue(messages.last().text.contains(firstText))
+            TREE_OFFER
+        }
+        conversations.send(scope, "", files = listOf(first))
+        ai.reply(TREE_OFFER)
+        conversations.send(scope, "还有一份补充资料", files = listOf(second))
+        ai.enqueue { messages ->
+            val request = messages.joinToString("\n") { it.text }
+            assertTrue(request.contains(firstText))
+            assertTrue(request.contains(secondText))
+            TREE_OFFER
+        }
+        conversations.send(scope, "重点讲怎么判断异常")
+
+        val notes = "交接规程.md 第一章明确交接职责。异常处置.txt 第三章要求 30 分钟内上报。"
+        val response = JSONObject(CREATED).put("reply", "异常处置仅覆盖已读取的正文。")
+        val skills = response.getJSONArray("trees").getJSONObject(0).put("name", "交接与异常处置").getJSONArray("skills")
+        skills.getJSONObject(0).put("sourceNotes", notes)
+        skills.getJSONObject(1).put("sourceNotes", "异常处置.txt 第三章练习异常上报。")
+        ai.enqueue { messages ->
+            val request = messages.joinToString("\n") { it.text }
+            assertTrue(messages.first().text.contains("sourceNotes"))
+            assertTrue(request.contains(firstText))
+            assertTrue(request.contains(secondText))
+            assertTrue(request.contains("\"partial\":true"))
+            response.toString()
+        }
+        val offer = conversations.watch(scope).first().last()
+        conversations.generateTree(scope, offer.id, GenerationOptions(GenerationLevel.BEGINNER, 2..2))
+        val draft = conversations.watch(scope).first().last()
+        assertEquals("异常处置仅覆盖已读取的正文。", draft.text)
+        val direction = container.library.snapshot().childrenOf(null).first()
+        conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
+        conversations.clearGeneration(scope)
+        val library = container.library.snapshot()
+        val course = library.childrenOf(direction.id).single()
+        val lesson = library.childrenOf(course.id).first()
+        assertEquals(notes, lesson.sourceNotes)
+        val encryptedNotes = checkNotNull(database.skills().entry(lesson.id)?.sourceNotes)
+        assertFalse(encryptedNotes.contains("30 分钟"))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("据此出题和判分"))
+            assertTrue(messages.first().text.contains(notes))
+            """{"kind":"teach","reply":"发现异常后，按第三章要求在 30 分钟内上报。"}"""
+        }
+        conversations.restartLesson(ChatScope(ChatMode.TUTOR, lesson.id), "")
+    }
+
     @Test fun unconfirmedDraftAndOldProposalDoNotBlockASecondPlan() = runBlocking {
         val direction = container.library.snapshot().childrenOf(null).first()
         val scope = ChatScope(ChatMode.GENERATE, direction.id)

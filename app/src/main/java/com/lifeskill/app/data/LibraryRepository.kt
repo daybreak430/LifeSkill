@@ -247,7 +247,8 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             names.add(name)
             val goal = LibraryRules.goal(draft.goal)
             val icon = draft.icon ?: usedIcons.recordFallback(GeneratedEntryIcons.forSkill(name, goal, usedIcons))
-            Entry(newId(), treeId, EntryKind.SKILL, name, goal, icon = icon, shortName = draft.shortName).also {
+            Entry(newId(), treeId, EntryKind.SKILL, name, goal, icon = icon, shortName = draft.shortName,
+                sourceNotes = draft.sourceNotes).also {
                 refIds[draft.ref] = it.id
             }
         }
@@ -278,6 +279,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         mastery.name, contentVersion, masteryVersion, position,
         icon?.name, shortName?.let { secret.seal(it, "$id:shortName") },
         directionColor?.name,
+        sourceNotes?.let { secret.seal(it, "$id:sourceNotes") },
     )
 
     private fun EntryRow.toEntry() = Entry(
@@ -285,6 +287,7 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         Mastery.valueOf(mastery), contentVersion, masteryVersion,
         EntryIcon.fromId(icon), shortName?.let { secret.open(it, "$id:shortName") },
         DirectionColor.entries.firstOrNull { it.name == directionColor },
+        sourceNotes?.let { secret.open(it, "$id:sourceNotes") },
     )
 
     private fun invalidScope(): Nothing = throw RuleViolation("AI 返回的新增内容与当前层级不匹配，请重试。")

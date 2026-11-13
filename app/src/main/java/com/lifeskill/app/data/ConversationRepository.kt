@@ -10,6 +10,7 @@ import com.lifeskill.app.ai.searchInstructions
 import com.lifeskill.app.ai.searchQuery
 import com.lifeskill.app.ai.searchSources
 import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
+import com.lifeskill.app.model.COURSE_ATTACHMENT_TEXT_LIMIT
 import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
@@ -247,13 +248,19 @@ internal class ConversationRepository(
             val history = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
                 newTreeHistory(recent, input)
             } else recent
+            val courseFiles = if (scope.mode == ChatMode.GENERATE && owner?.kind != EntryKind.TREE) {
+                val lastPlan = recent.indexOfLast {
+                    it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.TREE_OFFER && it.kind != TurnKind.TREE_QUESTION
+                }
+                recent.drop(lastPlan + 1).flatMap(Turn::attachments)
+            } else emptyList()
             val searchContext = dao.turn(scope.id, requestId)?.searchContext.takeIf { pending == null }
             Request(owner, input, pending, askedQuestions, reissue, searchContext,
-                ModelMessage("system", prompt), history)
+                ModelMessage("system", prompt), history, courseFiles)
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
-        val history = messageWindow(scope, context.history, config)
+        val history = messageWindow(scope, context.history, config, context.courseFiles)
         val owner = context.owner
         val target = when (owner?.kind) {
             EntryKind.SKILL -> UsageTarget(courseId = owner.parentId, lessonId = owner.id)
@@ -475,7 +482,7 @@ internal class ConversationRepository(
     }
 
     private suspend fun messageWindow(
-        scope: ChatScope, recent: List<Turn>, config: ModelSettings,
+        scope: ChatScope, recent: List<Turn>, config: ModelSettings, courseFiles: List<ChatAttachment>,
     ): List<ModelMessage> {
         val messages = recent.map {
             val role = if (it.speaker == Speaker.USER) "user" else "assistant"
@@ -494,10 +501,23 @@ internal class ConversationRepository(
             remaining -= it.text.length
             remaining >= 0
         }.dropWhile { it.role != "user" }
-        // 保留最近一条资料消息的附件，供后续提问和「确认生成」使用，避免反复附带整段历史原件。
+        if (window.isEmpty()) return window
         val attachmentTurn = recent.indexOfLast { it.attachments.isNotEmpty() }
+        if (courseFiles.isNotEmpty()) {
+            // 连续提议可能收窄文本历史。资料单独汇总，供补充要求和确认生成复用。
+            val supplied = courseFiles.takeLast(COURSE_ATTACHMENT_LIMIT)
+            val result = window.toMutableList()
+            val index = (attachmentTurn - (recent.size - window.size)).coerceAtLeast(0)
+            result[index] = attachments.addToMessage(
+                scope.id, result[index], supplied, config,
+                required = attachmentTurn == recent.lastIndex || recent.last().kind == TurnKind.GENERATE_TREE,
+                textBudget = COURSE_ATTACHMENT_TEXT_LIMIT, omittedFiles = supplied.size < courseFiles.size,
+            )
+            return result
+        }
+        // 普通教学和追加课时只附最近一条资料消息，避免反复发送整段历史原件。
         val index = attachmentTurn - (recent.size - window.size)
-        if (attachmentTurn < 0 || index !in window.indices) return window
+        if (index !in window.indices) return window
         return window.toMutableList().apply {
             this[index] = attachments.addToMessage(scope.id, this[index], recent[attachmentTurn].attachments,
                 config, required = attachmentTurn == recent.lastIndex)
@@ -513,7 +533,11 @@ internal class ConversationRepository(
         searchContext = searchSources?.let { secret.seal(it, "$id:search") },
         attachments = attachments.takeIf { it.isNotEmpty() }?.let { files ->
             val metadata = JSONArray()
-            files.forEach { metadata.put(JSONObject().put("id", it.id).put("name", it.name).put("mimeType", it.mimeType)) }
+            files.forEach {
+                val file = JSONObject().put("id", it.id).put("name", it.name).put("mimeType", it.mimeType)
+                if (it.partial) file.put("partial", true)
+                metadata.put(file)
+            }
             secret.seal(metadata.toString(), "$id:attachments")
         },
     )
@@ -524,9 +548,15 @@ internal class ConversationRepository(
         val sources = searchContext?.takeIf { speaker == Speaker.ASSISTANT.name }
             ?.let { secret.open(it, "$id:search") }
         if (turnKind == TurnKind.DRAFT) {
-            val draft = checkNotNull(AiProtocol.generation(body, savedDraft = true).draft)
+            val response = AiProtocol.generation(body, savedDraft = true)
+            val draft = checkNotNull(response.draft)
             val preview = GenerationPreview(draft.trees.map { it.name }, resultId ?: draft.directionId, draft.directionName)
-            val summary = if (draft.trees.isEmpty()) "已生成方向草稿" else "已生成课程草稿"
+            val summary = when {
+                draft.trees.isEmpty() -> "已生成方向草稿"
+                draft.trees.any { tree -> tree.skills.any { it.sourceNotes != null } } ->
+                    response.reply
+                else -> "已生成课程草稿"
+            }
             return Turn(id, Speaker.ASSISTANT, turnKind, summary + draft.prepareNewTrees().notice,
                 contentVersion, preview = preview, searchSources = sources)
         }
@@ -545,7 +575,8 @@ internal class ConversationRepository(
                 val metadata = JSONArray(secret.open(it, "$id:attachments"))
                 List(metadata.length()) { index ->
                     val file = metadata.getJSONObject(index)
-                    ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"))
+                    ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"),
+                        file.optBoolean("partial"))
                 }
             }.orEmpty())
     }
@@ -559,11 +590,13 @@ internal class ConversationRepository(
         val searchContext: String?,
         val system: ModelMessage,
         val history: List<Turn>,
+        val courseFiles: List<ChatAttachment>,
     )
 
     companion object {
         const val INPUT_LIMIT = 4_000
         private const val CONTEXT_TURNS = 16
         private const val CONTEXT_CHARS = 16_000
+        private const val COURSE_ATTACHMENT_LIMIT = 6
     }
 }
