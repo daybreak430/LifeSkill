@@ -98,6 +98,7 @@ internal fun HomeStudyCard(
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val cornerRadius = 26.dp
     val heroShape = RoundedCornerShape(cornerRadius)
+    val tilt = rememberHomeCardTilt(tiltEnabled)
     val title = when (study?.state) {
         null -> "想学什么？"
         HomeStudyState.COMPLETED -> study.tree.name
@@ -123,9 +124,9 @@ internal fun HomeStudyCard(
                 .background(colors.heroLayer, heroShape))
         }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(top = 15.dp).homeCardTilt(tiltEnabled)
-                .homeCardBeam(cornerRadius).clip(heroShape)
-                .background(Brush.linearGradient(colors.hero)).border(1.dp, colors.heroRim, heroShape),
+            Modifier.fillMaxWidth().padding(top = 15.dp).homeCardTilt(tilt).clip(heroShape)
+                .background(Brush.linearGradient(colors.hero)).border(1.dp, colors.heroRim, heroShape)
+                .homeCardRefraction(tilt, cornerRadius, colors),
         ) {
             val wideArt = maxWidth >= 328.dp && fontScale < 1.3f
             val compactArt = !wideArt && maxWidth >= 256.dp

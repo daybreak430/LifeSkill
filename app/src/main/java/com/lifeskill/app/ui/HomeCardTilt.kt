@@ -12,6 +12,7 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,32 +32,32 @@ import kotlinx.coroutines.awaitCancellation
 import kotlin.math.asin
 import kotlin.math.exp
 
-private const val MAX_TILT_DEGREES = 5f
+internal const val MAX_HOME_TILT_DEGREES = 5f
 private const val TILT_DEAD_ZONE_DEGREES = 1.2f
 private const val TILT_GAIN = .42f
 private const val TILT_SMOOTHING_SECONDS = .10f
 private const val CAMERA_POINTS_PER_INCH = 72f
 
 @Composable
-internal fun Modifier.homeCardTilt(enabled: Boolean): Modifier {
+internal fun rememberHomeCardTilt(enabled: Boolean): State<Offset> {
     val view = LocalView.current
+    val tilt = remember { mutableStateOf(Offset.Zero) }
     val manager = remember(view) { view.context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager }
-        ?: return this
+        ?: return tilt
     val sensor = remember(manager) {
         manager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
             ?: manager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-    } ?: return this
+    } ?: return tilt
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val durationScale = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
     val motionEnabled = durationScale > 0f
     val listening = enabled && lifecycle == Lifecycle.State.RESUMED && LocalWindowInfo.current.isWindowFocused
-    var tilt by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(listening, motionEnabled, view, manager, sensor) {
         if (!motionEnabled) {
-            tilt = Offset.Zero
+            tilt.value = Offset.Zero
         } else if (listening) {
-            val listener = HomeTiltListener(view, { tilt }) { tilt = it }
+            val listener = HomeTiltListener(view, { tilt.value }) { tilt.value = it }
             if (manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)) {
                 try {
                     awaitCancellation()
@@ -64,21 +65,22 @@ internal fun Modifier.homeCardTilt(enabled: Boolean): Modifier {
                     manager.unregisterListener(listener)
                 }
             } else {
-                tilt = Offset.Zero
+                tilt.value = Offset.Zero
             }
-        } else if (tilt != Offset.Zero) {
-            Animatable(tilt, Offset.VectorConverter).animateTo(Offset.Zero, tween(240)) { tilt = value }
+        } else if (tilt.value != Offset.Zero) {
+            Animatable(tilt.value, Offset.VectorConverter).animateTo(Offset.Zero, tween(240)) { tilt.value = value }
         }
     }
 
-    return graphicsLayer {
-        // 只更新卡面图层，流光和按钮随图层转动，列表无需重新布局。
-        val angles = if (motionEnabled) tilt else Offset.Zero
-        rotationX = angles.x
-        rotationY = angles.y
-        // Android 底层相机会将距离乘以 72，换算后让透视距离随卡片尺寸等比变化。
-        cameraDistance = (maxOf(size.width, size.height) * 1.35f / CAMERA_POINTS_PER_INCH).coerceAtLeast(1f)
-    }
+    return tilt
+}
+
+internal fun Modifier.homeCardTilt(tilt: State<Offset>): Modifier = graphicsLayer {
+    val angles = tilt.value
+    rotationX = angles.x
+    rotationY = angles.y
+    // Android 底层相机会将距离乘以 72，换算后让透视距离随卡片尺寸等比变化。
+    cameraDistance = (maxOf(size.width, size.height) * 1.35f / CAMERA_POINTS_PER_INCH).coerceAtLeast(1f)
 }
 
 private class HomeTiltListener(
@@ -129,6 +131,6 @@ internal fun homeTiltAngles(neutral: FloatArray, rotation: FloatArray): Offset {
     ) * (180f / Math.PI.toFloat())
     val magnitude = angles.getDistance()
     if (magnitude <= TILT_DEAD_ZONE_DEGREES) return Offset.Zero
-    val tilt = ((magnitude - TILT_DEAD_ZONE_DEGREES) * TILT_GAIN).coerceAtMost(MAX_TILT_DEGREES)
+    val tilt = ((magnitude - TILT_DEAD_ZONE_DEGREES) * TILT_GAIN).coerceAtMost(MAX_HOME_TILT_DEGREES)
     return angles * (tilt / magnitude)
 }
