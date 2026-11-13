@@ -83,6 +83,7 @@ internal class ConversationRepository(
     suspend fun send(
         scope: ChatScope, text: String, check: Boolean = false, webSearch: Boolean = false,
         files: List<AttachmentDraft> = emptyList(),
+        deepThinking: Boolean = false,
         onRequestQueued: (String) -> Unit = {},
     ) {
         val input = text.trim()
@@ -100,20 +101,24 @@ internal class ConversationRepository(
             onRequestQueued = onRequestQueued,
             webSearch = webSearch && !check && input.isNotEmpty(),
             files = files,
+            deepThinking = deepThinking,
         )
     }
 
     suspend fun restartLesson(
-        scope: ChatScope, requirements: String, webSearch: Boolean = false, onRequestQueued: (String) -> Unit = {},
+        scope: ChatScope, requirements: String, webSearch: Boolean = false, deepThinking: Boolean = false,
+        onRequestQueued: (String) -> Unit = {},
     ) {
         if (scope.mode != ChatMode.TUTOR) throw RuleViolation("请在 AI 老师页面重新学习。")
         val input = requirements.trim()
         if (input.length > INPUT_LIMIT) throw RuleViolation("本次学习要求最多 ${INPUT_LIMIT} 个字符。")
-        queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued, webSearch = webSearch)
+        queueAndRespond(scope, TurnKind.RESTART, input, onRequestQueued = onRequestQueued, webSearch = webSearch,
+            deepThinking = deepThinking)
     }
 
     suspend fun generateTree(
-        scope: ChatScope, offerId: String, options: GenerationOptions, onRequestQueued: (String) -> Unit = {},
+        scope: ChatScope, offerId: String, options: GenerationOptions, deepThinking: Boolean = false,
+        onRequestQueued: (String) -> Unit = {},
     ) {
         if (scope.mode != ChatMode.GENERATE) throw RuleViolation("请在 AI 生成对话中确认。")
         // 与待处理消息一起加密保存，自动补试、手动重试和重启都使用已确认的设置。
@@ -122,7 +127,7 @@ internal class ConversationRepository(
             .put("minimum", options.courseCount.first)
             .put("maximum", options.courseCount.last)
             .toString()
-        queueAndRespond(scope, TurnKind.GENERATE_TREE, input, offerId, onRequestQueued)
+        queueAndRespond(scope, TurnKind.GENERATE_TREE, input, offerId, onRequestQueued, deepThinking = deepThinking)
     }
 
     private suspend fun queueAndRespond(
@@ -130,6 +135,7 @@ internal class ConversationRepository(
         onRequestQueued: (String) -> Unit,
         webSearch: Boolean = false,
         files: List<AttachmentDraft> = emptyList(),
+        deepThinking: Boolean = false,
     ) {
         val id = database.withTransaction {
             val owner = requireOwner(scope)
@@ -164,7 +170,8 @@ internal class ConversationRepository(
             }
             val turn = Turn(newId(), Speaker.USER, kind, input, owner?.contentVersion ?: 0, attachments = files.map { it.attachment })
             // 空串标记本条消息需要搜索，成功后换成加密结果，旧消息与普通消息仍为 null。
-            dao.insertTurn(turn.row(scope).copy(searchContext = "".takeIf { webSearch }))
+            // 请求入队时记录开关，自动补试、重试和进程恢复都沿用发送时的选择。
+            dao.insertTurn(turn.row(scope).copy(searchContext = "".takeIf { webSearch }, deepThinking = deepThinking))
             for (file in files) attachments.save(turn.id, file)
             turn.id
         }
@@ -264,6 +271,9 @@ internal class ConversationRepository(
         } ?: return
 
         val config = withContext(Dispatchers.IO) { settings.active() }.validated()
+        if (context.input.deepThinking && !config.supportsDeepThinking) {
+            throw RuleViolation("当前模型不支持深度思考，请切换模型后重试，或撤回后重新发送。")
+        }
         val history = messageWindow(scope, context.history, config, context.courseFiles)
         val owner = context.owner
         val target = when (owner?.kind) {
@@ -324,7 +334,8 @@ internal class ConversationRepository(
             persistResponse(scope, requestId, context, raw, sources, tutor, example)
         }
         try {
-            val raw = usage.complete(config, messages, structured = true, target = target)
+            val raw = usage.complete(config, messages, structured = true, target = target,
+                deepThinking = context.input.deepThinking)
             save(raw)
         } catch (error: RecoverableReply) {
             // 只补试一次。沿用原请求标识，撤回、重学或已完成的请求无需再发。
@@ -333,7 +344,7 @@ internal class ConversationRepository(
             val retryMessages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + messages.drop(1)
             try {
                 val corrected = usage.complete(config, retryMessages, structured = true, target = target,
-                    useJsonMode = !error.retryWithoutJsonMode)
+                    useJsonMode = !error.retryWithoutJsonMode, deepThinking = context.input.deepThinking)
                 save(corrected)
             } catch (_: RecoverableReply) {
                 throw RuleViolation(if (scope.mode == ChatMode.GENERATE) "这次没能生成可用的内容，请重试。"
@@ -604,7 +615,8 @@ internal class ConversationRepository(
             val options = GenerationOptions(
                 GenerationLevel.valueOf(data.getString("level")), data.getInt("minimum")..data.getInt("maximum"),
             )
-            return Turn(id, Speaker.USER, turnKind, options.confirmation, contentVersion, generationOptions = options)
+            return Turn(id, Speaker.USER, turnKind, options.confirmation, contentVersion, generationOptions = options,
+                deepThinking = deepThinking)
         }
         return Turn(id, Speaker.valueOf(speaker), turnKind, body, contentVersion, exerciseId, resultId, choices?.let {
             val values = JSONArray(secret.open(it, "$id:choices"))
@@ -621,7 +633,7 @@ internal class ConversationRepository(
                     ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"),
                         file.optBoolean("partial"), credit)
                 }
-            }.orEmpty())
+            }.orEmpty(), deepThinking = deepThinking)
     }
 
     private data class Request(

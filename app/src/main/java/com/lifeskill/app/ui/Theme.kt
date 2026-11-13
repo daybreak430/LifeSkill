@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -192,7 +193,7 @@ internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
 internal enum class Glyph {
     TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, LOCK,
     WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, GLOBE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS, RESTART, PERSON,
-    PHOTO, ATTACHMENT,
+    PHOTO, ATTACHMENT, THINK,
 }
 
 @Composable
@@ -228,6 +229,12 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
                 path(10, 3, 12.4, 9.6, 19, 12, 12.4, 14.4, 10, 21, 7.6, 14.4, 1, 12, 7.6, 9.6, close = true)
                 line(19, 3, 19, 8)
                 line(16.5, 5.5, 21.5, 5.5)
+            }
+            Glyph.THINK -> {
+                for (angle in listOf(-45f, 45f)) rotate(angle, pivot = at(12, 12)) {
+                    drawOval(color, at(3, 7.5), Size(18 * unit, 9 * unit), style = Stroke(1.65f * unit))
+                }
+                circle(12, 12, 1.35f, fill = true)
             }
             Glyph.ADD -> { line(5, 12, 19, 12); line(12, 5, 12, 19) }
             Glyph.PHOTO -> {

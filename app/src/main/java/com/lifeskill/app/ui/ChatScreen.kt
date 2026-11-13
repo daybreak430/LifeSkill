@@ -86,7 +86,7 @@ internal fun ChatScreen(
     val timeline by chat.history.collectAsStateWithLifecycle()
     val history = timeline.turns
     val status by chat.status.collectAsStateWithLifecycle()
-    val webSearchAvailable by chat.webSearchAvailable.collectAsStateWithLifecycle()
+    val modelFeatures by chat.modelFeatures.collectAsStateWithLifecycle()
     val editor by app.editor.collectAsStateWithLifecycle()
     val attachmentDrafts by chat.attachmentDrafts.collectAsStateWithLifecycle()
     val attachmentStatus by chat.attachmentStatus.collectAsStateWithLifecycle()
@@ -101,7 +101,10 @@ internal fun ChatScreen(
     }
     val exercise = remember(currentLesson) { TutorRules.pendingExercise(currentLesson) }
     var webSearch by rememberSaveable(scope.id) { mutableStateOf(true) }
-    val supportsWebSearch = webSearchAvailable == true && !locked
+    val supportsWebSearch = modelFeatures?.webSearch == true && !locked
+    val supportsDeepThinking = modelFeatures?.deepThinking == true && !locked
+    var deepThinking by rememberSaveable(scope.id) { mutableStateOf(false) }
+    val useDeepThinking = supportsDeepThinking && deepThinking
     val showWebSearch = supportsWebSearch && exercise == null
     val lastQuizTurn = currentLesson.lastOrNull { it.speaker == Speaker.ASSISTANT && it.kind != TurnKind.OFF_TOPIC }
     val latestReply = currentLesson.lastOrNull()?.takeIf { it.speaker == Speaker.ASSISTANT }
@@ -135,12 +138,12 @@ internal fun ChatScreen(
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
     val footerVisible = !status.clearing && !settled &&
         (pending != null || statusMatches && (status.working || status.error != null))
-    val canSend = timeline.loaded && webSearchAvailable != null && !status.working && pending == null && !attachmentStatus.loading
+    val canSend = timeline.loaded && modelFeatures != null && !status.working && pending == null && !attachmentStatus.loading
     BackHandler(pageActive && attachmentsExpanded) { attachmentsExpanded = false }
 
     fun submit(text: String, check: Boolean = false, search: Boolean = false) {
         keyboard?.hide()
-        chat.send(text, check, search)
+        chat.send(text, check, search, deepThinking = useDeepThinking)
     }
 
     fun previewAttachment(item: ChatAttachment) {
@@ -149,7 +152,7 @@ internal fun ChatScreen(
     }
 
     LaunchedEffect(pageActive) {
-        if (pageActive) chat.refreshWebSearchAvailability()
+        if (pageActive) chat.refreshModelFeatures()
     }
 
     fun openDraft(id: String) {
@@ -205,7 +208,7 @@ internal fun ChatScreen(
                 else -> "AI 生成课程"
             }, owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
-            restartEnabled = !status.working && webSearchAvailable != null,
+            restartEnabled = !status.working && modelFeatures != null,
             onShowUsage = if (tutor) ({
                 keyboard?.hide()
                 showingUsage = true
@@ -319,7 +322,10 @@ internal fun ChatScreen(
                 item(key = CHAT_STATUS) {
                     // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
                     ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry) { turn ->
-                        if (turn.kind == TurnKind.MESSAGE) chat.editPending(turn) { draft = turn.text }
+                        if (turn.kind == TurnKind.MESSAGE) chat.editPending(turn) {
+                            draft = turn.text
+                            deepThinking = turn.deepThinking
+                        }
                         else chat.discard(turn)
                     }
                 }
@@ -348,10 +354,13 @@ internal fun ChatScreen(
                 sendEnabled = (draft.isNotBlank() || attachmentDrafts.isNotEmpty()) && !exceedsLimit && canSend && !locked,
                 webSearch = webSearch.takeIf { showWebSearch },
                 onToggleSearch = { webSearch = !webSearch },
+                deepThinking = deepThinking.takeIf { supportsDeepThinking },
+                onToggleDeepThinking = { deepThinking = !deepThinking },
                 onSend = {
                     keyboard?.hide()
                     attachmentsExpanded = false
-                    chat.send(draft, webSearch = showWebSearch && webSearch, includeAttachments = true) { draft = "" }
+                    chat.send(draft, webSearch = showWebSearch && webSearch, includeAttachments = true,
+                        deepThinking = useDeepThinking) { draft = "" }
                 },
                 attachmentsExpanded = attachmentsExpanded,
                 attachEnabled = canSend && !locked && (attachmentsExpanded || attachmentDrafts.size < CHAT_ATTACHMENT_LIMIT),
@@ -394,7 +403,7 @@ internal fun ChatScreen(
             onStart = { requirements ->
                 showRestart = false
                 keyboard?.hide()
-                chat.restartLesson(requirements, webSearch = supportsWebSearch && webSearch)
+                chat.restartLesson(requirements, webSearch = supportsWebSearch && webSearch, deepThinking = useDeepThinking)
                 chat.clearAttachments()
                 attachmentsExpanded = false
                 draft = ""
@@ -422,7 +431,7 @@ internal fun ChatScreen(
             onDismiss = { selectedOfferId = null },
             onConfirm = { options ->
                 selectedOfferId = null
-                chat.generateTree(treeOffer.id, options)
+                chat.generateTree(treeOffer.id, options, deepThinking = useDeepThinking)
             },
         )
     }
@@ -631,7 +640,11 @@ private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Loading(Modifier.size(25.dp))
                     Text(
-                        if (pending?.kind == TurnKind.GENERATE_TREE) "正在生成课程" else "正在等待 AI 回复",
+                        when {
+                            pending?.kind == TurnKind.GENERATE_TREE -> "正在生成课程"
+                            pending?.deepThinking == true -> "正在深度思考"
+                            else -> "正在等待 AI 回复"
+                        },
                         style = MaterialTheme.typography.labelMedium, color = Muted,
                     )
                 }

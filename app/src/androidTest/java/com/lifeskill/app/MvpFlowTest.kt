@@ -366,6 +366,30 @@ class MvpFlowTest {
         ui.onNodeWithText("AI 生成课程").assertIsDisplayed()
     }
 
+    @Test fun deepThinkingIsIndependentOfSearchAndSurvivesRetry() {
+        await("AI 生成课程")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("深度思考")
+        val thinking = ui.onNodeWithText("深度思考").assertIsDisplayed()
+        val search = ui.onNodeWithText("联网搜索").assertIsSelected()
+        thinking.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        thinking.performTouchInput { click() }.assertIsSelected()
+        search.assertIsSelected().performTouchInput { click() }
+        ui.activityRule.scenario.recreate()
+        await("深度思考")
+        thinking.assertIsSelected()
+        search.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        fixture.ai.enqueue { throw RuleViolation("测试暂时失败") }
+        send("先深入分析学习目标")
+        await("测试暂时失败")
+        val pending = runBlocking { fixture.container.conversations.watch(ChatScope(ChatMode.GENERATE)).first().last() }
+        assertTrue(pending.deepThinking)
+        fixture.ai.reply("""{"kind":"message","reply":"已按学习目标重新分析。"}""")
+        ui.onNodeWithText("重试").performTouchInput { click() }
+        showChatReply("已按学习目标重新分析。")
+        thinking.performTouchInput { click() }.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+    }
+
     @Test fun webSearchChipIsOnByDefaultAndCanBeTurnedOff() {
         await("AI 生成课程")
         ui.onNodeWithText("AI 生成课程").performClick()

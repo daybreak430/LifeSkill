@@ -33,6 +33,7 @@ internal class RecoverableReply(
 internal interface AiGateway {
     suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean = true,
+        deepThinking: Boolean = false,
         onUsage: (suspend (ModelUsage) -> Unit)? = null,
     ): String
 
@@ -51,14 +52,17 @@ internal class OpenAiGateway(
         messages: List<ModelMessage>,
         structured: Boolean,
         useJsonMode: Boolean,
+        deepThinking: Boolean,
         onUsage: (suspend (ModelUsage) -> Unit)?,
     ): String = withContext(Dispatchers.IO) {
         val valid = settings.validated()
         val jsonMode = valid.provider == Provider.DEEPSEEK && structured && useJsonMode
+        val thinking = deepThinking && valid.supportsDeepThinking
         val connection = openConnection(URI("${valid.baseUrl}/chat/completions"))
         try {
             val startedAt = Instant.now()
-            postJson(connection, valid.apiKey, requestBody(valid, messages, structured, jsonMode), 85_000)
+            postJson(connection, valid.apiKey, requestBody(valid, messages, structured, jsonMode, thinking),
+                if (thinking) 150_000 else 85_000)
             val status = connection.responseCode
             if (status !in 200..299) throw httpError(status)
             val raw = readBody(connection, "AI 响应过长，请缩小本次请求。")
@@ -142,7 +146,7 @@ internal class OpenAiGateway(
     }
 
     private fun requestBody(
-        settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, jsonMode: Boolean,
+        settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, jsonMode: Boolean, thinking: Boolean,
     ): JSONObject =
         JSONObject().apply {
             put("model", settings.model)
@@ -162,14 +166,15 @@ internal class OpenAiGateway(
             })
             when (settings.provider) {
                 Provider.DEEPSEEK -> {
-                    put("thinking", JSONObject().put("type", "disabled"))
+                    put("thinking", JSONObject().put("type", if (thinking) "enabled" else "disabled"))
+                    if (thinking) put("reasoning_effort", "high")
                     if (jsonMode) put("response_format", JSONObject().put("type", "json_object"))
-                    if (structured) put("max_tokens", 10_000)
+                    if (structured) put("max_tokens", if (thinking) 20_000 else 10_000)
                 }
                 Provider.MINIMAX -> {
-                    put("reasoning_effort", "low")
+                    put("reasoning_effort", if (thinking) "high" else "low")
                     put("reasoning_split", true)
-                    put("max_completion_tokens", if (structured) 12_000 else 2_000)
+                    put("max_completion_tokens", if (thinking) 20_000 else if (structured) 12_000 else 2_000)
                 }
                 Provider.CUSTOM -> Unit
             }

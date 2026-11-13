@@ -37,7 +37,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 **用量。** DeepSeek 和 MiniMax 的官方回执转换为统一格式，写入请求用量表。表内保存模型、时间、Token 分项、归属及当次费用估算。Room v6 增加回执总数，兼容仅有总数的回执，旧记录继续按分项求和。先存用量再解析回复正文，避免漏计带回执的补试。联网搜索成功返回结果后保存独立用量记录，汇总时将模型费用与搜索费用相加，并沿用历史搜索记录的单次估算值。搜索证据与对应消息一同加密保存，回复重试复用已有结果。课程生成请求先关联草稿，确认添加时在同一事务内转入课程。用量与对话和证书快照分离，删除课程或清空会话后仍可统计支出。
 
-**数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v8，保留 v1 到 v8 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
+**数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v12，保留 v1 到 v12 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。v12 在消息上记录发出时的深度思考选项，旧消息按关闭读取。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
 
 **证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和领取日期。证书档案独立于课程，删除课程后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书带展示日期，可隐藏和销毁。课程列表的「已领证书」与已领取证书统计均基于未销毁的正式证书。
 

@@ -74,6 +74,27 @@ class AiGatewayTest {
         }
     }
 
+    @Test fun mapsTheThinkingToggleToEachProviderAndKeepsStructuredReplies() = runBlocking {
+        for (provider in listOf(Provider.DEEPSEEK, Provider.MINIMAX)) {
+            for (enabled in listOf(false, true)) {
+                val response = Response(body = """{"choices":[{"message":{"content":"{\"reply\":\"回答\"}","reasoning_content":"内部过程"}}]}""")
+                val gateway = OpenAiGateway { response }
+                val config = ModelSettings(provider, apiKey = "test-key")
+                assertEquals("""{"reply":"回答"}""", gateway.complete(config, messages, structured = true, deepThinking = enabled))
+                val request = JSONObject(response.written.toByteArray().decodeToString())
+                if (provider == Provider.DEEPSEEK) {
+                    assertEquals(if (enabled) "enabled" else "disabled", request.getJSONObject("thinking").getString("type"))
+                    assertEquals("json_object", request.getJSONObject("response_format").getString("type"))
+                    assertEquals(if (enabled) "high" else "", request.optString("reasoning_effort"))
+                } else {
+                    assertEquals(if (enabled) "high" else "low", request.getString("reasoning_effort"))
+                    assertFalse(request.has("thinking"))
+                }
+                assertFalse(request.has("tools"))
+            }
+        }
+    }
+
     @Test fun readsDeepSeekBalanceFromTheDedicatedEndpoint() = runBlocking {
         val connection = Response(
             body = """{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"110.00","granted_balance":"10.00","topped_up_balance":"100.00"}]}""",

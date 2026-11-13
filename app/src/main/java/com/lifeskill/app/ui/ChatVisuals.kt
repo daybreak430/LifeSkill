@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -158,11 +161,13 @@ internal fun ChatPill(
 internal fun AiComposer(
     value: String, onChange: (String) -> Unit, label: String, enabled: Boolean, errorText: String?,
     sendEnabled: Boolean, webSearch: Boolean? = null, onToggleSearch: () -> Unit = {}, onSend: () -> Unit,
+    deepThinking: Boolean? = null, onToggleDeepThinking: () -> Unit = {},
     attachmentsExpanded: Boolean = false, attachEnabled: Boolean = false, onToggleAttachments: (() -> Unit)? = null,
     attachmentStrip: @Composable () -> Unit = {},
 ) {
     val colors = aiColors
     val supportsAttachments = onToggleAttachments != null
+    val hasTools = deepThinking != null || webSearch != null
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(if (supportsAttachments) 24.dp else 20.dp),
@@ -179,7 +184,7 @@ internal fun AiComposer(
             Column(Modifier.padding(start = 15.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
                 attachmentStrip()
                 Row(
-                    Modifier.heightIn(min = if (webSearch == null) 48.dp else 36.dp),
+                    Modifier.heightIn(min = if (hasTools) 36.dp else 48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     BasicTextField(
@@ -198,17 +203,17 @@ internal fun AiComposer(
                             }
                         },
                     )
-                    if (webSearch == null) {
+                    if (!hasTools) {
                         if (onToggleAttachments != null) ChatAttachmentButton(attachmentsExpanded, attachEnabled, onToggleAttachments)
                         ChatSendButton(sendEnabled, onSend)
                     }
                 }
-                if (webSearch != null) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically) {
-                        SelectionChip("联网搜索", webSearch, onToggleSearch, enabled = enabled, leadingIcon = {
-                            Mark(Glyph.GLOBE, if (webSearch) colors.accent else Muted, Modifier.size(16.dp))
-                        })
+                if (hasTools) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (deepThinking != null) ComposerTool("深度思考", Glyph.THINK, deepThinking, enabled, onToggleDeepThinking)
+                            if (webSearch != null) ComposerTool("联网搜索", Glyph.GLOBE, webSearch, enabled, onToggleSearch)
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (onToggleAttachments != null) ChatAttachmentButton(attachmentsExpanded, attachEnabled, onToggleAttachments)
                             ChatSendButton(sendEnabled, onSend)
@@ -220,6 +225,21 @@ internal fun AiComposer(
         errorText?.let { Text(it, Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+@Composable
+private fun ComposerTool(label: String, glyph: Glyph, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val colors = aiColors
+    val tint = if (selected) colors.accent else Muted
+    FilterChip(
+        selected = selected, onClick = onClick, enabled = enabled, shape = CircleShape,
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { Mark(glyph, if (enabled) tint else Muted.copy(alpha = .5f), Modifier.size(16.dp)) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = colors.panel, labelColor = Muted, selectedContainerColor = colors.chip, selectedLabelColor = colors.accent,
+        ),
+        border = BorderStroke(1.dp, (if (selected) colors.accent else colors.outline).copy(alpha = if (enabled) .45f else .20f)),
+    )
 }
 
 @Composable

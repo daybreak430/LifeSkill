@@ -121,8 +121,8 @@ internal class AiUsageRepository(private val dao: AiUsageDao, private val gatewa
 
     suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean,
-        target: UsageTarget = UsageTarget(), useJsonMode: Boolean = true,
-    ): String = gateway.complete(settings, messages, structured, useJsonMode) { usage ->
+        target: UsageTarget = UsageTarget(), useJsonMode: Boolean = true, deepThinking: Boolean = false,
+    ): String = gateway.complete(settings, messages, structured, useJsonMode, deepThinking) { usage ->
         record(AiUsageRow(
             courseId = target.courseId, lessonId = target.lessonId, draftId = target.draftId,
             generation = target.generation, model = usage.model, createdAt = usage.timestamp.epochSecond,

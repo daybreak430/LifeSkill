@@ -334,6 +334,8 @@ internal data class ChatHistory(
     val loaded: Boolean = true,
 )
 
+internal data class ChatModelFeatures(val webSearch: Boolean, val deepThinking: Boolean)
+
 internal class ChatViewModel(container: AppContainer, private val scope: ChatScope) : ViewModel() {
     private val repository = container.conversations
     private val attachmentStore = container.attachments
@@ -344,8 +346,8 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     private var importingAttachments: Job? = null
     private val settings = container.settings
     private val _status = MutableStateFlow(ChatStatus())
-    private val _webSearchAvailable = MutableStateFlow<Boolean?>(null)
-    val webSearchAvailable = _webSearchAvailable.asStateFlow()
+    private val _modelFeatures = MutableStateFlow<ChatModelFeatures?>(null)
+    val modelFeatures = _modelFeatures.asStateFlow()
     private var runningAction: Job? = null
     val status = _status.asStateFlow()
     val history = repository.watch(scope)
@@ -364,10 +366,12 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatHistory(loaded = false))
 
-    suspend fun refreshWebSearchAvailability() {
-        _webSearchAvailable.value = null
-        _webSearchAvailable.value = withContext(Dispatchers.IO) {
-            runCatching { settings.active().supportsWebSearch }.getOrDefault(false)
+    suspend fun refreshModelFeatures() {
+        _modelFeatures.value = null
+        _modelFeatures.value = withContext(Dispatchers.IO) {
+            runCatching { settings.active() }.getOrNull().let { config ->
+                ChatModelFeatures(config?.supportsWebSearch == true, config?.supportsDeepThinking == true)
+            }
         }
     }
 
@@ -414,22 +418,22 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         _attachmentDrafts.value.firstOrNull { it.attachment.id == attachment.id } ?: attachmentStore.load(scope.id, attachment)
 
     fun send(text: String, check: Boolean = false, webSearch: Boolean = false,
-        includeAttachments: Boolean = false, onSent: () -> Unit = {},
+        includeAttachments: Boolean = false, deepThinking: Boolean = false, onSent: () -> Unit = {},
     ) = runQueued { onQueued ->
         val files = if (includeAttachments) _attachmentDrafts.value else emptyList()
-        repository.send(scope, text, check, webSearch, files) { id ->
+        repository.send(scope, text, check, webSearch, files, deepThinking) { id ->
             onQueued(id)
             if (includeAttachments) clearAttachments()
             onSent()
         }
     }
 
-    fun generateTree(offerId: String, options: GenerationOptions) = runQueued { onQueued ->
-        repository.generateTree(scope, offerId, options, onQueued)
+    fun generateTree(offerId: String, options: GenerationOptions, deepThinking: Boolean) = runQueued { onQueued ->
+        repository.generateTree(scope, offerId, options, deepThinking, onQueued)
     }
 
-    fun restartLesson(requirements: String, webSearch: Boolean) = runQueued { onQueued ->
-        repository.restartLesson(scope, requirements, webSearch, onQueued)
+    fun restartLesson(requirements: String, webSearch: Boolean, deepThinking: Boolean) = runQueued { onQueued ->
+        repository.restartLesson(scope, requirements, webSearch, deepThinking, onQueued)
     }
 
     fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }

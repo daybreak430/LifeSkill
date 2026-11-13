@@ -69,6 +69,7 @@ internal class ScriptedGateway : AiGateway {
 
     override suspend fun complete(
         settings: ModelSettings, messages: List<ModelMessage>, structured: Boolean, useJsonMode: Boolean,
+        deepThinking: Boolean,
         onUsage: (suspend (ModelUsage) -> Unit)?,
     ): String {
         val reply = checkNotNull(script.poll()) { "测试缺少预设 AI 响应。" }
