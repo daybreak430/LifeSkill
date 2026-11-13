@@ -183,6 +183,33 @@ object SkillGraph {
         return adjacentOnly(acyclic.filter { it in bounded })
     }
 
+    internal fun connectGeneratedRoots(skillIds: Set<String>, edges: List<Edge>): List<Edge> {
+        val originalLevels = levels(skillIds, edges)
+        if (originalLevels.values.count { it == 0 } <= 1) return edges
+        val prerequisites = edges.groupBy(Edge::skillId, Edge::prerequisiteId)
+        val placedLevels = linkedMapOf<String, Int>()
+        val children = mutableMapOf<String, Int>()
+        val remaining = skillIds.sortedBy { originalLevels.getValue(it) }.toMutableList()
+        return buildList {
+            // 优先安置原先修课已就绪的课时，避免断开的部分抢占已有分支的名额。
+            while (remaining.isNotEmpty()) {
+                val ready = remaining.indexOfFirst { candidate ->
+                    prerequisites[candidate]?.all { it in placedLevels } == true
+                }
+                val skill = remaining.removeAt(ready.coerceAtLeast(0))
+                val available = prerequisites[skill].orEmpty().filter { children.getOrDefault(it, 0) < BRANCH_LIMIT }
+                val deepest = available.maxOfOrNull { placedLevels.getValue(it) }
+                val parents = if (deepest != null) available.filter { placedLevels.getValue(it) == deepest }
+                else listOfNotNull(placedLevels.keys.lastOrNull { children.getOrDefault(it, 0) < BRANCH_LIMIT })
+                placedLevels[skill] = (parents.firstOrNull()?.let(placedLevels::getValue) ?: -1) + 1
+                for (parent in parents) {
+                    add(Edge(skill, parent))
+                    children[parent] = children.getOrDefault(parent, 0) + 1
+                }
+            }
+        }
+    }
+
     fun validate(skillIds: Set<String>, edges: List<Edge>, previousEdges: List<Edge> = emptyList()) {
         if (edges.any { it.skillId !in skillIds || it.prerequisiteId !in skillIds }) {
             throw RuleViolation("先修课必须属于同一门课程。")

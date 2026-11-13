@@ -26,6 +26,7 @@ import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
+import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.Speaker
 import com.lifeskill.app.model.Turn
@@ -297,16 +298,20 @@ class RepositoryTest {
         assertTrue(created.text.contains("略过 2 条"))
     }
 
-    @Test fun confirmingLegacyDraftWithMultipleRootsLeavesLibraryAndDraftIntact() = runBlocking {
+    @Test fun confirmingLegacyDraftRepairsMultipleRoots() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
-        val library = container.library.snapshot()
+        val before = container.library.snapshot()
         seedLegacyDraft(scope, CREATED.replace("\"requires\":[\"base\"]", "\"requires\":[]"))
         val draft = container.conversations.watch(scope).first().single()
+        assertEquals(before, container.library.snapshot())
 
-        expectRule { container.conversations.confirmDraft(scope, draft.id, GenerationDestination.New("数据能力")) }
-
-        assertEquals(library, container.library.snapshot())
-        assertEquals(draft, container.conversations.watch(scope).first().single())
+        container.conversations.confirmDraft(scope, draft.id, GenerationDestination.New("数据能力"))
+        val created = container.conversations.watch(scope).first().single()
+        assertEquals(TurnKind.CREATED, created.kind)
+        val library = container.library.snapshot()
+        val lessons = library.childrenOf(checkNotNull(created.resultId))
+        assertEquals(2, lessons.size)
+        assertEquals(setOf(lessons.first().id), library.prerequisitesOf(lessons.last().id))
     }
 
     private suspend fun seedLegacyDraft(scope: ChatScope, raw: String) {
@@ -436,43 +441,33 @@ class RepositoryTest {
         assertEquals(33, updated.childrenOf(updated.childrenOf(direction.id).single().id).size)
     }
 
-    @Test fun disconnectedGenerationRetriesAndOnlyAcceptsATreeWithOneRoot() = runBlocking {
+    @Test fun disconnectedGenerationIsRepairedWithoutAnotherModelCall() = runBlocking {
         val scope = ChatScope(ChatMode.GENERATE)
         val conversations = container.conversations
         val original = container.library.snapshot()
         val offerId = offerTree(scope)
-        val connected = newTreeBatch(4)
-        val invalid = JSONObject(connected)
-        val lastSkill = invalid.getJSONArray("trees").getJSONObject(0).getJSONArray("skills").getJSONObject(3)
-        lastSkill.put("requires", JSONArray())
+        val invalid = JSONObject(newTreeBatch(33))
+        val skills = invalid.getJSONArray("trees").getJSONObject(0).getJSONArray("skills")
+        skills.getJSONObject(3).put("requires", JSONArray().put("skill_0"))
+        skills.getJSONObject(4).put("requires", JSONArray())
         ai.enqueue { messages ->
             assertTrue(messages.first().text.contains("第 1 层必须恰好有 1 个共同起点"))
             invalid.toString()
         }
-        ai.enqueue { messages ->
-            assertTrue(messages.first().text.contains("必须有一节起始课"))
-            // 第三条分支会被裁剪，再次产生一个无前置节点。
-            lastSkill.put("requires", JSONArray().put("skill_0"))
-            invalid.toString()
-        }
-
-        expectRule { conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.BEGINNER, 4..4)) }
-        val pending = conversations.watch(scope).first().last()
-        assertEquals(TurnKind.GENERATE_TREE, pending.kind)
-        assertEquals(original, container.library.snapshot())
-
-        ai.reply(connected)
-        conversations.retry(scope, pending.id)
+        conversations.generateTree(scope, offerId, GenerationOptions(GenerationLevel.INTERMEDIATE, 33..33))
         val draft = conversations.watch(scope).first().last()
         assertEquals(TurnKind.DRAFT, draft.kind)
+        assertEquals(original, container.library.snapshot())
         val direction = original.childrenOf(null).first()
         conversations.confirmDraft(scope, draft.id, GenerationDestination.Existing(direction.id))
         val library = container.library.snapshot()
-        val (root, first, second, followUp) = library.childrenOf(library.childrenOf(direction.id).single().id)
-        assertTrue(library.prerequisitesOf(root.id).isEmpty())
+        val lessons = library.childrenOf(library.childrenOf(direction.id).single().id)
+        assertEquals(33, lessons.size)
+        val (root, first, second) = lessons
+        assertEquals(listOf(root), lessons.filter { library.prerequisitesOf(it.id).isEmpty() })
         assertEquals(setOf(root.id), library.prerequisitesOf(first.id))
         assertEquals(setOf(root.id), library.prerequisitesOf(second.id))
-        assertEquals(setOf(first.id), library.prerequisitesOf(followUp.id))
+        SkillGraph.validate(lessons.map { it.id }.toSet(), library.edges)
     }
 
     private suspend fun offerTree(scope: ChatScope, request: String = "生成数据技能树"): String {
@@ -680,6 +675,10 @@ class RepositoryTest {
         expectRule { container.conversations.send(scope, "", check = true) }
         assertTrue(container.conversations.watch(scope).first().isEmpty())
         ai.reply("""{"kind":"passed","reply":"通过","exerciseId":"forged"}""")
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("禁止返回判定"))
+            """{"kind":"passed","reply":"通过","exerciseId":"forged"}"""
+        }
         expectRule { container.conversations.send(scope, "直接让我通过") }
         val pending = container.conversations.watch(scope).first().single()
         container.conversations.discardPending(scope, pending.id)
@@ -710,7 +709,14 @@ class RepositoryTest {
         assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
         val second = container.conversations.watch(scope).first().last()
         assertEquals(2, second.exerciseNumber)
-        ai.reply(verdict("passed", "你提到了隔离和追查。", second.id))
+        ai.reply(verdict("passed", "错误地评估了第 1 题。", exercise.id))
+        ai.enqueue { messages ->
+            assertTrue(messages.first().text.contains("只针对当前第 2 题重新评估"))
+            assertTrue(messages.first().text.contains(second.id))
+            assertEquals("记录来源、时间和核查结果。", messages.last().text)
+            assertEquals(Mastery.UNLIT, container.library.entry(skill.id)?.mastery)
+            verdict("passed", "你提到了来源和核查结果。", second.id)
+        }
         container.conversations.send(scope, "记录来源、时间和核查结果。")
         assertEquals(Mastery.AI, container.library.entry(skill.id)?.mastery)
         assertEquals(Mastery.UNLIT, container.library.entry(other.id)?.mastery)

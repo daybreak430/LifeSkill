@@ -30,7 +30,6 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.NumberFormat
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EntryUsageMenu(
     entry: Entry, app: AppViewModel, usage: UsageTotal?, generation: UsageTotal? = null,
@@ -39,33 +38,39 @@ internal fun EntryUsageMenu(
     var showingUsage by rememberSaveable(entry.id) { mutableStateOf(false) }
     EntryMenu(entry, app, onShowUsage = { showingUsage = true }, onExportConversation = onExportConversation)
     if (showingUsage) {
-        ModalBottomSheet(
-            onDismissRequest = { showingUsage = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Panel,
-            contentColor = Ink,
+        AiUsageSheet(if (entry.kind == EntryKind.TREE) "整门课程" else "本节课", usage, generation) { showingUsage = false }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AiUsageSheet(label: String, usage: UsageTotal?, generation: UsageTotal? = null, onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Panel,
+        contentColor = Ink,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                    .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "AI 用量", Modifier.weight(1f).semantics { heading() },
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    GlyphButton(Glyph.CLOSE, "关闭 AI 用量", { showingUsage = false })
-                }
-                AiUsageSummary(
-                    usage, generation = generation,
-                    label = if (entry.kind == EntryKind.TREE) "整门课程" else "本节课",
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "AI 用量", Modifier.weight(1f).semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
                 )
-                if (usage != null && usage.searchCalls > 0) {
-                    val calls = NumberFormat.getIntegerInstance().format(usage.searchCalls)
-                    Text("其中联网搜索 $calls 次 · ${formatCost(usage.searchCostNanos)}",
-                        color = Muted, style = MaterialTheme.typography.bodySmall)
-                }
+                GlyphButton(Glyph.CLOSE, "关闭 AI 用量", onDismiss)
+            }
+            AiUsageSummary(
+                usage, generation = generation,
+                label = label,
+            )
+            if (usage != null && usage.searchCalls > 0) {
+                val calls = NumberFormat.getIntegerInstance().format(usage.searchCalls)
+                Text("其中联网搜索 $calls 次 · ${formatCost(usage.searchCostNanos)}",
+                    color = Muted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

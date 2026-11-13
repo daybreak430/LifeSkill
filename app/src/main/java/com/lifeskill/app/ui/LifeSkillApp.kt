@@ -212,7 +212,8 @@ internal fun LifeSkillApp(
                                         val scope = ChatScope(mode, displayedRoute.id)
                                         val onExport = scope.ownerId?.takeIf { mode == ChatMode.TUTOR }
                                             ?.let { id -> { exportConversation(id) } }
-                                        ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active, onExport)
+                                        ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active,
+                                            onExport, usage.lessons[scope.ownerId])
                                     }
                                     Page.EXAM -> entry?.let {
                                         ExamScreen(it, displayedLibrary.examAvailable(it.id), app,

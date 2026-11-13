@@ -167,12 +167,14 @@ class MvpFlowTest {
         try {
             val fence = "```"
             val markdown = "## 原始小标题\n\n${fence}text\n来源 A\n$fence"
+            val receipt = ModelUsage(Provider.DEEPSEEK, "deepseek-flash", Instant.parse("2026-11-11T02:00:00Z"), 1_000, 200, 100)
             runBlocking {
-                fixture.ai.reply("""{"kind":"teach","reply":"第二节内容。"}""")
+                fixture.ai.reply("""{"kind":"teach","reply":"第二节内容。"}""", receipt)
                 container.conversations.send(ChatScope(ChatMode.TUTOR, second.id), "第二节提问")
                 val lesson = ChatScope(ChatMode.TUTOR, first.id)
-                fixture.ai.reply("""{"kind":"offer_check","reply":"可以做练习。"}""")
-                container.conversations.send(lesson, "第一节提问")
+                fixture.ai.enqueueSearch { readDeepSeekSearch("""{"results":[{"url":"https://example.com/record"}]}""") }
+                fixture.ai.reply("""{"kind":"offer_check","reply":"可以做练习。"}""", receipt)
+                container.conversations.send(lesson, "第一节提问", webSearch = true)
                 fixture.ai.reply("""{"kind":"exercise","question":"查哪份材料？","choices":["原始凭证","空白表"]}""")
                 container.conversations.send(lesson, "", check = true)
                 fixture.ai.reply(JSONObject().put("kind", "off_topic").put("reply", "回到本节。").toString())
@@ -184,6 +186,10 @@ class MvpFlowTest {
             await("继续学习")
             ui.onNodeWithText("继续学习").performTouchInput { click() }
             await("AI 老师")
+            openAiUsage("本节课", "1,200 Token · 预估 ¥0.0084")
+            ui.onNodeWithText("其中联网搜索 1 次 · ¥0.0050").assertIsDisplayed()
+            ui.onNodeWithContentDescription("关闭 AI 用量").performTouchInput { click() }
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("本节课").fetchSemanticsNodes().isEmpty() }
             ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
             ui.onNodeWithText("重新学习").assertIsDisplayed().performClick()
             await("开始新一轮")

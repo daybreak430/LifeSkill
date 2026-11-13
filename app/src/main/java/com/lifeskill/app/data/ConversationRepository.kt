@@ -284,9 +284,15 @@ internal class ConversationRepository(
             if (lastPending(scope)?.id != requestId) return
             val system = messages.first()
             val retryMessages = listOf(system.copy(text = "${system.text}\n\n${error.retryInstruction}")) + messages.drop(1)
-            val corrected = usage.complete(config, retryMessages, structured = true, target = target,
-                useJsonMode = !error.retryWithoutJsonMode)
-            persistResponse(scope, requestId, context, corrected, sources)
+            try {
+                val corrected = usage.complete(config, retryMessages, structured = true, target = target,
+                    useJsonMode = !error.retryWithoutJsonMode)
+                persistResponse(scope, requestId, context, corrected, sources)
+            } catch (_: RecoverableReply) {
+                throw RuleViolation(if (scope.mode == ChatMode.GENERATE) "这次没能生成可用的内容，请重试。"
+                    else if (context.pending != null) "这次没能完成评估，已保留你的答案。"
+                    else "这次没能完成回复，请重试。")
+            }
         }
     }
 
@@ -353,7 +359,8 @@ internal class ConversationRepository(
         if (draft.skills.isNotEmpty() || (owner != null && (draft.directionId != null || draft.directionName != null)) ||
             (draft.trees.isEmpty() && (owner != null || draft.directionName == null || draft.directionId != null))
         ) {
-            throw RuleViolation("AI 返回的草稿与当前入口不匹配，请重试。")
+            throw RecoverableReply("AI 返回的草稿与当前入口不匹配，请重试。",
+                "草稿与当前入口不匹配。按当前入口和确认状态重新输出完整 JSON，检查 directionId、directionName、trees 和 skills。")
         }
         try {
             library.validateNewTrees(draft.prepareNewTrees().draft.trees)
@@ -368,7 +375,17 @@ internal class ConversationRepository(
 
     private suspend fun tutorTurn(raw: String, context: Request, id: String): Turn {
         val reply = AiProtocol.tutor(raw)
-        if (!context.reissue) TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
+        if (!context.reissue) {
+            try {
+                TutorRules.validateVerdict(reply.kind, reply.exerciseId, context.pending, context.input)
+            } catch (error: RuleViolation) {
+                // 让模型结合当前题干重新判断原答案，避免仅替换标识后接受可能评错题的结果。
+                val correction = context.pending?.takeIf { context.input.kind == TurnKind.MESSAGE }?.let {
+                    "请只针对当前第 ${it.number} 题重新评估最后一条用户答案。若返回判定，exerciseId 必须原样填写 ${it.id}。"
+                } ?: "最后一条用户消息不是当前练习的答案。按当前状态讲解或出第 1 题，禁止返回判定。"
+                throw RecoverableReply(checkNotNull(error.message), correction)
+            }
+        }
         val earlierQuestions = if (context.reissue) context.askedQuestions.dropLast(1) else context.askedQuestions
         val question = reply.reply.filterNot(Char::isWhitespace)
         val correction = when {
@@ -383,7 +400,7 @@ internal class ConversationRepository(
             throw RecoverableReply("AI 的练习题序或内容有误，请重试。", correction)
         }
         if (context.input.kind == TurnKind.CHECK && reply.kind != TurnKind.EXERCISE) {
-            throw RuleViolation("AI 暂未给出练习题，请重试。")
+            throw RecoverableReply("AI 暂未给出练习题，请重试。", "用户已开始练习，只返回 exercise 和完整的第 1 题。")
         }
         var text = if (reply.kind == TurnKind.OFF_TOPIC) {
             "我们先回到「${context.owner?.name}」。你想继续哪个知识点，或试试一个小练习？"

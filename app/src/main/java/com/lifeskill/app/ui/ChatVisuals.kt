@@ -78,7 +78,7 @@ internal fun SearchSourcesSheet(links: String, onDismiss: () -> Unit) {
 internal fun AiChatHeader(
     title: String, subtitle: String?, onBack: () -> Unit,
     onRestart: (() -> Unit)?, restartEnabled: Boolean, onExportConversation: (() -> Unit)?,
-    onClearConversation: (() -> Unit)?,
+    onClearConversation: (() -> Unit)?, onShowUsage: (() -> Unit)?,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -94,7 +94,7 @@ internal fun AiChatHeader(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
-        if (onRestart != null || onExportConversation != null || onClearConversation != null) {
+        if (onRestart != null || onExportConversation != null || onClearConversation != null || onShowUsage != null) {
             var expanded by remember { mutableStateOf(false) }
             Box {
                 GlyphButton(Glyph.MORE, "更多操作", { expanded = true }, background = aiColors.panel)
@@ -102,6 +102,12 @@ internal fun AiChatHeader(
                     expanded = expanded, onDismissRequest = { expanded = false },
                     shape = ControlShape, containerColor = Panel,
                 ) {
+                    if (onShowUsage != null) {
+                        DropdownMenuItem(text = { Text("AI 用量") }, onClick = {
+                            expanded = false
+                            onShowUsage()
+                        })
+                    }
                     if (onExportConversation != null) {
                         DropdownMenuItem(text = { Text("导出对话") }, onClick = {
                             expanded = false

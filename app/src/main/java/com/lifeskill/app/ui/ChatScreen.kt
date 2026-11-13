@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeskill.app.data.ConversationRepository
+import com.lifeskill.app.data.UsageTotal
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Entry
@@ -75,7 +76,7 @@ private val creationCount = Regex("""([0-9]+) (?:个(方向|技能点)|棵(技�
 @Composable
 internal fun ChatScreen(
     scope: ChatScope, library: Library, app: AppViewModel, chat: ChatViewModel, pageActive: Boolean,
-    onExportConversation: (() -> Unit)?,
+    onExportConversation: (() -> Unit)?, lessonUsage: UsageTotal?,
 ) {
     val timeline by chat.history.collectAsStateWithLifecycle()
     val history = timeline.turns
@@ -99,6 +100,7 @@ internal fun ChatScreen(
     val checkOffered = !locked && !examAvailable && latestReply?.kind == TurnKind.CHECK_OFFER
     var draft by remember(scope) { mutableStateOf("") }
     var showRestart by rememberSaveable { mutableStateOf(false) }
+    var showingUsage by rememberSaveable(scope.id) { mutableStateOf(false) }
     var showClearConversation by rememberSaveable { mutableStateOf(false) }
     var openedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDraftId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -188,6 +190,10 @@ internal fun ChatScreen(
             }, owner?.name, app::back,
             onRestart = if (tutor) ({ showRestart = true }) else null,
             restartEnabled = !status.working && webSearchAvailable != null,
+            onShowUsage = if (tutor) ({
+                keyboard?.hide()
+                showingUsage = true
+            }) else null,
             onExportConversation = onExportConversation?.let { export -> {
                 keyboard?.hide()
                 export()
@@ -339,6 +345,9 @@ internal fun ChatScreen(
     }
     if (pageActive && selectedSources != null) {
         SearchSourcesSheet(selectedSources.searchSourceLinks()) { selectedSourcesId = null }
+    }
+    if (pageActive && showingUsage) {
+        AiUsageSheet("本节课", lessonUsage) { showingUsage = false }
     }
     if (pageActive && showRestart) {
         RestartLessonDialog(
