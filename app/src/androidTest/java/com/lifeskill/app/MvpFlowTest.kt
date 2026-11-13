@@ -146,6 +146,7 @@ class MvpFlowTest {
             fun pickDocument() {
                 openFilePicker()
                 await(document.name)
+                ui.onNodeWithTag("attachment-icon-markdown", useUnmergedTree = true).assertIsDisplayed()
             }
             pickDocument()
             ui.onNodeWithContentDescription("移除 ${document.name}").performTouchInput { click() }
@@ -162,6 +163,7 @@ class MvpFlowTest {
             showChatReply("可以规划凭证核对课程。")
             ui.onNodeWithContentDescription("移除 ${document.name}").assertDoesNotExist()
             ui.onNodeWithTag("chat-messages").performScrollToNode(hasText(document.name))
+            ui.onNodeWithTag("attachment-icon-markdown", useUnmergedTree = true).assertIsDisplayed()
             val attachments = ui.onNodeWithTag("sent-attachments").getUnclippedBoundsInRoot()
             val storedAttachment = ui.onNodeWithText(document.name).getUnclippedBoundsInRoot()
             assertTrue(storedAttachment.left > attachments.left + (attachments.right - attachments.left) / 3)

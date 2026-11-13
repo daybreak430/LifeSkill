@@ -150,7 +150,7 @@ internal fun ChatAttachmentStrip(
                         ) {
                             Box(Modifier.size(30.dp).clip(ControlShape).background(aiColors.panel),
                                 contentAlignment = Alignment.Center) {
-                                Mark(Glyph.ATTACHMENT, aiColors.accent, Modifier.size(18.dp))
+                                AttachmentFileIcon(item.mimeType)
                             }
                             Text(item.name, style = MaterialTheme.typography.labelMedium, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis)
