@@ -31,7 +31,7 @@ internal fun AttachmentFileIcon(mimeType: String) {
         "text/markdown" -> FileIcon.MARKDOWN
         else -> FileIcon.GENERIC
     }
-    Canvas(Modifier.size(26.dp).testTag("attachment-icon-${icon.name.lowercase()}")) {
+    Canvas(Modifier.size(36.dp).testTag("attachment-icon-${icon.name.lowercase()}")) {
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
             val paper = Path().apply {
                 moveTo(5f, 1f)

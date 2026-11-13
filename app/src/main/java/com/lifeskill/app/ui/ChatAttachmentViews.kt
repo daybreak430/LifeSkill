@@ -148,10 +148,7 @@ internal fun ChatAttachmentStrip(
                                 .padding(start = 10.dp, end = if (onRemove == null) 12.dp else 46.dp, top = 8.dp, bottom = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(Modifier.size(30.dp).clip(ControlShape).background(aiColors.panel),
-                                contentAlignment = Alignment.Center) {
-                                AttachmentFileIcon(item.mimeType)
-                            }
+                            AttachmentFileIcon(item.mimeType)
                             Text(item.name, style = MaterialTheme.typography.labelMedium, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis)
                         }
