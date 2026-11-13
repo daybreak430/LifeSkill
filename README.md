@@ -4,7 +4,7 @@ LifeSkill 是一款原生 Android 学习应用。你可以按学习方向整理�
 
 ## 安装
 
-LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.14.21，本地签名安装包路径为 `release/LifeSkill-0.14.21-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
+LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.14.22，本地签名安装包路径为 `release/LifeSkill-0.14.22-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
 
 手动管理课程无需模型账户。要使用 AI 功能，在「我的 → 设置 → 模型设置」填入自己的服务商 API Key。自定义服务使用 HTTPS Base URL、模型名和 API Key。详见 [使用指南](docs/user-guide.md)。
 

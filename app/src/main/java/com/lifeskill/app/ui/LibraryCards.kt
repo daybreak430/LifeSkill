@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -95,7 +96,8 @@ internal fun HomeStudyCard(
 ) {
     val colors = studyColors
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    val heroShape = RoundedCornerShape(26.dp)
+    val cornerRadius = 26.dp
+    val heroShape = RoundedCornerShape(cornerRadius)
     val title = when (study?.state) {
         null -> "想学什么？"
         HomeStudyState.COMPLETED -> study.tree.name
@@ -114,12 +116,14 @@ internal fun HomeStudyCard(
         HomeStudyState.COMPLETED -> "查看课程"
         HomeStudyState.RESUME -> "继续学习"
     }
-    Box(modifier.fillMaxWidth().clipToBounds()) {
-        Box(Modifier.matchParentSize().padding(horizontal = 14.dp).padding(top = colors.heroLayerTopInset, bottom = 16.dp)
-            .rotate(-3f)
-            .background(colors.heroLayer, heroShape))
+    Box(modifier.fillMaxWidth()) {
+        Box(Modifier.matchParentSize().clipToBounds()) {
+            Box(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(top = colors.heroLayerTopInset, bottom = 16.dp)
+                .rotate(-3f)
+                .background(colors.heroLayer, heroShape))
+        }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(top = 15.dp).clip(heroShape)
+            Modifier.fillMaxWidth().padding(top = 15.dp).homeCardBeam(cornerRadius).clip(heroShape)
                 .background(Brush.linearGradient(colors.hero)).border(1.dp, colors.heroRim, heroShape),
         ) {
             val wideArt = maxWidth >= 328.dp && fontScale < 1.3f
