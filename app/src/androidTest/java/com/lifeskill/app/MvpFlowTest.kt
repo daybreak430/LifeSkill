@@ -383,15 +383,37 @@ class MvpFlowTest {
         await("深度思考")
         thinking.assertIsSelected()
         search.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
-        fixture.ai.enqueue { throw RuleViolation("测试暂时失败") }
+        fixture.ai.enqueue(expectedDeepThinking = true) { throw RuleViolation("测试暂时失败") }
         send("先深入分析学习目标")
         await("测试暂时失败")
         val pending = runBlocking { fixture.container.conversations.watch(ChatScope(ChatMode.GENERATE)).first().last() }
         assertTrue(pending.deepThinking)
-        fixture.ai.reply("""{"kind":"message","reply":"已按学习目标重新分析。"}""")
+        fixture.ai.reply("""{"kind":"message","reply":"已按学习目标重新分析。"}""", expectedDeepThinking = true)
         ui.onNodeWithText("重试").performTouchInput { click() }
         showChatReply("已按学习目标重新分析。")
         thinking.performTouchInput { click() }.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+    }
+
+    @Test fun confirmingAiTreeGenerationUsesTheDeepThinkingToggle() {
+        await("AI 生成课程")
+        ui.onNodeWithText("AI 生成课程").performClick()
+        await("深度思考")
+        val thinking = ui.onNodeWithText("深度思考")
+        for (enabled in listOf(false, true)) {
+            if (enabled) thinking.performTouchInput { click() }
+            thinking.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, enabled))
+            fixture.ai.reply(RepositoryTest.TREE_OFFER, expectedDeepThinking = enabled)
+            send("请为我规划数据质量课程")
+            await("你的基础")
+            ui.onNodeWithText("进阶").performTouchInput { click() }
+            ui.onNodeWithText("自定义").performScrollTo().performTouchInput { click() }
+            ui.onNode(hasSetTextAction() and hasText("课数（1–33）")).performTextInput("2")
+            fixture.ai.reply(RepositoryTest.CREATED, expectedDeepThinking = enabled)
+            ui.onNodeWithText("确认生成").assertIsDisplayed().assertIsEnabled().performTouchInput { click() }
+            await("选择学习方向")
+            pressBack()
+            ui.waitUntil(8_000) { ui.onAllNodesWithText("选择学习方向").fetchSemanticsNodes().isEmpty() }
+        }
     }
 
     @Test fun webSearchChipIsOnByDefaultAndCanBeTurnedOff() {
@@ -451,7 +473,7 @@ class MvpFlowTest {
         search.performTouchInput { click() }.assertIsSelected()
     }
 
-    @Test fun startingContinuingAndRestartingALessonUseTheSearchToggle() {
+    @Test fun startingContinuingAndRestartingALessonUseTheComposerToggles() {
         await("本职工作")
         val library = fixture.container.library
         val (direction, course, lesson) = runBlocking {
@@ -472,11 +494,12 @@ class MvpFlowTest {
             ui.onNodeWithText("开始学习").performClick()
             await("联网搜索")
             ui.onNodeWithText("联网搜索").assertIsSelected()
+            val thinking = ui.onNodeWithText("深度思考")
             fixture.ai.enqueueSearch { query ->
                 assertEquals(lesson.name, query)
                 readDeepSeekSearch("""{"results":[{"title":"规范说明","url":"https://example.com/spec","summary":"新版调整了结构。"}]}""")
             }
-            fixture.ai.enqueue { messages ->
+            fixture.ai.enqueue(expectedDeepThinking = false) { messages ->
                 assertTrue(messages.first().text.contains("新版调整了结构。"))
                 """{"kind":"teach","reply":"先介绍新版结构。"}"""
             }
@@ -488,7 +511,8 @@ class MvpFlowTest {
                 assertEquals(lesson.name, query)
                 readDeepSeekSearch("""{"results":[]}""")
             }
-            fixture.ai.enqueue { messages ->
+            thinking.performTouchInput { click() }.assertIsSelected()
+            fixture.ai.enqueue(expectedDeepThinking = true) { messages ->
                 assertTrue(messages.first().text.contains("联网搜索没有可用结果"))
                 """{"kind":"teach","reply":"接着讲文档标题。"}"""
             }
@@ -499,7 +523,7 @@ class MvpFlowTest {
                 assertEquals(lesson.name, query)
                 readDeepSeekSearch("""{"results":[{"title":"规范说明","url":"https://example.com/spec","summary":"新版先介绍适用范围。"}]}""")
             }
-            fixture.ai.enqueue { messages ->
+            fixture.ai.enqueue(expectedDeepThinking = true) { messages ->
                 assertTrue(messages.first().text.contains("新版先介绍适用范围。"))
                 """{"kind":"teach","reply":"重新从适用范围讲起。"}"""
             }
@@ -510,9 +534,14 @@ class MvpFlowTest {
             showChatReply("查看来源 · 1")
 
             ui.onNodeWithText("联网搜索").performTouchInput { click() }
+            thinking.performTouchInput { click() }.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+            fixture.ai.reply("""{"kind":"teach","reply":"再讲一个标题示例。"}""", expectedDeepThinking = false)
+            ui.onNode(hasText(TutorRules.CONTINUE_REPLY) and hasClickAction()).performClick()
+            showChatReply("再讲一个标题示例。")
             fixture.ai.reply(
                 """{"kind":"teach","reply":"重新从文档结构讲起。"}""",
                 ModelUsage(Provider.DEEPSEEK, "deepseek-flash", Instant.parse("2026-11-11T02:00:00Z"), 1_000, 200, 100),
+                expectedDeepThinking = false,
             )
             ui.onNodeWithContentDescription("更多操作").performTouchInput { click() }
             ui.onNodeWithText("重新学习").performClick()

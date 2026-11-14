@@ -246,9 +246,9 @@ internal fun DirectionCard(
     val status = if (progress.total > 0) Modifier.semantics {
         stateDescription = "共 ${progress.total} 节课，已完成 ${progress.lit} 节"
     } else Modifier
-    Surface(modifier.fillMaxWidth().panelShadow(), color = Panel, contentColor = Ink, shape = PanelShape) {
+    Surface(modifier.fillMaxWidth().directionCardShadows(), color = Panel, contentColor = Ink, shape = PanelShape) {
         Column(
-            (if (createTree == null) open.then(status) else Modifier)
+            Modifier.directionCardPaper().then(if (createTree == null) open.then(status) else Modifier)
                 .padding(horizontal = 10.dp, vertical = DirectionCardVerticalPadding),
         ) {
             Row(
@@ -256,7 +256,7 @@ internal fun DirectionCard(
                     .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
-                Emblem(entry.displayIcon.glyph, tint, tint.copy(alpha = .12f), diameter = 30.dp)
+                DirectionCardIcon(entry, tint)
                 Text(
                     entry.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,

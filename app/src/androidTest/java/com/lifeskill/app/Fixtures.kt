@@ -17,6 +17,7 @@ import com.lifeskill.app.data.LifeSkillDatabase
 import com.lifeskill.app.data.LessonImageSearch
 import com.lifeskill.app.data.SecretBox
 import org.json.JSONArray
+import org.junit.Assert.assertEquals
 import java.util.concurrent.ConcurrentLinkedQueue
 
 class LifeSkillTestRunner : AndroidJUnitRunner() {
@@ -40,7 +41,11 @@ internal fun fixture(
         InstrumentationRegistry.getInstrumentation().targetContext, imageSearch)
 
 internal class ScriptedGateway : AiGateway {
-    private data class Reply(val action: suspend (List<ModelMessage>) -> String, val usage: ModelUsage? = null)
+    private data class Reply(
+        val action: suspend (List<ModelMessage>) -> String,
+        val usage: ModelUsage? = null,
+        val expectedDeepThinking: Boolean? = null,
+    )
     private val script = ConcurrentLinkedQueue<Reply>()
     private val balanceScript = ConcurrentLinkedQueue<suspend () -> DeepSeekBalance>()
     private val searchScript = ConcurrentLinkedQueue<(String) -> DeepSeekSearch>()
@@ -52,12 +57,12 @@ internal class ScriptedGateway : AiGateway {
     override suspend fun search(settings: ModelSettings, query: String): DeepSeekSearch =
         searchScript.poll()?.invoke(query) ?: DeepSeekSearch(JSONArray(), billable = false)
 
-    fun reply(json: String, usage: ModelUsage? = null) {
-        script.add(Reply({ json }, usage))
+    fun reply(json: String, usage: ModelUsage? = null, expectedDeepThinking: Boolean? = null) {
+        script.add(Reply({ json }, usage, expectedDeepThinking))
     }
 
-    fun enqueue(action: suspend (List<ModelMessage>) -> String) {
-        script.add(Reply(action))
+    fun enqueue(expectedDeepThinking: Boolean? = null, action: suspend (List<ModelMessage>) -> String) {
+        script.add(Reply(action, expectedDeepThinking = expectedDeepThinking))
     }
 
     fun enqueueBalance(action: suspend () -> DeepSeekBalance) {
@@ -73,6 +78,7 @@ internal class ScriptedGateway : AiGateway {
         onUsage: (suspend (ModelUsage) -> Unit)?,
     ): String {
         val reply = checkNotNull(script.poll()) { "测试缺少预设 AI 响应。" }
+        reply.expectedDeepThinking?.let { assertEquals("模型请求应遵循深度思考开关", it, deepThinking) }
         if (onUsage != null && reply.usage != null) onUsage(reply.usage)
         return reply.action(messages)
     }

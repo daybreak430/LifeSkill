@@ -9,6 +9,7 @@
 | AndroidX Activity、Compose、Material 3、Lifecycle、Room | 界面、状态和本地存储 | 发布物采用 Apache-2.0，具体声明随各 AndroidX 发布物提供 |
 | PdfBox-Android | 读取 PDF 文字 | [Apache-2.0](https://github.com/TomRoush/PdfBox-Android/blob/master/LICENSE) |
 | Kotlin 标准库、kotlinx.coroutines | Kotlin 运行时和协程 | 发布物采用 Apache-2.0，具体声明随发布物提供 |
+| Lucide 图标 | 首页学习方向卡片的线性图标 | [Lucide](https://github.com/lucide-icons/lucide/tree/55782beff3a0133df79c417eb68f96e8f19e2404) 的 ISC 与 Feather 衍生图标 MIT 声明，随 APK 保留[许可证副本](app/src/main/assets/licenses/lucide.txt) |
 
 以下命令显示发布版本的直接和传递依赖。
 
