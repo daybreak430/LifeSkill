@@ -63,6 +63,8 @@ import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.CHAT_ATTACHMENT_LIMIT
 import com.lifeskill.app.model.ChatAttachment
 import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.BuiltInTeaching
+import com.lifeskill.app.model.TeachingAction
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.Library
@@ -195,7 +197,8 @@ internal fun ChatScreen(
         val sent = last.speaker == Speaker.USER
         // 仅初次打开历史或发送消息时定位。收到回复时由列表按消息键保留当前阅读锚点。
         if (!initial && !sent) return@LaunchedEffect
-        val destination = history.size + if (footerVisible && sent) 1 else 0
+        val onlyExample = BuiltInTeaching.lesson(scope.ownerId)?.turnId == history.singleOrNull()?.id
+        val destination = if (initial && onlyExample) 0 else history.size + if (footerVisible && sent) 1 else 0
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > destination }
         if (initial) listState.scrollToItem(destination) else listState.animateScrollToItem(destination)
     }
@@ -282,6 +285,8 @@ internal fun ChatScreen(
                         open = { app.open(Route.entry(it)) },
                         loadAttachment = chat::loadAttachment,
                         previewAttachment = ::previewAttachment,
+                        teachingEnabled = !locked && turn.contentVersion == owner?.contentVersion,
+                        onTeachingAction = { blockId, action -> chat.interact(turn.id, blockId, action) },
                     )
                     if (turn.id == treeOffer?.id) {
                         ChatPill(
@@ -463,6 +468,8 @@ private fun ChatBubble(
     open: (Entry) -> Unit,
     loadAttachment: suspend (ChatAttachment) -> AttachmentDraft,
     previewAttachment: (ChatAttachment) -> Unit,
+    teachingEnabled: Boolean,
+    onTeachingAction: (String, TeachingAction) -> Unit,
 ) {
     if (turn.kind == TurnKind.RESTART) {
         Column(
@@ -519,6 +526,8 @@ private fun ChatBubble(
                     Text(badge, color = colors.accent, style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(bottom = 5.dp))
                 }
+                if (turn.id.startsWith("lifeskill:example:")) Text("内置示例",
+                    Modifier.padding(bottom = 8.dp), color = colors.accent, style = MaterialTheme.typography.labelMedium)
                 turn.attachments.filter { it.imageCredit != null }.forEach { image ->
                     LessonIllustration(image, loadAttachment) { previewAttachment(image) }
                 }
@@ -529,6 +538,7 @@ private fun ChatBubble(
                         LessonMarkdown(turn.text)
                     }
                 }
+                if (!user && turn.teachingBlocks.isNotEmpty()) TeachingContent(turn, teachingEnabled, onTeachingAction)
                 if (choices.isNotEmpty()) {
                     Column(Modifier.padding(top = 7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         choices.forEachIndexed { index, choice ->

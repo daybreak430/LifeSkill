@@ -8,14 +8,24 @@ class TeachingInteractionsTest {
     private val chart get() = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>()
         .first { it.mode == TeachingChartMode.LINEAR_DEMAND }
 
+    @Test fun everyRegisteredTeachingTypeHasAnOfflineShowcaseLesson() {
+        // JVM17 的密封类型列表自动包含未来新增类型，防止只实现组件却忘记补入同一系列课。
+        val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet()
+        val showcased = BuiltInTeaching.lessons.flatMap { it.blocks }.map { it.javaClass }.toSet()
+        assertEquals(required, showcased)
+        assertEquals(TeachingChartMode.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }
+            .filterIsInstance<TeachingChart>().map { it.mode }.toSet())
+    }
+
     @Test fun demandRequiresPredictionAndUsesOnlyTheFixedModel() {
         assertThrows(RuleViolation::class.java) { TeachingInteractions.apply(chart, TeachingState(), TeachingAction.Reveal) }
         assertThrows(RuleViolation::class.java) { TeachingInteractions.apply(chart, TeachingState(), TeachingAction.SetValue(4.0)) }
         val predicted = TeachingInteractions.apply(chart, TeachingState(), TeachingAction.Predict(1))
         val revealed = TeachingInteractions.apply(chart, predicted, TeachingAction.Reveal)
         val adjusted = TeachingInteractions.apply(chart, revealed, TeachingAction.SetValue(4.0))
-        assertEquals(4.0, adjusted.value!!, 0.0)
-        assertEquals(80.0, chart.demandAt(adjusted.value!!), 0.0)
+        val price = checkNotNull(adjusted.value)
+        assertEquals(4.0, price, 0.0)
+        assertEquals(80.0, chart.demandAt(price), 0.0)
         assertEquals(100.0, chart.demandAt(2.0), 0.0)
         assertEquals(20.0, chart.demandAt(10.0), 0.0)
         assertThrows(RuleViolation::class.java) { TeachingInteractions.apply(chart, adjusted, TeachingAction.SetValue(Double.NaN)) }

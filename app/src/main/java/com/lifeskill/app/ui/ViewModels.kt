@@ -32,6 +32,7 @@ import com.lifeskill.app.model.SkillState
 import com.lifeskill.app.model.SkillUnlock
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
+import com.lifeskill.app.model.TeachingAction
 import com.lifeskill.app.model.unlocksSince
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,8 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 internal enum class Page {
@@ -349,6 +352,7 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     private val _modelFeatures = MutableStateFlow<ChatModelFeatures?>(null)
     val modelFeatures = _modelFeatures.asStateFlow()
     private var runningAction: Job? = null
+    private val interactionMutex = Mutex()
     val status = _status.asStateFlow()
     val history = repository.watch(scope)
         .runningFold<List<Turn>, ChatHistory?>(null) { previous, turns ->
@@ -420,11 +424,24 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     fun send(text: String, check: Boolean = false, webSearch: Boolean = false,
         includeAttachments: Boolean = false, deepThinking: Boolean = false, onSent: () -> Unit = {},
     ) = runQueued { onQueued ->
+        // 先等已提交的互动落库，紧接着发出的追问才能带上刚才的选择和观察结果。
+        interactionMutex.withLock { }
         val files = if (includeAttachments) _attachmentDrafts.value else emptyList()
         repository.send(scope, text, check, webSearch, files, deepThinking) { id ->
             onQueued(id)
             if (includeAttachments) clearAttachments()
             onSent()
+        }
+    }
+
+    fun interact(turnId: String, blockId: String, action: TeachingAction) {
+        viewModelScope.launch {
+            try {
+                interactionMutex.withLock { repository.interact(scope, turnId, blockId, action) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _status.value = _status.value.copy(error = readable(error, "无法保存互动结果。"))
+            }
         }
     }
 

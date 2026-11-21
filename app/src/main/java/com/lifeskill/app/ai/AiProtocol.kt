@@ -15,6 +15,7 @@ import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.TeachingBlock
 import com.lifeskill.app.model.interactionSummary
+import com.lifeskill.app.model.markdown
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -342,7 +343,12 @@ internal object AiProtocol {
         if (turn.choices.isNotEmpty()) put("choices", JSONArray(turn.choices))
         put("exerciseId", turn.exerciseId)
         if (turn.teachingBlocks.isNotEmpty()) {
-            put("blocks", TeachingBlockProtocol.encode(turn.teachingBlocks))
+            val blocks = TeachingBlockProtocol.encode(turn.teachingBlocks)
+            // 大组件不能挤掉整条历史回复；超过预算时给模型有界摘要，完整快照仍加密保存在本机。
+            if (blocks.toString().length <= 4_000) put("blocks", blocks)
+            else put("blockSummaries", JSONArray(turn.teachingBlocks.map { block ->
+                JSONObject().put("id", block.id).put("content", block.markdown().take(700))
+            }))
             put("interactions", JSONArray(turn.teachingBlocks.mapNotNull { block ->
                 turn.teachingStates[block.id]?.let { block.interactionSummary(it) }?.takeIf(String::isNotBlank)
             }))

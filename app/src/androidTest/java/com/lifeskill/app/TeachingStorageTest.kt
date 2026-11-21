@@ -125,6 +125,14 @@ class TeachingStorageTest {
         } finally { context.deleteDatabase(name) }
     }
 
+    @Test fun largeComponentHistoryKeepsTheRecentConversationWithinBudget() {
+        val blocks = List(4) { index -> TeachingText("text$index", "第${index + 1}段", "教学说明".repeat(450)) }
+        val history = AiProtocol.tutorHistory(Turn("large", Speaker.ASSISTANT, TurnKind.MESSAGE, "讲解".repeat(3_000), teachingBlocks = blocks))
+        assertTrue(history.length < 11_000)
+        assertTrue(history.contains("blockSummaries"))
+        assertFalse(history.contains("\"blocks\""))
+    }
+
     private fun createVersionTwelve(name: String): SQLiteDatabase {
         val path = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
         val schema = instrumentation.context.assets.open("${LifeSkillDatabase::class.java.name}/12.json").bufferedReader().use {

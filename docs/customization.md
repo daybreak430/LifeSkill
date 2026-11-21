@@ -10,6 +10,10 @@
 4. 在 [AiGateway.kt](../app/src/main/java/com/lifeskill/app/ai/AiGateway.kt) 的 `requestBody` 里处理新预设，只添加服务需要的参数。保留 HTTPS、禁止重定向和响应校验。需要修改业务输出字段时，同步检查 [AiProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/AiProtocol.kt) 和 [TreeAssessmentProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TreeAssessmentProtocol.kt) 的提示词、解析及兼容规则。
 5. 用 [AiGatewayTest.kt](../app/src/androidTest/java/com/lifeskill/app/AiGatewayTest.kt) 的假连接验证请求、错误映射和截断响应。用 [AiProtocolTest.kt](../app/src/androidTest/java/com/lifeskill/app/AiProtocolTest.kt) 与 [TreeAssessmentTest.kt](../app/src/androidTest/java/com/lifeskill/app/TreeAssessmentTest.kt) 验证业务响应。测试数据使用占位 Key。
 
+## 增加教学交互类型
+
+按[交互教学与内置系列课](interactive-teaching.md)扩展领域类型、协议校验、状态转换和 Compose 渲染器。每种新类型都必须在 `BuiltInTeaching.lessons` 追加一节使用稳定ID和新安装标记的展示课，保留同一门「交互教学体验」系列课。组件操作不修改正式练习进度；随堂反馈和课后评估分别校验。
+
 ## 增加证书主题
 
 1. 在 [CertificateStyle.kt](../app/src/main/java/com/lifeskill/app/model/CertificateStyle.kt) 新增 `CertificateTheme`，再调整 `forTree` 中课程图标与主题的映射。主题名、徽记名和角纹编号共同组成已签发档案的样式 ID，已有标识和解码规则需要保留。

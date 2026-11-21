@@ -3,6 +3,7 @@ package com.lifeskill.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -222,7 +225,7 @@ private fun LessonTable(table: TableBlock) {
 }
 
 @Composable
-private fun FlowBlock(flow: LessonFlow) {
+internal fun FlowBlock(flow: LessonFlow, selectedNode: String? = null, onSelect: ((String) -> Unit)? = null) {
     val columns = flow.tiers.maxOf { it.size }
     val gutter = if (flow.returnArrows.isEmpty()) 0.dp else 22.dp + 10.dp * (flow.returnArrows.size - 1)
     val positions = remember(flow) {
@@ -315,9 +318,13 @@ private fun FlowBlock(flow: LessonFlow) {
                         val decision = id in flow.decisions
                         Surface(
                             modifier = Modifier.offset(column * (slot + .5f) - stepWidth / 2, top + row * level)
-                                .size(stepWidth, stepHeight),
+                                .size(stepWidth, stepHeight).then(if (onSelect != null) Modifier
+                                    .testTag("flow-node-$id")
+                                    .clickable(role = Role.Button, onClickLabel = "查看${flow.labels.getValue(id)}") { onSelect(id) }
+                                else Modifier),
                             shape = if (decision) decisionShape else RoundedCornerShape(8.dp),
-                            color = if (decision) GoldGround else Raised, border = BorderStroke(1.dp, if (decision) Gold else Line),
+                            color = if (id == selectedNode) aiColors.chip else if (decision) GoldGround else Raised,
+                            border = BorderStroke(1.dp, if (id == selectedNode) aiColors.accent else if (decision) Gold else Line),
                         ) {
                             Box(Modifier.padding(horizontal = if (decision) 18.dp else 5.dp), contentAlignment = Alignment.Center) {
                                 Text(

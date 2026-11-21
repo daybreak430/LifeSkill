@@ -123,6 +123,7 @@ internal object TeachingBlockProtocol {
     val instructions = """
         可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
+        使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
         {"id":"t","type":"timeline","title":"事件顺序","events":[{"id":"e1","date":"第一天","title":"提出问题","detail":"背景与影响"},{"id":"e2","date":"第二天","title":"验证假设","detail":"观察结果"}]}
         {"id":"f","type":"flow","title":"操作流程","diagram":"flowchart TD\nA[核对] --> B{一致}\nB -->|是| C[归档]\nB -->|否| D[复核]\nD --> A","details":{"A":"核对依据","B":"判断条件","C":"完成后的产物","D":"如何复核"}}
         {"id":"c","type":"compare","title":"对比","columns":["概念一","概念二"],"dimensions":[{"id":"cause","title":"变化原因","values":["第一项的原因","第二项的原因"]}]}
