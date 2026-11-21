@@ -35,8 +35,8 @@ class TeachingUiTest {
         val slider = ui.onNodeWithTag("teaching-price")
         slider.performTouchInput { swipe(Offset(width * .25f, height / 2f), Offset(width * .75f, height / 2f), 500) }
         ui.waitUntil(8_000) { (state(lesson, "demand").value ?: 0.0) > 6.0 }
-        scrollTo(hasText("放大"))
-        ui.onNodeWithText("放大").performTouchInput { click() }
+        scrollTo(hasContentDescription("放大价格与需求量"))
+        ui.onNodeWithContentDescription("放大价格与需求量").performTouchInput { click() }
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
         awaitDialogFocus()
         back()
@@ -51,7 +51,11 @@ class TeachingUiTest {
     @Test fun practiceWrongAnswerRetryNeverCompletesTheLesson() {
         val lesson = openLesson("quiz")
         scrollTo(hasTestTag("practice-choice-0"))
-        ui.onNodeWithTag("practice-choice-0").performTouchInput { click() }
+        val option = ui.onNodeWithTag("practice-choice-0")
+        val containerBounds = option.getUnclippedBoundsInRoot()
+        val textBounds = ui.onNodeWithText("A. 直接交给开发", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(kotlin.math.abs((containerBounds.top.value + containerBounds.bottom.value - textBounds.top.value - textBounds.bottom.value) / 2f) < 2f)
+        option.performTouchInput { click() }
         scrollTo(hasText("提交随堂答案"))
         ui.onNodeWithText("提交随堂答案").performTouchInput { click() }
         scrollTo(hasText("再想一步"))
@@ -79,8 +83,8 @@ class TeachingUiTest {
         scrollTo(hasText("否 → 回访用户"))
         ui.onNodeWithText("否 → 回访用户").performTouchInput { click() }
         ui.waitUntil(8_000) { state(lesson, "flow").selection == "E" }
-        scrollTo(hasText("放大"))
-        ui.onNodeWithText("放大").performClick()
+        scrollTo(hasContentDescription("放大需求怎样进入开发"))
+        ui.onNodeWithContentDescription("放大需求怎样进入开发").performClick()
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
         awaitDialogFocus()
         back()
@@ -113,6 +117,9 @@ class TeachingUiTest {
         ui.onNodeWithText("图上表现").performTouchInput { click() }
         ui.waitUntil(8_000) { state(comparison, "comparison").selection == "graph" }
         ui.onNodeWithText("需求曲线整体移动，相同价格下的需求量改变。").assertExists()
+        val left = ui.onNodeWithTag("comparison-column-0").getUnclippedBoundsInRoot()
+        val right = ui.onNodeWithTag("comparison-column-1").getUnclippedBoundsInRoot()
+        assertEquals(left.bottom.value - left.top.value, right.bottom.value - right.top.value, 0.1f)
     }
 
     private fun openLesson(key: String): BuiltInTeachingLesson {

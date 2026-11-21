@@ -62,7 +62,7 @@ private fun TeachingCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
                 if (block !is TeachingText) {
-                    if (onExpand != null) TextButton(onClick = onExpand) { Text("放大", color = aiColors.accent) }
+                    if (onExpand != null) GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
                     GlyphButton(Glyph.RESTART, "重置${block.title}", { onAction(TeachingAction.Reset) },
                         enabled = enabled, background = Panel)
                 }
@@ -127,9 +127,9 @@ private fun ComparisonContent(block: TeachingComparison, state: TeachingState, e
             TeachingOption(it.title, it.id == dimension.id, enabled, Modifier, { onAction(TeachingAction.Select(it.id)) })
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         block.columns.forEachIndexed { index, label ->
-            Surface(Modifier.weight(1f), shape = ControlShape, color = Ground) {
+            Surface(Modifier.weight(1f).fillMaxHeight().testTag("comparison-column-$index"), shape = ControlShape, color = Ground) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(label, color = aiColors.accent, style = MaterialTheme.typography.labelLarge)
                     Text(dimension.values[index], color = Ink, style = MaterialTheme.typography.bodyMedium)
@@ -169,7 +169,9 @@ internal fun TeachingOption(text: String, active: Boolean, enabled: Boolean, mod
         color = if (active) aiColors.chip else Ground,
         border = BorderStroke(1.dp, if (active) aiColors.accent else Line),
         modifier = modifier.semantics { selected = active }) {
-        Text(text, Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.bodyMedium, color = if (active) aiColors.accent else Ink)
+        // 最小高度属于容器，文字只按自身行高测量，再在容器内居中；不能把最小高度直接加在 Text 上。
+        Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = if (active) aiColors.accent else Ink)
+        }
     }
 }
