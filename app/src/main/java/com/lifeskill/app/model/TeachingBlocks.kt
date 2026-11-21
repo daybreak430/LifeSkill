@@ -28,8 +28,33 @@ data class TeachingComparison(
     override val id: String, override val title: String, val columns: List<String>, val dimensions: List<ComparisonDimension>,
     val palette: ComparisonPalette = ComparisonPalette.BLUE_AMBER,
 ) : TeachingBlock
-enum class TeachingChartStyle { LINE, BAR, AREA }
 
+/** 结构图的语义色只用于区分类别，不承载对错。 */
+enum class FigureTone { BLUE, AMBER, ROSE, TEAL }
+
+/**
+ * 结构图的节点：标题必填，数字、限定说明和要点都可选。
+ * 列数由所在行决定，节点不绑定固定版式，同一套字段可以拼出层级、并列和带数字的面板。
+ */
+data class FigureItem(
+    val title: String,
+    val value: String? = null,
+    val note: String? = null,
+    val items: List<String> = emptyList(),
+    val tone: FigureTone? = null,
+)
+
+/** 行只有两种：一排并列节点，或一句关系说明。关系说明不画箭头，避免和流程图混淆。 */
+sealed interface FigureRow {
+    data class Nodes(val items: List<FigureItem>) : FigureRow
+    data class Relation(val text: String) : FigureRow
+}
+
+data class TeachingFigure(
+    override val id: String, override val title: String,
+    val rows: List<FigureRow>, val caption: String? = null,
+) : TeachingBlock
+enum class TeachingChartStyle { LINE, BAR, AREA }
 enum class TeachingChartMode { DATA, LINEAR_DEMAND }
 data class TeachingPoint(val label: String, val value: Double)
 data class TeachingQuestion(
@@ -146,7 +171,8 @@ internal object TeachingInteractions {
                         !previous.revealed
                 }
                 is TeachingHotspot -> block.hotspots.any { it.id == action.key }
-                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment, is TeachingGame,
+                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment,
+                is TeachingGame, is TeachingFigure,
                 -> false
             }
             if (!valid) invalid()
@@ -224,7 +250,9 @@ internal object TeachingInteractions {
                 is TeachingClassification -> previous.submitted && !previous.classificationComplete(block)
                 is TeachingStepTrace -> previous.submitted && !previous.currentStepCorrect(block)
                 is TeachingHotspot -> true
-                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard, is TeachingExperiment, is TeachingGame -> false
+                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard,
+                is TeachingExperiment, is TeachingGame, is TeachingFigure,
+                -> false
             }
             if (!valid) invalid()
             previous.copy(revealed = true)
@@ -281,6 +309,17 @@ internal fun TeachingBlock.markdown(): String = buildString {
         is TeachingComparison -> block.dimensions.forEach { dimension ->
             appendLine("**${dimension.title}**")
             block.columns.zip(dimension.values).forEach { (column, value) -> appendLine("- $column：$value") }
+        }
+        is TeachingFigure -> {
+            block.rows.forEach { row ->
+                when (row) {
+                    is FigureRow.Nodes -> appendLine(row.items.joinToString(" ｜ ") { item ->
+                        listOfNotNull(item.title, item.value, item.note).joinToString("：")
+                    })
+                    is FigureRow.Relation -> appendLine("（${row.text}）")
+                }
+            }
+            block.caption?.let { appendLine(it) }
         }
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
             appendLine("教学模型：Q = 120 − 10P，价格 P 为 2–10 元，需求量 Q 的单位为${block.quantityUnit}，其他条件不变。")
@@ -373,6 +412,7 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
         }.orEmpty()
     }
     is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
+    is TeachingFigure -> ""
     is TeachingGame -> if (state.gameOpened) "已打开小游戏：${block.goal}；游戏反馈不计正式评估" else "尚未打开小游戏"
     is TeachingText -> ""
 }

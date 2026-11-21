@@ -64,6 +64,21 @@ internal object BuiltInTeaching {
         ComparisonDimension("limit", "需要考虑", listOf("步行时间与天气。", "停车条件、道路安全和设备状态。")),
     ), ComparisonPalette.ROSE_SAGE)
 
+    // 结构图示例：一个整体、一句关系、三个并列依据，演示“一行一层”的板书式表达。
+    private val writingFigure = TeachingFigure(
+        "writing-structure", "写作的三层结构",
+        listOf(
+            FigureRow.Nodes(listOf(FigureItem("核心主张", note = "一句话说清要证明什么", tone = FigureTone.AMBER))),
+            FigureRow.Relation("由三类依据支撑"),
+            FigureRow.Nodes(listOf(
+                FigureItem("数据", note = "可核对的数字", tone = FigureTone.BLUE),
+                FigureItem("案例", note = "具体发生过的事", tone = FigureTone.BLUE),
+                FigureItem("反例", note = "说明边界在哪里", tone = FigureTone.BLUE),
+            )),
+        ),
+        caption = "三类依据都指向同一主张时，论证才站得住。",
+    )
+
     private val demand = TeachingChart("demand", "价格与需求量", "需求量（杯）", "价格（元）",
         mode = TeachingChartMode.LINEAR_DEMAND,
         prediction = TeachingQuestion("其他条件不变，奶茶从6元降到4元，需求量会怎样变化？", listOf("增加", "减少"), 0,
@@ -140,6 +155,7 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_001, timeline),
                 BuiltInTeachingItem(1_002, flow),
                 BuiltInTeachingItem(1_003, comparison),
+                BuiltInTeachingItem(1_023, writingFigure),
             )),
         BuiltInTeachingLesson("data", 2_002, "数据图表", "图表", "在同一会话中预测、比较并观察折线、柱状和面积图。",
             EntryIcon.CHART, "同一会话展示需求预测、趋势、分类比较和总量面积。切换表达时核对数值、单位与坐标。",
