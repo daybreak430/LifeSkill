@@ -208,6 +208,44 @@ class TeachingUiTest {
         }
     }
 
+    @Test fun stepTraceAdvancesAcrossMultipleCheckpoints() {
+        val lesson = BuiltInTeaching.lessonByKey("practice")!!
+        runBlocking {
+            app.conversations.interact(
+                ChatScope(ChatMode.TUTOR, lesson.id), lesson.turnId, "trace", TeachingAction.Reset,
+            )
+        }
+        openLesson("practice")
+        scrollTo(hasTestTag("trace-choice-down-0"))
+        ui.onNodeWithTag("trace-choice-down-0").performClick()
+        scrollTo(hasText("提交预测"))
+        ui.onNodeWithText("提交预测").performClick()
+        scrollTo(hasText("进入下一步"))
+        ui.onNodeWithText("进入下一步").performClick()
+        ui.waitUntil(8_000) { state(lesson, "trace").step == 1 }
+
+        scrollTo(hasTestTag("trace-choice-up-1"))
+        ui.onNodeWithTag("trace-choice-up-1").performClick()
+        scrollTo(hasText("提交预测"))
+        ui.onNodeWithText("提交预测").performClick()
+        scrollTo(hasTestTag("trace-choice-up-0"))
+        ui.onNodeWithTag("trace-choice-up-0").performClick()
+        ui.waitUntil(8_000) {
+            state(lesson, "trace").selection == "0" && !state(lesson, "trace").submitted
+        }
+        ui.onNodeWithTag("trace-choice-up-1").performClick()
+        ui.waitUntil(8_000) {
+            state(lesson, "trace").selection == "1" && !state(lesson, "trace").submitted
+        }
+        ui.onNodeWithText("提交预测").performClick()
+        ui.waitUntil(8_000) { state(lesson, "trace").submitted }
+        scrollTo(hasText("进入下一步"))
+        ui.onNodeWithText("进入下一步").performClick()
+        ui.waitUntil(8_000) { state(lesson, "trace").step == 2 }
+        scrollTo(hasTestTag("trace-step-combine"))
+        ui.onNodeWithTag("trace-step-combine").assertIsDisplayed()
+    }
+
     @Test fun hotspotZoomAndStepTraceExplicitRevealRemainInteractive() {
         val hotspot = openLesson("visual")
         scrollTo(hasTestTag("hotspot-nucleus"))

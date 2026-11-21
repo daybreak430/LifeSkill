@@ -109,6 +109,14 @@ class TeachingInteractionsTest {
             TeachingAction.Select(first.checkpoint.answer.toString()))
         val firstSubmitted = TeachingInteractions.apply(trace, firstChoice, TeachingAction.Submit)
         assertTrue(firstSubmitted.currentStepCorrect(trace))
+        val switched = TeachingInteractions.apply(trace, firstSubmitted, TeachingAction.Select(
+            ((first.checkpoint.answer + 1) % first.checkpoint.options.size).toString(),
+        ))
+        assertFalse(switched.submitted)
+        assertEquals(
+            ((first.checkpoint.answer + 1) % first.checkpoint.options.size).toString(),
+            switched.selection,
+        )
         val advanced = TeachingInteractions.apply(trace, firstSubmitted, TeachingAction.Advance)
         assertEquals(1, advanced.step)
         val second = trace.steps[1]

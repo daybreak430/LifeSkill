@@ -125,7 +125,11 @@ internal object TeachingInteractions {
                 -> false
             }
             if (!valid) invalid()
-            if (quizCorrect || traceCorrect) previous else previous.copy(selection = action.key, submitted = false)
+            when {
+                quizCorrect -> previous
+                traceCorrect && action.key == previous.selection -> previous
+                else -> previous.copy(selection = action.key, submitted = false)
+            }
         }
         is TeachingAction.SetValue -> {
             if (block !is TeachingChart || block.mode != TeachingChartMode.LINEAR_DEMAND ||

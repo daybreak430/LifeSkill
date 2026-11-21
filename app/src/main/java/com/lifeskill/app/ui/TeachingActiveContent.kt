@@ -5,6 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.*
 import sh.calvin.reorderable.ReorderableColumn
 import sh.calvin.reorderable.ReorderableItem
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun TeachingFlipCardContent(
@@ -345,6 +348,15 @@ private fun PlantCellHotspotImage(
 internal fun TeachingStepTraceContent(
     block: TeachingStepTrace, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
 ) {
+    val currentStepRequester = remember { BringIntoViewRequester() }
+    var observedStep by remember { mutableIntStateOf(state.step) }
+    LaunchedEffect(state.step, state.revealed) {
+        if (!state.revealed && state.step > observedStep) {
+            delay(80)
+            currentStepRequester.bringIntoView()
+        }
+        observedStep = state.step
+    }
     Text(block.introduction, color = Ink, style = MaterialTheme.typography.bodyMedium)
     val visibleLast = if (state.revealed) block.steps.lastIndex else state.step.coerceIn(0, block.steps.lastIndex)
     Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -352,7 +364,8 @@ internal fun TeachingStepTraceContent(
             val step = block.steps[index]
             val current = !state.revealed && index == state.step
             Surface(
-                Modifier.fillMaxWidth().testTag("trace-step-${step.id}"),
+                Modifier.fillMaxWidth().testTag("trace-step-${step.id}")
+                    .then(if (current) Modifier.bringIntoViewRequester(currentStepRequester) else Modifier),
                 shape = ControlShape,
                 color = if (current) aiColors.chip else Ground,
                 border = BorderStroke(1.dp, if (current) aiColors.accent.copy(alpha = .4f) else Line),
@@ -365,7 +378,7 @@ internal fun TeachingStepTraceContent(
                         step.checkpoint.options.forEachIndexed { optionIndex, option ->
                             TeachingOption(choiceAnswer(optionIndex, option),
                                 state.selection?.toIntOrNull() == optionIndex,
-                                enabled && !state.currentStepCorrect(block) && !state.revealed,
+                                enabled && !state.revealed,
                                 Modifier.fillMaxWidth().testTag("trace-choice-${step.id}-$optionIndex"),
                                 { onAction(TeachingAction.Select(optionIndex.toString())) })
                         }
