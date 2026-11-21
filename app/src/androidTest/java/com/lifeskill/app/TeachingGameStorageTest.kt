@@ -26,7 +26,7 @@ class TeachingGameStorageTest {
             val lesson = BuiltInTeaching.lessonByKey("practice")!!
             val game = lesson.blocks.filterIsInstance<TeachingGame>().single()
             assertEquals(listOf(game), TeachingBlockProtocol.decode(TeachingBlockProtocol.encode(listOf(game))))
-            val tooLong = TeachingBlockProtocol.encode(listOf(game.copy(code = "x".repeat(4001))))
+            val tooLong = TeachingBlockProtocol.encode(listOf(game.copy(code = "x".repeat(MAX_GAME_CODE_LENGTH + 1))))
             assertTrue(TeachingBlockProtocol.decode(tooLong).isEmpty())
             val duplicateGames = TeachingBlockProtocol.encode(listOf(game, game.copy(id = "second")))
             val reply = AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", "游戏说明").put("blocks", duplicateGames).toString())

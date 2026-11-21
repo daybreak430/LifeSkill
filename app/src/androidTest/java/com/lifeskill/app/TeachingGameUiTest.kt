@@ -39,20 +39,33 @@ class TeachingGameUiTest {
             assertFalse(native.settings.allowFileAccess)
             assertFalse(native.settings.allowContentAccess)
         }
-        tapButton(0)
-        awaitMessage("1/4")
+        // 拖动两块工时给「访谈」，再用四块填满「测试」与「分析」；全部落位后本局结束。
+        dragOnCanvas(0.12, 0.79, 0.18, 0.42)
+        dragOnCanvas(0.24, 0.79, 0.18, 0.42)
         captureTeachingScreenshot("teaching-game.png")
-        tapButton(1)
-        awaitMessage("3/4")
-        tapButton(0)
+        dragOnCanvas(0.36, 0.79, 0.50, 0.42)
+        dragOnCanvas(0.48, 0.79, 0.50, 0.42)
+        dragOnCanvas(0.60, 0.79, 0.50, 0.42)
+        dragOnCanvas(0.72, 0.79, 0.82, 0.42)
         awaitState("finished")
-        awaitMessage("4/4")
+        awaitMessage("6 块工时")
         ui.onNodeWithContentDescription("重新开始小游戏").performClick()
         awaitState("ready")
-        awaitMessage("0/4")
         back()
         ui.onNodeWithTag("game-open-${sample.id}").assertIsDisplayed()
         ui.waitUntil(8_000) { view() == null }
+    }
+
+    private fun dragOnCanvas(fromX: Double, fromY: Double, toX: Double, toY: Double) {
+        val start = canvasOffset(fromX, fromY)
+        val end = canvasOffset(toX, toY)
+        ui.onNodeWithTag("game-webview").performTouchInput {
+            down(start)
+            moveTo(androidx.compose.ui.geometry.Offset((start.x + end.x) / 2, (start.y + end.y) / 2))
+            moveTo(end)
+            up()
+        }
+        ui.waitForIdle()
     }
 
     @Test fun brokenAndRunawayCodeRemainClosableAndDoNotHangNativeUi() {
@@ -111,6 +124,33 @@ class TeachingGameUiTest {
             up()
         }
         awaitState("finished")
+        back()
+    }
+
+    @Test fun richModelSampleWithNewPrimitivesRenders() {
+        // 真实 DeepSeek 生成的长脚本：用到 poly、8位透明色、描边与大量命令，验证放宽限制后仍能稳定渲染。
+        val raw = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
+            .open("teaching-game-rich-sample.json").bufferedReader().use { it.readText() }
+        val game = com.lifeskill.app.ai.AiProtocol.tutor(raw).blocks.single() as TeachingGame
+        assertTrue(game.code.length <= MAX_GAME_CODE_LENGTH)
+        assertTrue(game.code.length > 2_000)
+        show(game)
+        ui.onNodeWithTag("game-open-${game.id}").performClick()
+        awaitState("ready")
+        assertTrue(evaluate("document.querySelectorAll('canvas').length").contains("1"))
+        back()
+    }
+
+    @Test fun frameCallbackReceivesHostTicksAndNewPrimitivesRender() {
+        // 动效依赖宿主发帧；同时验证 poly/arc/透明度颜色不会让运行器进入失败态。
+        val code = "let n=0;game.background('#fbf7ef');" +
+            "game.draw([['poly',[20,20,80,20,50,60,'#276B9188'],0],['arc',50,70,20,0,180,'#c9a227',1]," +
+            "['text','动效',50,90,4,'#276B91','center','bold']]);" +
+            "game.onFrame(t=>{n++;if(n===5)game.say('帧数 '+n);});"
+        show(sample.copy(code = code))
+        ui.onNodeWithTag("game-open-${sample.id}").performClick()
+        awaitState("ready")
+        awaitMessage("帧数 5")
         back()
     }
 

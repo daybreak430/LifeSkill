@@ -18,14 +18,23 @@ body[data-hud="off"] #message{position:absolute;width:1px;height:1px;padding:0;o
 // 生成代码仅拼接到Worker源码，不进入页面脚本或DOM；原生侧注入的是Base64数据。
 const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('__PAYLOAD__'),c=>c.charCodeAt(0))));
 const message=document.querySelector('#message'),actions=document.querySelector('#actions'),canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),stage=document.querySelector('#stage');
-let worker=null,timer=null,busy=false,commands=[],sx=1,sy=1,seq=0,finished=false,messages=0,windowStart=performance.now(),sessionTimer=null,dragging=false,lastMove=0;
+let worker=null,timer=null,busy=false,commands=[],sx=1,sy=1,seq=0,finished=false,messages=0,windowStart=performance.now(),sessionTimer=null,dragging=false,lastMove=0,tickPending=false,lastTick=0,rafId=0,hasFrame=false;
 message.textContent=payload.instructions;
 // 部分系统 WebView 会把 vh/百分比高度按 0 解析，导致 flex 画布只剩内边距高；用实测视口高度写死像素值。
 function fitHeight(){const h=document.documentElement.clientHeight||innerHeight;if(h>0)document.body.style.height=h+'px';}
 fitHeight();
 if(typeof ResizeObserver==='function')new ResizeObserver(fitHeight).observe(document.documentElement);else window.addEventListener('resize',fitHeight);
-function fail(text){if(worker)worker.terminate();worker=null;clearTimeout(timer);clearTimeout(sessionTimer);busy=false;dragging=false;document.body.dataset.state='failed';message.textContent=text;actions.textContent='';}
-function color(v){return typeof v==='string'&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)?v:'#276B91';}
+function fail(text){if(worker)worker.terminate();worker=null;clearTimeout(timer);clearTimeout(sessionTimer);cancelAnimationFrame(rafId);busy=false;dragging=false;document.body.dataset.state='failed';message.textContent=text;actions.textContent='';}
+// 支持 #RGB、#RRGGBB 与带透明度的 #RRGGBBAA；8 位色统一转成 rgba，兼容只认 rgba 的旧 WebView。
+function color(v){
+ if(typeof v!=='string')return '#276B91';
+ const m=/^#([0-9a-f]{3,8})$/i.exec(v);if(!m)return '#276B91';
+ const h=m[1];
+ if(h.length===3||h.length===6)return '#'+h;
+ if(h.length===4){const r=parseInt(h[0]+h[0],16),g=parseInt(h[1]+h[1],16),b=parseInt(h[2]+h[2],16),a=parseInt(h[3]+h[3],16)/255;return 'rgba('+r+','+g+','+b+','+a.toFixed(3)+')';}
+ if(h.length===8){const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16),a=parseInt(h.slice(6,8),16)/255;return 'rgba('+r+','+g+','+b+','+a.toFixed(3)+')';}
+ return '#276B91';
+}
 function number(v,min,max){return typeof v==='number'&&Number.isFinite(v)?Math.max(min,Math.min(max,v)):min;}
 // 画布铺满舞台：横纵各自换算，矩形与线随比例伸展，圆和文字按短边取尺度，避免被拉成椭圆。
 function redraw(){
@@ -37,16 +46,34 @@ function redraw(){
   if(!Array.isArray(c))continue;const X=v=>number(v,-100,200)*sx,Y=v=>number(v,-100,200)*sy;ctx.save();
   if(c[0]==='text'){
    const size=Math.max(12,number(c[4],2,10)*s),align=c[6]==='center'?'center':c[6]==='right'?'right':'left';
-   ctx.fillStyle=color(c[5]);ctx.font=size+'px system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';
+   const weight=c[7]==='bold'||c[7]===true?'600 ':'';
+   ctx.fillStyle=color(c[5]);ctx.font=weight+size+'px system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';
    const limit=Math.max(20,w*1.4);ctx.fillText(String(c[1]).slice(0,160),X(c[2]),Y(c[3]),limit);
   }
   else if(c[0]==='rect'){
-   const x=X(c[1]),y=Y(c[2]),rw=number(c[3],0,200)*sx,rh=number(c[4],0,200)*sy,r=number(c[6]||0,0,20)*s;
-   ctx.fillStyle=color(c[5]);
-   if(r>0){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,rw,rh,r):ctx.rect(x,y,rw,rh);ctx.fill();}else ctx.fillRect(x,y,rw,rh);
+   const x=X(c[1]),y=Y(c[2]),rw=number(c[3],0,200)*sx,rh=number(c[4],0,200)*sy,r=number(c[6]||0,0,20)*s,stroke=number(c[7]||0,0,4);
+   ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,rw,rh,r):ctx.rect(x,y,rw,rh);
+   if(stroke>0){ctx.strokeStyle=color(c[5]);ctx.lineWidth=Math.max(.5,stroke*s);ctx.stroke();}
+   else{ctx.fillStyle=color(c[5]);ctx.fill();}
   }
   else if(c[0]==='circle'){ctx.fillStyle=color(c[4]);ctx.beginPath();ctx.arc(X(c[1]),Y(c[2]),number(c[3],0,100)*s,0,Math.PI*2);ctx.fill();}
   else if(c[0]==='line'){ctx.strokeStyle=color(c[5]);ctx.lineWidth=Math.max(.5,number(c[6],.2,4)*s);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(X(c[1]),Y(c[2]));ctx.lineTo(X(c[3]),Y(c[4]));ctx.stroke();}
+  else if(c[0]==='poly'){
+   const pts=Array.isArray(c[1])?c[1]:[];
+   if(pts.length>=6){
+    ctx.beginPath();
+    for(let i=0;i+1<pts.length&&i<64;i+=2){const px=X(pts[i]),py=Y(pts[i+1]);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+    ctx.closePath();
+    const stroke=number(c[3]||0,0,4);
+    if(stroke>0){ctx.strokeStyle=color(c[2]);ctx.lineWidth=Math.max(.5,stroke*s);ctx.lineJoin='round';ctx.stroke();}
+    else{ctx.fillStyle=color(c[2]);ctx.fill();}
+   }
+  }
+  else if(c[0]==='arc'){
+   const r=number(c[3],0,100)*s,start=number(c[4],-360,360)*Math.PI/180,end=number(c[5],-360,720)*Math.PI/180;
+   ctx.strokeStyle=color(c[6]);ctx.lineWidth=Math.max(.5,number(c[7],.2,6)*s);ctx.lineCap='round';
+   ctx.beginPath();ctx.arc(X(c[1]),Y(c[2]),r,start,end);ctx.stroke();
+  }
   ctx.restore();
  }
 }
@@ -55,7 +82,7 @@ function dispatch(event){if(!worker||busy||finished)return;busy=true;seq++;event
 // 拖拽单独走通道：不占用忙碌标记，按约30次/秒合并移动，避免逐像素刷屏。
 function sendPointer(phase,x,y){if(!worker||finished)return;worker.postMessage({type:'pointer',phase,x,y});}
 const bootstrap=`'use strict';
-const send=self.postMessage.bind(self),handlers={tap:null,action:null,pointer:null};
+const send=self.postMessage.bind(self),handlers={tap:null,action:null,pointer:null,frame:null};
 const game=Object.freeze({
  draw:commands=>send({type:'draw',commands}),
  say:text=>send({type:'say',text:String(text)}),
@@ -65,12 +92,19 @@ const game=Object.freeze({
  onTap:fn=>handlers.tap=fn,
  onAction:fn=>handlers.action=fn,
  onPointer:fn=>handlers.pointer=fn,
+ onFrame:fn=>handlers.frame=fn,
  finish:text=>send({type:'finish',text:String(text)})
 });
 let downX=0,downY=0;
 self.onmessage=e=>{
  try{
   const d=e.data;
+  if(d.type==='tick'){
+   // 帧回调由宿主按约30帧/秒驱动；返回 frameDone 后才会发下一帧，慢脚本自然降帧而不会堆积。
+   if(handlers.frame)handlers.frame(d.t);
+   send({type:'frameDone'});
+   return;
+  }
   if(d.type==='pointer'){
    if(d.phase==='down'){downX=d.x;downY=d.y;}
    if(handlers.pointer)handlers.pointer({phase:d.phase,x:d.x,y:d.y});
@@ -85,19 +119,20 @@ self.onmessage=e=>{
 };
 `;
 try{
- const blob=new Blob([bootstrap,'\ntry{\n',payload.code,'\nself.postMessage({type:"ready"});\n}catch(error){self.postMessage({type:"error"});}'],{type:'text/javascript'}),url=URL.createObjectURL(blob);
+ const blob=new Blob([bootstrap,'\ntry{\n',payload.code,'\nself.postMessage({type:"ready",frame:!!handlers.frame});\n}catch(error){self.postMessage({type:"error"});}'],{type:'text/javascript'}),url=URL.createObjectURL(blob);
  worker=new Worker(url);URL.revokeObjectURL(url);sessionTimer=setTimeout(()=>fail('本局已结束，请点击上方重新开始。'),90000);busy=true;timer=setTimeout(()=>fail('小游戏未能启动，请点击上方重新开始。'),1800);
  worker.onerror=e=>{e.preventDefault();fail('小游戏运行出错，可关闭后请AI换一个小游戏。');};
  // 限制消息频率和长度，避免生成代码逐帧刷消息或提交超大绘图列表。
  worker.onmessage=e=>{
-  const now=performance.now();if(now-windowStart>1000){windowStart=now;messages=0;}if(++messages>160){fail('小游戏更新过于频繁，请重新开始。');return;}
+  const now=performance.now();if(now-windowStart>1000){windowStart=now;messages=0;}if(++messages>200){fail('小游戏更新过于频繁，请重新开始。');return;}
   const d=e.data;if(!d||typeof d!=='object')return;
-  try{if(JSON.stringify(d).length>20000){fail('小游戏内容过多，请重新开始。');return;}}catch(error){fail('小游戏数据无效，请重新开始。');return;}
-  if(d.type==='ready'||d.type==='idle'&&d.token===seq){clearTimeout(timer);busy=false;if(!finished)document.body.dataset.state='ready';}
-  else if(d.type==='draw'&&Array.isArray(d.commands)){commands=d.commands.slice(0,160);redraw();}
+  try{if(JSON.stringify(d).length>48000){fail('小游戏内容过多，请重新开始。');return;}}catch(error){fail('小游戏数据无效，请重新开始。');return;}
+  if(d.type==='ready'||d.type==='idle'&&d.token===seq){clearTimeout(timer);busy=false;if(d.type==='ready')hasFrame=!!d.frame;if(!finished)document.body.dataset.state='ready';}
+  else if(d.type==='frameDone'){tickPending=false;}
+  else if(d.type==='draw'&&Array.isArray(d.commands)){commands=d.commands.slice(0,320);redraw();}
   else if(d.type==='background'){const value=color(d.color);stage.style.background=value;}
   else if(d.type==='hud'){document.body.dataset.hud=d.show?'on':'off';}
-  else if(d.type==='say'||d.type==='finish'){message.textContent=String(d.text).slice(0,400);if(d.type==='finish'){finished=true;document.body.dataset.state='finished';clearTimeout(timer);clearTimeout(sessionTimer);busy=false;dragging=false;actions.querySelectorAll('button').forEach(b=>b.disabled=true);worker.terminate();worker=null;}}
+  else if(d.type==='say'||d.type==='finish'){message.textContent=String(d.text).slice(0,400);if(d.type==='finish'){finished=true;document.body.dataset.state='finished';clearTimeout(timer);clearTimeout(sessionTimer);cancelAnimationFrame(rafId);busy=false;dragging=false;actions.querySelectorAll('button').forEach(b=>b.disabled=true);worker.terminate();worker=null;}}
   else if(d.type==='buttons'&&Array.isArray(d.items)&&!finished){actions.textContent='';d.items.slice(0,6).forEach(item=>{if(!item||typeof item.id!=='string'||typeof item.label!=='string')return;const b=document.createElement('button');b.textContent=item.label.slice(0,24);b.onclick=()=>dispatch({type:'action',id:item.id.slice(0,40)});actions.appendChild(b);});}
   else if(d.type==='error')fail('小游戏运行出错，可关闭后请AI换一个小游戏。');
  };
@@ -108,6 +143,14 @@ canvas.addEventListener('pointermove',e=>{if(!dragging)return;const now=performa
 function release(e){if(!dragging)return;dragging=false;const p=point(e);sendPointer('up',p.x,p.y);}
 canvas.addEventListener('pointerup',release);
 canvas.addEventListener('pointercancel',release);
+// 只有声明了 onFrame 的游戏才发帧；约30帧/秒，上一帧没有返回就不再发，避免慢脚本堆积。
+function tickLoop(ts){
+ if(ts-lastTick>=33&&hasFrame&&worker&&!finished&&!tickPending&&document.body.dataset.state==='ready'){
+  lastTick=ts;tickPending=true;worker.postMessage({type:'tick',t:ts});
+ }
+ rafId=requestAnimationFrame(tickLoop);
+}
+rafId=requestAnimationFrame(tickLoop);
 if(typeof ResizeObserver==='function')new ResizeObserver(redraw).observe(stage);else window.addEventListener('resize',redraw);
 window.pauseGame=()=>fail('本局已暂停，请点击上方重新开始。');
 </script></body></html>

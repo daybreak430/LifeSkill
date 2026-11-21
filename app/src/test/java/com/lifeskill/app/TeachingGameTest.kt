@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TeachingGameTest {
-    @Test fun codeBudgetIsSmallAndRejectsEmptyOrTruncatedPayloads() {
+    @Test fun codeBudgetRejectsEmptyTruncatedAndOversizedPayloads() {
         assertTrue(validGameCode("x".repeat(MAX_GAME_CODE_LENGTH)))
         assertFalse(validGameCode("x".repeat(MAX_GAME_CODE_LENGTH + 1)))
         assertFalse(validGameCode("   "))
