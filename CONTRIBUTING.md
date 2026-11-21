@@ -29,7 +29,7 @@
 | --- | --- |
 | 技能前置、有效点亮、地图和续学 | `RulesTest`、`SkillMapLayoutTest`、`LessonFlowTest`、`RepositoryTest` |
 | 模型接入和结构化回复 | `AiGatewayTest`、`AiProtocolTest`、`RepositoryTest` |
-| 教学组件、随堂互动和内置展示课 | `TeachingInteractionsTest`、`TeachingStorageTest`、`TeachingUiTest`、`TeachingGameTest`、`TeachingGameStorageTest`、`TeachingGameUiTest`，扩展步骤见[交互教学](docs/interactive-teaching.md) |
+| 教学组件、随堂互动和内置展示课 | `TeachingInteractionsTest`、`LeverExperimentTest`、`TeachingStorageTest`、`TeachingUiTest`、`TeachingGameTest`、`TeachingGameStorageTest`、`TeachingGameUiTest`，扩展步骤见[交互教学](docs/interactive-teaching.md) |
 | 考试、挑战和发证 | `TreeAssessmentTest`、`MvpFlowTest` |
 | 资料、证书档案和数据库迁移 | `PersonalStorageTest`、`MvpFlowTest` |
 

@@ -14,6 +14,8 @@
 
 按[交互教学与内置系列课](interactive-teaching.md)扩展领域类型、协议校验、状态转换和 Compose 渲染器。新增组件必须先归入「结构与过程、数据图表、互动练习、图像与综合」之一，并追加到 `BuiltInTeaching` 中对应的现有分类会话，使用稳定组件 ID 和新的安装标记；只有需要全新的交互类别时才新增课时。组件操作不修改正式练习进度；随堂反馈和课后评估分别校验。
 
+停用组件时不要把类型、编解码或旧互动状态直接删除，否则已有加密快照会失去兼容。应在 `TeachingBlock.isAvailable` 等统一门槛过滤历史展示、AI 新回复、AI 历史上下文和仓库互动，保留旧安装标记且不得复用；同时补测旧快照解码、初始化不复活删除内容、迟到动作被拒绝。当前停用状态和验证范围见[交互教学验证基线](interactive-teaching.md#当前验证基线)。
+
 ## 增加证书主题
 
 1. 在 [CertificateStyle.kt](../app/src/main/java/com/lifeskill/app/model/CertificateStyle.kt) 新增 `CertificateTheme`，再调整 `forTree` 中课程图标与主题的映射。主题名、徽记名和角纹编号共同组成已签发档案的样式 ID，已有标识和解码规则需要保留。
