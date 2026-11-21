@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `cd6359a`（完整哈希见 `git rev-parse v0.15.15`） |
-| 最新版本 | `0.15.15` |
-| `versionCode` | `102` |
-| 标签 | `v0.15.15` |
-| Release | [LifeSkill 0.15.15](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.15) |
-| APK 文件名 | `LifeSkill-0.15.15-release.apk` |
-| APK 大小 | `18,250,215` bytes |
-| APK SHA-256 | `0052dbc2559101090baf352566ec25673a6a9b005b1bf88a4dbf3b2b73f16c68` |
+| 最新产品与发布提交 | `0dfdbcd`（完整哈希见 `git rev-parse v0.15.16`） |
+| 最新版本 | `0.15.16` |
+| `versionCode` | `103` |
+| 标签 | `v0.15.16` |
+| Release | [LifeSkill 0.15.16](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.16) |
+| APK 文件名 | `LifeSkill-0.15.16-release.apk` |
+| APK 大小 | `18,266,599` bytes |
+| APK SHA-256 | `2fd35dbd5f87efc7a3398e2cd67cfcdc300197842693cbdb54df14a915ac9a79` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.15..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.16..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.15` 已发布：标签指向 `cd6359a`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.14` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.16` 已发布：标签指向 `0dfdbcd`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.15` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -83,6 +83,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.13` | 新增短代码小游戏与放大运行器；只保留一个对比演示；重新学习改为居中遮罩loading；强化旧课重学组件选择并做真实模型验证。 |
 | `v0.15.14` | 答题与翻卡支持1–3级提示阶梯；任意数据图表可先预测后揭晓；小游戏画布铺满、支持拖拽与自绘样式，修复遮挡与空缺；生成约束禁止换皮选择题。 |
 | `v0.15.15` | 小游戏放宽到8000字符与320条命令，新增多边形/圆弧/描边/透明色/帧回调；演示换成拖拽版「分配研究工时」。 |
+| `v0.15.16` | 新增结构图 figure：1–3列节点、关系行与脚注，支持数字与要点，语义色最多两种。 |
 
 对应提交如下：
 
@@ -100,6 +101,16 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.13` | `bb29bb6` |
 | `v0.15.14` | `22fec95` |
 | `v0.15.15` | `cd6359a` |
+| `v0.15.16` | `0dfdbcd` |
+
+## 0.15.16 的验证证据
+
+- `./scripts/build-release.sh` 构建、签名并校验；证书沿用既有调试证书 `AD:01:E1:…:0A`。
+- 单元测试与 `lintDebug` 通过；教学相关仪器测试 53 项通过：新增 `FigureBlockTest` 4 项（编解码往返、列数/节点数/语气色校验、内置示例、三列渲染）。
+- 模拟器人工验证：「结构与过程」中的「写作的三层结构」按顶层节点 → 关系行 → 三列并列 → 脚注渲染，无文字截断或溢出。
+- 从 `0.15.15` 覆盖升级到 `0.15.16`，`firstInstallTime` 保持不变；Release 附件与本地 APK SHA-256 一致。
+
+未完成：真机与 Android 8–9 WebView 验收；结构图尚未在真实模型对话中抽样，只验证了内置示例与协议往返。
 
 ## 0.15.15 的验证证据
 
