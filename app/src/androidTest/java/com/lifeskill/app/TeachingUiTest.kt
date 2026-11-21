@@ -279,6 +279,62 @@ class TeachingUiTest {
         ui.onNodeWithTag("flip-card-turn").assertIsEnabled()
     }
 
+    @Test fun leverSlidersDraggingExpansionResetAndReopenShareOneState() {
+        val lesson = openLesson("visual")
+        fun expandedNode(tag: String) = ui.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("teaching-expanded")))
+        scrollTo(hasContentDescription("放大杠杆实验台"))
+        ui.onNodeWithContentDescription("放大杠杆实验台").performClick()
+        ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
+        val arm = expandedNode("lever-right_arm")
+        arm.performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+        ui.waitUntil(8_000) { state(lesson, "lever").lever?.rightArm == 4.0 }
+        expandedNode("lever-status").assertTextEquals("已平衡")
+        expandedNode("lever-left_force").performScrollTo().performTouchInput {
+            swipe(Offset(width * .25f, height / 2f), Offset(width * .70f, height / 2f), 400)
+        }
+        ui.waitUntil(8_000) { (state(lesson, "lever").lever?.leftForce ?: 0.0) > 4.0 }
+        expandedNode("lever-weight-right").performScrollTo().performTouchInput {
+            swipe(center, center + Offset(-70f, 0f), 450)
+        }
+        ui.waitUntil(8_000) { (state(lesson, "lever").lever?.rightArm ?: 4.0) < 4.0 }
+        val saved = state(lesson, "lever").lever
+        try {
+            ui.runOnUiThread { ui.activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            ui.waitUntil(8_000) {
+                val bounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
+                bounds.right - bounds.left > bounds.bottom - bounds.top
+            }
+            expandedNode("lever-left_force").performScrollTo().assertIsDisplayed()
+            val scene = expandedNode("lever-scene").getUnclippedBoundsInRoot()
+            val control = expandedNode("lever-left_force").getUnclippedBoundsInRoot()
+            assertTrue(control.left > scene.left)
+            assertEquals(saved, state(lesson, "lever").lever)
+        } finally {
+            ui.runOnUiThread { ui.activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+        }
+        ui.waitUntil(8_000) {
+            val bounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
+            bounds.bottom - bounds.top > bounds.right - bounds.left
+        }
+        awaitDialogFocus()
+        back()
+        ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
+        assertEquals(saved, state(lesson, "lever").lever)
+        ui.activityRule.scenario.recreate()
+        await("AI 老师")
+        assertEquals(saved, state(lesson, "lever").lever)
+        scrollTo(hasContentDescription("放大杠杆实验台"))
+        ui.onNodeWithContentDescription("放大杠杆实验台").performClick()
+        ui.onNode(hasContentDescription("重置杠杆实验台") and hasAnyAncestor(hasTestTag("teaching-expanded"))).performClick()
+        ui.waitUntil(8_000) { state(lesson, "lever").lever == null }
+        expandedNode("lever-status").assertTextEquals("左侧下沉")
+        back()
+        scrollTo(hasTestTag("lever-scene"))
+        ui.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
+        back()
+        await("课程大纲")
+    }
+
     @Test fun deletedShowcaseCanBeRestoredWithoutReinstallingTheApp() {
         val library = app.library
         val personalCourse = runBlocking {

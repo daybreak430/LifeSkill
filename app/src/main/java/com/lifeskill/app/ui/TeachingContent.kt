@@ -74,7 +74,7 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
                         TeachingBlockBody(
                             expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
-                            { action -> onAction(expanded.id, action) },
+                            { action -> onAction(expanded.id, action) }, expanded = true,
                         )
                     }
                 }
@@ -96,7 +96,7 @@ private fun TeachingCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
                 if (block !is TeachingText) {
-                    if (block is TeachingChart && onExpand != null) {
+                    if ((block is TeachingChart || block is TeachingExperiment) && onExpand != null) {
                         GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
                     }
                     GlyphButton(Glyph.RESTART, "重置${block.title}", { onAction(TeachingAction.Reset) },
@@ -111,12 +111,14 @@ private fun TeachingCard(
 @Composable
 private fun TeachingBlockBody(
     block: TeachingBlock, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
+    expanded: Boolean = false,
 ) {
     when (block) {
         is TeachingText -> LessonMarkdown(block.text)
         is TeachingTimeline -> TimelineContent(block, state, enabled, onAction)
         is TeachingFlow -> InteractiveFlowContent(block, state, enabled, onAction)
         is TeachingComparison -> ComparisonContent(block, state, enabled, onAction)
+        is TeachingExperiment -> TeachingExperimentContent(block, state, enabled, onAction, expanded)
         is TeachingChart -> TeachingChartContent(block, state, enabled, onAction)
         is TeachingQuiz -> PracticeContent(block, state, enabled, onAction)
         is TeachingFlipCard -> TeachingFlipCardContent(block, state, enabled, onAction)

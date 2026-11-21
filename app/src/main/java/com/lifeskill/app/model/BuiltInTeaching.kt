@@ -146,7 +146,7 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_011, flip),
                 BuiltInTeachingItem(1_012, sorting),
             )),
-        BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、对比和判断题。",
+        BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、对比、判断题与杠杆实验。",
             EntryIcon.LEAF, "先探索植物细胞热点，再回到数据观察与解释，比较不同媒介如何承担讲解。",
             listOf(
                 BuiltInTeachingItem(1_014, hotspot),
@@ -154,6 +154,8 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_018, bridge),
                 BuiltInTeachingItem(1_019, evidence),
                 BuiltInTeachingItem(1_020, mixedQuiz),
+                BuiltInTeachingItem(1_021, TeachingExperiment("lever", "杠杆实验台",
+                    "移动两侧重物或调整力，试着让杠杆平衡。")),
             )),
     )
 

@@ -90,11 +90,13 @@ data class TeachingState(
     val selection: String? = null, val value: Double? = null, val submitted: Boolean = false,
     val attempts: Int = 0, val prediction: Int? = null, val revealed: Boolean = false,
     val order: List<String> = emptyList(), val placements: Map<String, String> = emptyMap(), val step: Int = 0,
+    val lever: LeverParameters? = null,
 )
 
 sealed interface TeachingAction {
     data class Select(val key: String) : TeachingAction
     data class SetValue(val value: Double) : TeachingAction
+    data class SetLeverParameter(val parameter: LeverParameter, val value: Double) : TeachingAction
     data class Predict(val index: Int) : TeachingAction
     data class Move(val key: String, val toIndex: Int) : TeachingAction
     data class Classify(val key: String, val category: String) : TeachingAction
@@ -125,7 +127,7 @@ internal object TeachingInteractions {
                         !previous.revealed
                 }
                 is TeachingHotspot -> block.hotspots.any { it.id == action.key }
-                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification,
+                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment,
                 -> false
             }
             if (!valid) invalid()
@@ -140,6 +142,11 @@ internal object TeachingInteractions {
                 !action.value.isFinite() || action.value !in 2.0..10.0 || block.prediction != null && !previous.revealed
             ) invalid()
             previous.copy(value = action.value.roundToInt().toDouble())
+        }
+        is TeachingAction.SetLeverParameter -> {
+            if (block !is TeachingExperiment) invalid()
+            // 单个参数在仓库事务内合并，避免快速调整不同滑块时旧快照覆盖刚保存的其他参数。
+            previous.copy(lever = LeverPhysics.update(previous.lever ?: block.initial, action.parameter, action.value))
         }
         is TeachingAction.Predict -> {
             if (block !is TeachingChart || block.prediction == null || action.index !in block.prediction.options.indices ||
@@ -188,7 +195,7 @@ internal object TeachingInteractions {
                 is TeachingClassification -> previous.submitted && !previous.classificationComplete(block)
                 is TeachingStepTrace -> previous.submitted && !previous.currentStepCorrect(block)
                 is TeachingHotspot -> true
-                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard -> false
+                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard, is TeachingExperiment -> false
             }
             if (!valid) invalid()
             previous.copy(revealed = true)
@@ -249,6 +256,11 @@ internal fun TeachingBlock.markdown(): String = buildString {
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
             appendLine("教学模型：Q = 120 − 10P，价格 P 为 2–10 元，需求量 Q 的单位为${block.quantityUnit}，其他条件不变。")
         } else block.points.forEach { appendLine("- ${it.label}：${it.value}（${block.yLabel}）") }
+        is TeachingExperiment -> {
+            appendLine(block.prompt)
+            appendLine("理想轻杆，两侧竖直受力；比较 F × 到支点的水平距离，平衡时两侧相等。倾角仅作方向示意。")
+            appendLine("初始状态：${block.initial.summary()}")
+        }
         is TeachingQuiz -> {
             appendLine(block.question.question)
             block.question.options.forEachIndexed { index, option -> appendLine("- ${choiceAnswer(index, option)}") }
@@ -316,5 +328,6 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
             }
         }.orEmpty()
     }
+    is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
     is TeachingText -> ""
 }

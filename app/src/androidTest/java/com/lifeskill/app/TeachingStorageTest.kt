@@ -80,15 +80,15 @@ class TeachingStorageTest {
         try {
             val app = fixture(database, ScriptedGateway())
             app.library.initialize()
-            val practice = checkNotNull(BuiltInTeaching.lessonByKey("practice"))
-            val scope = ChatScope(ChatMode.TUTOR, practice.id)
-            val original = checkNotNull(database.skills().turn(scope.id, practice.turnId))
-            val blocks = TeachingBlockProtocol.decode(JSONArray(secret.open(original.teachingBlocks.orEmpty(), "${practice.turnId}:blocks")))
-            val newest = practice.items.last()
+            val visual = checkNotNull(BuiltInTeaching.lessonByKey("visual"))
+            val scope = ChatScope(ChatMode.TUTOR, visual.id)
+            val original = checkNotNull(database.skills().turn(scope.id, visual.turnId))
+            val blocks = TeachingBlockProtocol.decode(JSONArray(secret.open(original.teachingBlocks.orEmpty(), "${visual.turnId}:blocks")))
+            val newest = visual.items.last()
             val shortened = blocks.filterNot { it.id == newest.block.id }
             database.skills().updateTurn(original.copy(
                 teachingBlocks = secret.seal(
-                    TeachingBlockProtocol.encode(shortened).toString(), "${practice.turnId}:blocks",
+                    TeachingBlockProtocol.encode(shortened).toString(), "${visual.turnId}:blocks",
                 ),
             ))
             database.openHelper.writableDatabase.execSQL("DELETE FROM bootstrap WHERE id = ${newest.installMarker}")
@@ -97,9 +97,9 @@ class TeachingStorageTest {
 
             val lessons = app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID)
             assertEquals(4, lessons.size)
-            val restored = checkNotNull(database.skills().turn(scope.id, practice.turnId))
+            val restored = checkNotNull(database.skills().turn(scope.id, visual.turnId))
             val restoredBlocks = TeachingBlockProtocol.decode(
-                JSONArray(secret.open(restored.teachingBlocks.orEmpty(), "${practice.turnId}:blocks")),
+                JSONArray(secret.open(restored.teachingBlocks.orEmpty(), "${visual.turnId}:blocks")),
             )
             assertTrue(restoredBlocks.any { it.id == newest.block.id })
             assertEquals(1, database.skills().turnsForChat(scope.id).size)
@@ -281,6 +281,45 @@ class TeachingStorageTest {
             assertFalse(history.contains("旧分类"))
             assertFalse(history.contains("旧推演"))
             assertTrue(history.contains("flip"))
+        } finally { database.close() }
+    }
+
+    @Test fun leverProtocolPersistenceAndAiHistoryUseValidatedActualParameters() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        val secret = SecretBox("lifeskill-tests")
+        try {
+            val app = fixture(database, ScriptedGateway())
+            app.library.initialize()
+            val lesson = BuiltInTeaching.lessonByKey("visual")!!
+            val block = lesson.blocks.filterIsInstance<TeachingExperiment>().single()
+            val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+            val encoded = TeachingBlockProtocol.encode(listOf(block))
+            assertEquals(listOf(block), TeachingBlockProtocol.decode(encoded))
+            val reply = AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", "尝试调平杠杆")
+                .put("blocks", encoded).toString())
+            assertEquals(listOf(block), reply.blocks)
+            val malformed = JSONObject(encoded.getJSONObject(0).toString()).put("model", "arbitrary_code")
+            assertTrue(TeachingBlockProtocol.decode(JSONArray().put(malformed)).isEmpty())
+            val fractionalForce = JSONObject(encoded.getJSONObject(0).toString())
+            fractionalForce.getJSONObject("initial").put("leftForce", 2.5)
+            assertTrue(TeachingBlockProtocol.decode(JSONArray().put(fractionalForce)).isEmpty())
+            val invalidArm = JSONObject(encoded.getJSONObject(0).toString())
+            invalidArm.getJSONObject("initial").put("rightArm", 10)
+            assertTrue(TeachingBlockProtocol.decode(JSONArray().put(invalidArm)).isEmpty())
+            val before = database.skills().turn(scope.id, lesson.turnId)!!
+            app.conversations.interact(scope, lesson.turnId, block.id, TeachingAction.SetLeverParameter(LeverParameter.RIGHT_ARM, 4.0))
+            val saved = database.skills().turn(scope.id, lesson.turnId)!!
+            assertEquals(before.teachingBlocks, saved.teachingBlocks)
+            assertFalse(saved.teachingStates.orEmpty().contains("rightArm"))
+            val restored = fixture(database, ScriptedGateway()).conversations.watch(scope).first().single()
+            val state = restored.teachingStates.getValue(block.id)
+            assertEquals(4.0, state.lever!!.rightArm, 0.0)
+            assertEquals(state, TeachingBlockProtocol.decodeStates(TeachingBlockProtocol.encodeStates(mapOf(block.id to state))).getValue(block.id))
+            assertNull(TeachingBlockProtocol.decodeStates("{\"old\":{}}").getValue("old").lever)
+            val history = AiProtocol.tutorHistory(restored)
+            assertTrue(history.contains("experiment"))
+            assertTrue(history.contains("已平衡"))
+            assertEquals(Mastery.UNLIT, app.library.entry(lesson.id)!!.mastery)
         } finally { database.close() }
     }
 

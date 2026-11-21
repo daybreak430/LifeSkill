@@ -185,5 +185,5 @@ private fun TeachingPlot(
         textAlign = androidx.compose.ui.text.style.TextAlign.End)
 }
 
-private fun number(value: Double): String = if (value == value.toLong().toDouble()) value.toLong().toString()
+internal fun number(value: Double): String = if (value == value.toLong().toDouble()) value.toLong().toString()
     else String.format(java.util.Locale.ROOT, "%.1f", value)

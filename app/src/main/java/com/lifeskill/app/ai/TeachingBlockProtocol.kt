@@ -61,6 +61,10 @@ internal object TeachingBlockProtocol {
                             if (mode == TeachingChartMode.LINEAR_DEMAND) TeachingChartStyle.LINE else
                                 TeachingChartStyle.entries.firstOrNull { it.name.equals(json.optString("style"), true) } ?: TeachingChartStyle.LINE)
                     }
+                    "experiment" -> {
+                        require(json.text("model", 24) == "lever")
+                        TeachingExperiment(id, title, json.text("prompt", 600), json.getJSONObject("initial").lever())
+                    }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
                     "flip" -> TeachingFlipCard(id, title, json.text("prompt", 600), json.text("answer", 1_200),
                         json.text("hint", 400))
@@ -147,6 +151,10 @@ internal object TeachingBlockProtocol {
                     }).put("correctOrder", JSONArray(block.correctOrder)).put("hint", block.hint)
                         .put("explanation", block.explanation)
                 }
+                is TeachingExperiment -> {
+                    put("type", "experiment").put("model", "lever").put("prompt", block.prompt)
+                        .put("initial", block.initial.json())
+                }
                 is TeachingClassification -> {
                     put("type", "classify").put("prompt", block.prompt).put("categories", JSONArray().apply {
                         block.categories.forEach { put(JSONObject().put("id", it.id).put("title", it.title)) }
@@ -182,7 +190,8 @@ internal object TeachingBlockProtocol {
         states.forEach { (id, state) -> put(id, JSONObject().put("selection", state.selection).put("value", state.value)
             .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction)
             .put("revealed", state.revealed).put("order", JSONArray(state.order))
-            .put("placements", JSONObject(state.placements)).put("step", state.step)) }
+            .put("placements", JSONObject(state.placements)).put("step", state.step)
+            .put("lever", state.lever?.json())) }
     }.toString()
 
     fun decodeStates(raw: String?): Map<String, TeachingState> = runCatching {
@@ -208,6 +217,7 @@ internal object TeachingBlockProtocol {
             }
             TeachingState(
                 selection = if (state.isNull("selection")) null else state.optString("selection"),
+                lever = state.optJSONObject("lever")?.lever(),
                 value = value?.toDouble(), submitted = state.optBoolean("submitted"),
                 attempts = state.optInt("attempts").coerceIn(0, 1_000),
                 prediction = (state.opt("prediction") as? Number)?.toInt(),
@@ -234,10 +244,18 @@ internal object TeachingBlockProtocol {
         (get(name) as Number).toDouble().also { require(it.isFinite() && it in range) }
     private fun JSONObject.array(name: String, range: IntRange): JSONArray = getJSONArray(name).also { require(it.length() in range) }
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
+    private fun JSONObject.lever(): LeverParameters = LeverParameters(
+        number("leftForce", 1.0..10.0), number("rightForce", 1.0..10.0),
+        number("leftArm", 1.0..4.0), number("rightArm", 1.0..4.0),
+    ).also { require(LeverPhysics.isValid(it)) }
+
+    private fun LeverParameters.json(): JSONObject = JSONObject()
+        .put("leftForce", leftForce).put("rightForce", rightForce).put("leftArm", leftArm).put("rightArm", rightArm)
+
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
     val instructions = """
-        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
+        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点、变量实验台或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
         先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序同时做成flow和sort，不要把同一概念做成compare和quiz后再重复说明，也不要在首次讲解时把“讲解＋图表＋对比＋测验”一次全部塞入。
         主题与组件选择参考：
         - 历史、事件、阶段、制度演变：timeline；需要比较原因、影响或易混概念时加compare。
@@ -250,6 +268,8 @@ internal object TeachingBlockProtocol {
         - plant_cell坐标须对准实际图示：细胞壁在外缘（如8,24），细胞核中心(50,46)，液泡(76,35)，叶绿体(28,73)，线粒体(79,74)。只选本轮需要观察的2–4个结构（协议上限6个），不要堆满标记或把多个热点挤在一起。label只写结构名，detail说明可观察的形态/位置与功能联系，不把长说明塞进图中；数字和触控尺寸由客户端决定。不要把示意图当成显微照片或按真实比例推断结构大小。
         外行人文学科可优先timeline、compare、flip；科学和数据分析可优先chart、compare；操作技能可优先flow、sort；语言学习可优先flip、compare、quiz。参考只用于判断，不能覆盖本节实际目标。
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
+        - 探索杠杆受力、距离与平衡关系：experiment/lever。仅适用于理想轻杆、固定支点、两侧竖直向下受力；不计杆重、摩擦、振荡，倾角仅表示下沉方向。不能套用于其他物理系统。AI只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。
+        experiment仅支持model:lever，initial四项必填：leftForce/rightForce为1–10 N整数；leftArm/rightArm为到支点的水平距离，1–4 m，步长0.5 m。坐标与动画由应用计算。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
         分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
         使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
@@ -260,6 +280,7 @@ internal object TeachingBlockProtocol {
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
         {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hint":"先关注适用条件。"}
         {"id":"s","type":"sort","title":"排出顺序","prompt":"调整为合理步骤。","items":[{"id":"a","text":"第一步文本"},{"id":"b","text":"第二步文本"},{"id":"c","text":"第三步文本"}],"correctOrder":["a","b","c"],"hint":"先确定起点。","explanation":"完整顺序和原因"}
+        {"id":"lab","type":"experiment","model":"lever","title":"杠杆实验台","prompt":"移动右侧重物，试着让杠杆平衡。","initial":{"leftForce":4,"rightForce":2,"leftArm":2,"rightArm":3}}
         {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
         compare 可选 palette 为 blue_amber、violet_teal、rose_sage，按对比主题选择。chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
         也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
