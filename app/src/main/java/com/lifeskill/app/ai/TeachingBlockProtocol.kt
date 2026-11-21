@@ -51,8 +51,12 @@ internal object TeachingBlockProtocol {
                             require(value.isFinite() && value in -1_000_000.0..1_000_000.0)
                             TeachingPoint(point.text("label", 40), value)
                         } else emptyList()
-                        TeachingChart(id, title, json.text("xLabel", 40), json.text("yLabel", 40), points, mode,
-                            json.optJSONObject("prediction")?.question())
+                        val unit = if (json.has("quantityUnit")) json.text("quantityUnit", 12) else "单位"
+                        // 固定模板的轴含义由应用保证；缺少数量单位时使用中性标签，不能把券、件等误标成杯。
+                        TeachingChart(id, title,
+                            if (mode == TeachingChartMode.LINEAR_DEMAND) "需求量（$unit）" else json.text("xLabel", 40),
+                            if (mode == TeachingChartMode.LINEAR_DEMAND) "价格（元）" else json.text("yLabel", 40), points, mode,
+                            json.optJSONObject("prediction")?.question(), unit)
                     }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
                     else -> null
@@ -76,6 +80,7 @@ internal object TeachingBlockProtocol {
                 is TeachingChart -> {
                     put("type", "chart").put("model", if (block.mode == TeachingChartMode.DATA) "data" else "linear_demand")
                         .put("xLabel", block.xLabel).put("yLabel", block.yLabel)
+                        .put("quantityUnit", block.quantityUnit)
                         .put("points", JSONArray().apply { block.points.forEach { put(JSONObject().put("label", it.label).put("value", it.value)) } })
                     block.prediction?.let { put("prediction", it.json()) }
                 }
@@ -130,7 +135,7 @@ internal object TeachingBlockProtocol {
         {"id":"p","type":"chart","title":"趋势","model":"data","xLabel":"年份","yLabel":"数量（件）","points":[{"label":"2024","value":20},{"label":"2025","value":30}]}
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
         也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。
-        价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
+        价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
         quiz 是随堂反馈，点击和答对均不能点亮课时。正式课后练习继续按原有kind、question、choices、exerciseId协议，不得用blocks绕过题序。正式评估或待答题期间不要附加blocks。历史中的互动记录仅是学习证据，不能单独作为通过课后练习的依据。
     """.trimIndent()
 }

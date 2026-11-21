@@ -51,13 +51,15 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
     if (demand) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("价格 ${price.roundToInt()} 元", style = MaterialTheme.typography.titleMedium, color = aiColors.accent)
-            Text("需求量 ${block.demandAt(price.toDouble()).roundToInt()} 杯", style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text("需求量 ${block.demandAt(price.toDouble()).roundToInt()} ${block.quantityUnit}", style = MaterialTheme.typography.titleMedium, color = Ink)
         }
     } else {
         val point = block.points.getOrNull(selected) ?: block.points.first()
         Text("${point.label} · ${number(point.value)}", style = MaterialTheme.typography.titleMedium, color = aiColors.accent)
     }
-    TeachingPlot(points, demand, selected, block.xLabel, block.yLabel, enabled) { index ->
+    TeachingPlot(points, demand, selected,
+        if (demand) "需求量（${block.quantityUnit}）" else block.xLabel,
+        if (demand) "价格（元）" else block.yLabel, enabled) { index ->
         onAction(if (demand) TeachingAction.SetValue(index + 2.0) else TeachingAction.Select(index.toString()))
     }
     if (demand) {

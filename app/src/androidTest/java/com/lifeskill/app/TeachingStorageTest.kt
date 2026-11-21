@@ -133,6 +133,20 @@ class TeachingStorageTest {
         assertFalse(history.contains("\"blocks\""))
     }
 
+    @Test fun demandUnitsFollowTheExampleAndAxesCannotBeReversed() {
+        val raw = JSONObject().put("id", "tickets").put("title", "咖啡券").put("type", "chart")
+            .put("model", "linear_demand").put("xLabel", "价格").put("yLabel", "数量")
+            .put("quantityUnit", "张")
+        val chart = TeachingBlockProtocol.decode(JSONArray().put(raw)).single() as TeachingChart
+        assertEquals("张", chart.quantityUnit)
+        assertEquals("需求量（张）", chart.xLabel)
+        assertEquals("价格（元）", chart.yLabel)
+        assertTrue(chart.interactionSummary(TeachingState(value = 4.0, revealed = true)).contains("80 张"))
+        raw.remove("quantityUnit")
+        val legacy = TeachingBlockProtocol.decode(JSONArray().put(raw)).single() as TeachingChart
+        assertEquals("单位", legacy.quantityUnit)
+    }
+
     private fun createVersionTwelve(name: String): SQLiteDatabase {
         val path = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
         val schema = instrumentation.context.assets.open("${LifeSkillDatabase::class.java.name}/12.json").bufferedReader().use {

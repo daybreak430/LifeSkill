@@ -43,7 +43,7 @@ internal object BuiltInTeaching {
     private val demand = TeachingChart("demand", "价格与需求量", "需求量（杯）", "价格（元）",
         mode = TeachingChartMode.LINEAR_DEMAND,
         prediction = TeachingQuestion("其他条件不变，奶茶从6元降到4元，需求量会怎样变化？", listOf("增加", "减少"), 0,
-            "在这个教学模型中，6元对应60杯，4元对应80杯。价格下降，需求量增加。", "只改变商品自身价格，沿给定需求曲线观察。"))
+            "在这个教学模型中，6元对应60杯，4元对应80杯。价格下降，需求量增加。", "只改变商品自身价格，沿给定需求曲线观察。"), quantityUnit = "杯")
     private val quiz = TeachingQuiz("quiz", "随堂练习", TeachingQuestion(
         "问题与目标已明确，但支持一个需求的证据不足，下一步更合适的是？",
         listOf("直接交给开发", "补充用户验证", "立即永久否决"), 1,

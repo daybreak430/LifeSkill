@@ -30,6 +30,7 @@ data class TeachingChart(
     override val id: String, override val title: String, val xLabel: String, val yLabel: String,
     val points: List<TeachingPoint> = emptyList(), val mode: TeachingChartMode = TeachingChartMode.DATA,
     val prediction: TeachingQuestion? = null,
+    val quantityUnit: String = "单位",
 ) : TeachingBlock {
     // 模板只允许应用实现并验证过的函数，不接收模型返回的表达式或可执行代码。
     fun demandAt(price: Double): Double = (120.0 - 10.0 * price.coerceIn(2.0, 10.0)).coerceAtLeast(0.0)
@@ -108,7 +109,7 @@ internal fun TeachingBlock.markdown(): String = buildString {
             block.columns.zip(dimension.values).forEach { (column, value) -> appendLine("- $column：$value") }
         }
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
-            appendLine("教学模型：Q = 120 − 10P，价格 P 为 2–10 元，其他条件不变。")
+            appendLine("教学模型：Q = 120 − 10P，价格 P 为 2–10 元，需求量 Q 的单位为${block.quantityUnit}，其他条件不变。")
         } else block.points.forEach { appendLine("- ${it.label}：${it.value}（${block.yLabel}）") }
         is TeachingQuiz -> {
             appendLine(block.question.question)
@@ -125,7 +126,7 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
         val price = state.value ?: 6.0
         val prediction = state.prediction?.let { block.prediction?.options?.getOrNull(it) }
         if (block.prediction != null && !state.revealed) "预测：${prediction ?: "尚未选择"}，尚未验证"
-        else "预测：${prediction ?: "无"}；已观察价格 ${price.roundToInt()} 元，需求量 ${block.demandAt(price).roundToInt()} 杯"
+        else "预测：${prediction ?: "无"}；已观察价格 ${price.roundToInt()} 元，需求量 ${block.demandAt(price).roundToInt()} ${block.quantityUnit}"
     } else state.selection?.toIntOrNull()?.let { block.points.getOrNull(it) }?.let { "查看 ${it.label}：${it.value}" }.orEmpty()
     is TeachingQuiz -> state.selection?.toIntOrNull()?.let { index ->
         "随堂作答：${block.question.options.getOrNull(index).orEmpty()}；" +
