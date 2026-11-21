@@ -338,6 +338,7 @@ internal class AppViewModel(
 
 internal data class ChatStatus(
     val working: Boolean = false,
+    val restarting: Boolean = false,
     val error: String? = null,
     val draftError: String? = null,
     val requestId: String? = null,
@@ -462,11 +463,11 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
         repository.generateTree(scope, offerId, options, deepThinking, onQueued)
     }
 
-    fun restartLesson(requirements: String, webSearch: Boolean, deepThinking: Boolean) = runQueued { onQueued ->
+    fun restartLesson(requirements: String, webSearch: Boolean, deepThinking: Boolean) = runQueued(restarting = true) { onQueued ->
         repository.restartLesson(scope, requirements, webSearch, deepThinking, onQueued)
     }
 
-    fun retry(turn: Turn) = run(requestId = turn.id) { repository.retry(scope, turn.id) }
+    fun retry(turn: Turn) = run(requestId = turn.id, restarting = turn.kind == TurnKind.RESTART) { repository.retry(scope, turn.id) }
     fun discard(turn: Turn) = run(requestId = turn.id) { repository.discardPending(scope, turn.id) }
     fun editPending(turn: Turn, onRestored: () -> Unit) = run(requestId = turn.id) {
         val restored = turn.attachments.map { attachmentStore.load(scope.id, it) }
@@ -485,23 +486,23 @@ internal class ChatViewModel(container: AppContainer, private val scope: ChatSco
     }
 
     private fun run(
-        addingDraft: Boolean = false, requestId: String? = null, clearing: Boolean = false, action: suspend () -> Unit,
+        addingDraft: Boolean = false, requestId: String? = null, clearing: Boolean = false, restarting: Boolean = false, action: suspend () -> Unit,
     ) {
-        execute(addingDraft, requestId, clearing) { action() }
+        execute(addingDraft, requestId, clearing, restarting) { action() }
     }
 
-    private fun runQueued(action: suspend (onRequestQueued: (String) -> Unit) -> Unit) {
-        execute(addingDraft = false, initialRequestId = null, clearing = false, action)
+    private fun runQueued(restarting: Boolean = false, action: suspend (onRequestQueued: (String) -> Unit) -> Unit) {
+        execute(addingDraft = false, initialRequestId = null, clearing = false, restarting = restarting, action = action)
     }
 
     private fun execute(
-        addingDraft: Boolean, initialRequestId: String?, clearing: Boolean,
+        addingDraft: Boolean, initialRequestId: String?, clearing: Boolean, restarting: Boolean = false,
         action: suspend (onRequestQueued: (String) -> Unit) -> Unit,
     ) {
         if (_status.value.clearing || (_status.value.working && !clearing)) return
         if (clearing) runningAction?.cancel()
         var requestId = initialRequestId
-        _status.value = ChatStatus(working = true, requestId = requestId, clearing = clearing)
+        _status.value = ChatStatus(working = true, restarting = restarting, requestId = requestId, clearing = clearing)
         runningAction = viewModelScope.launch {
             try {
                 action { queuedId ->

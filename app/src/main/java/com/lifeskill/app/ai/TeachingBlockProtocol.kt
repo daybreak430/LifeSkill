@@ -61,6 +61,11 @@ internal object TeachingBlockProtocol {
                             if (mode == TeachingChartMode.LINEAR_DEMAND) TeachingChartStyle.LINE else
                                 TeachingChartStyle.entries.firstOrNull { it.name.equals(json.optString("style"), true) } ?: TeachingChartStyle.LINE)
                     }
+                    "game" -> {
+                        val code = json.get("code") as? String ?: error("小游戏代码必须是文本")
+                        require(validGameCode(code))
+                        TeachingGame(id, title, json.text("goal", 240), json.text("instructions", 160), code)
+                    }
                     "experiment" -> {
                         require(json.text("model", 24) == "lever")
                         TeachingExperiment(id, title, json.text("prompt", 600), json.getJSONObject("initial").lever())
@@ -151,6 +156,9 @@ internal object TeachingBlockProtocol {
                     }).put("correctOrder", JSONArray(block.correctOrder)).put("hint", block.hint)
                         .put("explanation", block.explanation)
                 }
+                is TeachingGame -> {
+                    put("type", "game").put("goal", block.goal).put("instructions", block.instructions).put("code", block.code)
+                }
                 is TeachingExperiment -> {
                     put("type", "experiment").put("model", "lever").put("prompt", block.prompt)
                         .put("initial", block.initial.json())
@@ -191,7 +199,7 @@ internal object TeachingBlockProtocol {
             .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction)
             .put("revealed", state.revealed).put("order", JSONArray(state.order))
             .put("placements", JSONObject(state.placements)).put("step", state.step)
-            .put("lever", state.lever?.json())) }
+            .put("lever", state.lever?.json()).put("gameOpened", state.gameOpened)) }
     }.toString()
 
     fun decodeStates(raw: String?): Map<String, TeachingState> = runCatching {
@@ -218,6 +226,7 @@ internal object TeachingBlockProtocol {
             TeachingState(
                 selection = if (state.isNull("selection")) null else state.optString("selection"),
                 lever = state.optJSONObject("lever")?.lever(),
+                gameOpened = state.optBoolean("gameOpened"),
                 value = value?.toDouble(), submitted = state.optBoolean("submitted"),
                 attempts = state.optInt("attempts").coerceIn(0, 1_000),
                 prediction = (state.opt("prediction") as? Number)?.toInt(),
@@ -255,7 +264,7 @@ internal object TeachingBlockProtocol {
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
     val instructions = """
-        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点、变量实验台或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
+        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点、变量实验台、小游戏或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。普通组件只描述数据，禁止生成HTML、可执行表达式或外部资源链接；只有game.code允许遵循下方专用API生成短JavaScript。
         先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序同时做成flow和sort，不要把同一概念做成compare和quiz后再重复说明，也不要在首次讲解时把“讲解＋图表＋对比＋测验”一次全部塞入。
         主题与组件选择参考：
         - 历史、事件、阶段、制度演变：timeline；需要比较原因、影响或易混概念时加compare。
@@ -270,6 +279,10 @@ internal object TeachingBlockProtocol {
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
         - 探索杠杆受力、距离与平衡关系：experiment/lever。仅适用于理想轻杆、固定支点、两侧竖直向下受力；不计杆重、摩擦、振荡，倾角仅表示下沉方向。不能套用于其他物理系统。AI只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。
         experiment仅支持model:lever，initial四项必填：leftForce/rightForce为1–10 N整数；leftArm/rightArm为到支点的水平距离，1–4 m，步长0.5 m。坐标与动画由应用计算。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
+        小游戏 game：先判断当前学习阶段是否需要学习者通过“操作→观察后果→调整策略”练习本节知识。适合已讲清概念后的配对组合、资源取舍、空间操作、规则探索等；只有玩的时候会实际用到目标知识才生成。简单定义、普通追问、已有组件已能表达或尚未讲清必要知识时不生成；不得为热闹强行加游戏，不做换皮选择题，不恢复已停用分类/推演组件。通常0个，需要时本轮只给1个game主组件，reply短讲目标与入口，不重复代码。
+        game包含goal（可检验学习目标）、instructions（一句话玩法）、code（JavaScript代码）。代码目标800–2400字符，硬上限4000字符（含空格），一个场景、一种核心操作、约30–90秒；没有外部库、素材、HTML/CSS/DOM、网络、音频、持久化或定时器，不写无限循环，不造复杂引擎。超过预算时简化玩法，不截断代码。只能使用JS基础语法和game API，代码直接执行初始化。
+        游戏在放大后启动。当前只支持画布点击与按钮驱动的短回合玩法，不生成拖动、键盘或实时反应游戏。逻辑运行在Worker内，画布为0–100的正方形坐标，手机横竖屏一致；文字使用短中文。API：game.draw(commands)替换整幅画面，最多160条；commands支持['text',文字,x,y,字号2–10,颜色]、['rect',x,y,w,h,颜色]、['circle',x,y,r,颜色]、['line',x1,y1,x2,y2,颜色,线宽0.2–4]，颜色为#RGB或#RRGGBB。game.say(反馈文字)更新画布上方提示；game.buttons([{id,label}])最多6个操作按钮；game.onTap((x,y)=>{})接收画布点击，game.onAction(id=>{})接收按钮点击；game.finish(总结文字)标记本局完成并解释知识。所有回调必须快速返回，不使用requestAnimationFrame/setInterval/setTimeout。不要调用浏览器、宿主或Worker的其他接口。应用提供重开和关闭，游戏不需要自己画功能图标。
+        示例：{"id":"fraction_game","type":"game","title":"凑出一整个","goal":"通过组合分数理解和为1","instructions":"点击分数块凑成1，超过1就换一种组合。","code":"let sum=0;function show(){game.say('当前合计 '+sum+'/4，试着凑成4/4');game.draw([['text',sum+'/4',40,48,8,'#276B91']]);}game.buttons([{id:'1',label:'加1/4'},{id:'2',label:'加1/2'},{id:'reset',label:'清空'}]);game.onAction(id=>{if(id==='reset')sum=0;else sum+=Number(id);show();if(sum===4)game.finish('4/4就是1：相同分母的分数相加，把分子相加。');else if(sum>4)game.say('超过1了，清空后换一种组合。');});show();"}
         分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
         使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。

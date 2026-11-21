@@ -241,7 +241,7 @@ class TeachingStorageTest {
             app.library.initialize()
             val lesson = BuiltInTeaching.lessonByKey("practice")!!
             assertTrue(lesson.blocks.all { it.isAvailable })
-            assertEquals(3, lesson.blocks.size)
+            assertEquals(4, lesson.blocks.size)
             val scope = ChatScope(ChatMode.TUTOR, lesson.id)
             val row = database.skills().turn(scope.id, lesson.turnId)!!
             val retired = retiredTeachingBlocks()

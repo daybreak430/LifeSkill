@@ -155,16 +155,20 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         val missing = if (installed) {
             lesson.items.filterNot { dao.initialized(it.installMarker) }
         } else lesson.items
-        if (missing.isEmpty()) return
         val scope = ChatScope(ChatMode.TUTOR, lesson.id)
         val existing = dao.turn(scope.id, lesson.turnId)
-        val existingBlocks = existing?.teachingBlocks?.let {
+        val originalBlocks = existing?.teachingBlocks?.let {
             TeachingBlockProtocol.decode(JSONArray(secret.open(it, "${lesson.turnId}:blocks")))
         }.orEmpty()
+        // 仅清理内置分类消息中与旧教案完全相同的配色示例，保留用户内容及其他对比组件。
+        val existingBlocks = if (lesson.key == "structure") originalBlocks.filterNot {
+            it in BuiltInTeaching.retiredComparisonDemos
+        } else originalBlocks
+        if (missing.isEmpty() && existingBlocks == originalBlocks) return
         val additions = missing.map(BuiltInTeachingItem::block).filterNot { candidate ->
             existingBlocks.any { it.id == candidate.id }
         }
-        val validIds = lesson.blocks.map { it.id }.toSet()
+        val validIds = (existingBlocks + lesson.blocks).map { it.id }.toSet()
         val existingStates = existing?.teachingStates?.let {
             TeachingBlockProtocol.decodeStates(secret.open(it, "${lesson.turnId}:interactions"))
         }.orEmpty()

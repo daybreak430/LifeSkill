@@ -29,7 +29,7 @@
 | --- | --- |
 | 技能前置、有效点亮、地图和续学 | `RulesTest`、`SkillMapLayoutTest`、`LessonFlowTest`、`RepositoryTest` |
 | 模型接入和结构化回复 | `AiGatewayTest`、`AiProtocolTest`、`RepositoryTest` |
-| 教学组件、随堂互动和内置展示课 | `TeachingInteractionsTest`、`TeachingStorageTest`、`TeachingUiTest`，扩展步骤见[交互教学](docs/interactive-teaching.md) |
+| 教学组件、随堂互动和内置展示课 | `TeachingInteractionsTest`、`TeachingStorageTest`、`TeachingUiTest`、`TeachingGameTest`、`TeachingGameStorageTest`、`TeachingGameUiTest`，扩展步骤见[交互教学](docs/interactive-teaching.md) |
 | 考试、挑战和发证 | `TreeAssessmentTest`、`MvpFlowTest` |
 | 资料、证书档案和数据库迁移 | `PersonalStorageTest`、`MvpFlowTest` |
 
@@ -44,3 +44,5 @@ Compose 改动按影响范围验证触控、滚动、键盘和系统返回。Roo
 当前仓库的 Release 构建输出 `app/build/outputs/apk/release/app-release-unsigned.apk`。用 Android SDK 的 `apksigner sign` 生成签名包，再用 `apksigner verify --verbose --print-certs` 验证签名并与上一发布包比对证书 SHA-256。覆盖升级需沿用上一发布版的签名证书，并递增 `versionCode`。验证旧包覆盖升级后，将签名包保存为 `release/LifeSkill-<版本>-release.apk`。签名密钥留在本机。
 
 首次公开仓库前，确认项目授权范围，核对[第三方声明](THIRD_PARTY_NOTICES.md)，并检查当前提交和 Git 历史中的密钥、签名文件、真实用户数据及仅供内部使用的内容。发布时也检查 README 中的版本和安装入口。
+
+小游戏运行验证需要实际WebView：检查只在放大后启动、真实画布/按钮触控、重开/关闭、语法错误、无限循环超时、网络与HTML注入隔离。模型代码样本使用可公开的教学内容，不将Key写入参数、日志或测试资产。小游戏的胜负不进入正式评估。

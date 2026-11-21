@@ -559,7 +559,7 @@ internal class ConversationRepository(
                 scope.mode == ChatMode.TUTOR && it.speaker == Speaker.ASSISTANT -> AiProtocol.tutorHistory(it)
                 scope.mode == ChatMode.GENERATE && it.speaker == Speaker.ASSISTANT -> AiProtocol.generationHistory(it)
                 it.kind == TurnKind.CHECK -> "【App 发起课后练习】请出本节课后练习的第 1 题。"
-                it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按本节学习目标重新组织这节课。" +
+                it.kind == TurnKind.RESTART -> "【App 发起重新学习】请按本节学习目标重新组织这节课，并使用当前教学组件能力选择适合的主表达。旧课程的创建时间和旧格式不限制当前组件。" +
                     if (it.text.isNotEmpty()) "\n本次学习要求：${it.text}" else ""
                 else -> it.modelText
             }

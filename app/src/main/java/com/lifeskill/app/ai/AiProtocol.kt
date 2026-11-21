@@ -13,6 +13,8 @@ import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
+import com.lifeskill.app.model.TeachingGame
+import com.lifeskill.app.model.TeachingText
 import com.lifeskill.app.model.TeachingBlock
 import com.lifeskill.app.model.interactionSummary
 import com.lifeskill.app.model.isAvailable
@@ -239,8 +241,9 @@ internal object AiProtocol {
             教学节奏：默认直接讲解，不把提问当结尾。teach 用陈述、小结、示例或下一步建议收尾，避免「你觉得呢」「准备好了吗」之类问题。
             根据本节学习目标和实际教学进度判断是否适合检验。讲完足以检验目标的内容后，可用 offer_check 替代 teach，reply 写讲解或小结。App 会在回复下方显示「做课后练习」。当前是否允许邀请检验：${if (pending == null) "是，由你判断时机" else "否"}。
             没有待答题时，用户说「${TutorRules.CONTINUE_REPLY}」是继续教学的请求，不参与判分。
-            收到 App 发起重新学习的消息时，以当前学习目标和本次学习要求为准，从头安排讲解并直接开始第一小节。不要假设用户已经学过旧课。只有用户明确要求先出题时才以练习开场。
-            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。凡是流程、步骤、交易链路、因果、循环或分支关系，必须使用完整的 Markdown 代码围栏，语言标记为 mermaid，围栏内首行写 flowchart TD。每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。禁止用 ASCII、Unicode 框线、箭头链或 diagram 围栏代替流程图，即使历史回复使用字符图也必须改写为 mermaid。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
+            收到 App 发起重新学习的消息时，以当前学习目标和本次学习要求为准，从头安排讲解并直接开始第一小节。
+            新旧课程一律使用当前教学组件协议，无需重新创建课程。旧课程目标若只写“理解/掌握”，请从课时名称、本节实际内容和用户要求提炼当前需要观察、比较或操作的动作，不因目标笼统而默认只讲文字。重学先重新选择适合的表达方式，不模仿旧版内容的单一格式。若当前核心内容是2–3个对象的共同维度辨析，首选compare；时序、分支或定量趋势有匹配意图时首选timeline、flow或chart。没有匹配意图则只用文字；不要为了显示组件牵强制造数据或小游戏。不要假设用户已经学过旧课。只有用户明确要求先出题时才以练习开场。
+            reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，有2–3个对象按共同维度比较时优先用compare组件；Markdown表格用于不适合该组件的表格资料。凡是流程、步骤、交易链路、因果、循环或分支关系，必须使用完整的 Markdown 代码围栏，语言标记为 mermaid，围栏内首行写 flowchart TD。每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。禁止用 ASCII、Unicode 框线、箭头链或 diagram 围栏代替流程图，即使历史回复使用字符图也必须改写为 mermaid。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
             $DIAGRAM_FORMAT
             ${TeachingBlockProtocol.instructions}
             只输出一个完整的 json 对象，不在对象外输出文字。Markdown 只写在 reply 字符串里，换行写成 \n，英文双引号用 \" 转义。每次讲清一个步骤，通常控制在 800 个中文字以内。讲解例：{"kind":"teach","reply":"**核心概念**：先从实际例子看起。"}。
@@ -328,8 +331,15 @@ internal object AiProtocol {
             )
         }
         val imageQuery = (json.opt("imageQuery") as? String)?.takeIf { kind in TutorRules.teachingReplyKinds }
-        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery,
-            if (kind in TutorRules.teachingReplyKinds) TeachingBlockProtocol.decode(json.optJSONArray("blocks")).filter { it.isAvailable } else emptyList())
+        var gameIncluded = false
+        val blocks = if (kind in TutorRules.teachingReplyKinds) TeachingBlockProtocol.decode(json.optJSONArray("blocks")).filter { block ->
+            // 每轮最多接受一个小游戏，使生成代码预算不会随组件数量倍增。
+            if (!block.isAvailable) false
+            else if (block is TeachingGame) {
+                if (gameIncluded) false else { gameIncluded = true; true }
+            } else true
+        } else emptyList()
+        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery, blocks)
     }
 
     private fun containsAsciiFlow(markdown: String): Boolean = fencedBlocks.findAll(markdown).any { block ->
@@ -346,7 +356,10 @@ internal object AiProtocol {
         put("exerciseId", turn.exerciseId)
         val availableBlocks = turn.teachingBlocks.filter { it.isAvailable }
         if (availableBlocks.isNotEmpty()) {
-            val blocks = TeachingBlockProtocol.encode(availableBlocks)
+            // 模型只需要小游戏的目标与体验记录，不回传源代码，避免历史代码反复占用Token。
+            val blocks = TeachingBlockProtocol.encode(availableBlocks.map { block ->
+                if (block is TeachingGame) TeachingText(block.id, block.title, "小游戏目标：${block.goal}；玩法：${block.instructions}") else block
+            })
             // 大组件不能挤掉整条历史回复；超过预算时给模型有界摘要，完整快照仍加密保存在本机。
             if (blocks.toString().length <= 4_000) put("blocks", blocks)
             else put("blockSummaries", JSONArray(availableBlocks.map { block ->

@@ -32,6 +32,8 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 杠杆实验台的纯计算与参数校验见[TeachingExperiments.kt](../app/src/main/java/com/lifeskill/app/model/TeachingExperiments.kt)，原生预览、拖动与滑块见[实验台UI](../app/src/main/java/com/lifeskill/app/ui/TeachingExperiments.kt)。
 
+小游戏的模型与预算在 `model/TeachingGames.kt`，原生启动/销毁和WebView能力限制在 `ui/TeachingGames.kt`，共用画布与Worker运行器在 `assets/teaching/game-runtime.html`。代码不进入原生业务层，不注册JS宿主接口；后台与退出终止运行。
+
 ## 修改时需要保留的行为
 
 **课程。** 产品按学习方向、课程、课时组织。存储继续使用 `DIRECTION`、`TREE`、`SKILL` 三级标识。Room v9 为方向增加可空的配色字段，升级时现有方向沿用自动配色。前置关系限制在同一棵树内，须保持无环。新连接需满足相邻逻辑层和分叉限制。有效点亮依赖整条前置链，改动前置后要重新计算进度。地图的视觉换行独立于逻辑层级。
@@ -51,3 +53,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 业务细节见 [MVP 技术设计](mvp.md)，扩展步骤见[二次开发指南](customization.md)。
 
 **对话附件。** Room 保存加密的附件元数据和分块原件，附件外键随所属消息删除。预览在本机读取。内置 DeepSeek Flash 和 MiniMax M3.1 Flash 接收缩放后的图片，文档在本机提取有限长度的正文，PDF 使用 PDFBox。新课规划与确认生成复用本轮近期上传的附件，提取或请求预算导致正文不完整时标记为 `partial`。Room v11 为课时增加可空的加密 `sourceNotes`，保存生成时整理的章节与事实要点，供教学和课后练习使用。清空生成对话会删除原附件，课时要点随课程保留，旧课时无此字段时沿用原教学逻辑。
+
+重新学习状态由ChatViewModel在请求排队前标记restarting（含重试），ChatScreen显示独立遮罩模态加载而隐藏消息流中的等待横条。成功/失败统一收敛状态；返回离开页面，不只隐藏工作中的遮罩。所有课程均调用同一tutorPrompt，无创建时间或课程版本门槛。
+
+WebView渲染器异常处理参考[Android官方管理WebView对象](https://developer.android.com/develop/ui/views/layout/webapps/managing-webview)与[WebViewRenderProcessClient](https://developer.android.com/reference/android/webkit/WebViewRenderProcessClient)。Worker隔离与网络/文件/宿主接口限制共同构成此处的运行边界。

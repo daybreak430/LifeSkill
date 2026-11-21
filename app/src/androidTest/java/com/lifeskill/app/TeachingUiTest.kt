@@ -299,7 +299,9 @@ class TeachingUiTest {
         ui.waitUntil(8_000) { (state(lesson, "lever").lever?.rightArm ?: 4.0) < 4.0 }
         val saved = state(lesson, "lever").lever
         try {
-            ui.runOnUiThread { ui.activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            // ActivityScenario取Activity可能等待生命周期收敛，必须在测试线程完成，不能占住UI线程等待旋转。
+            val portraitActivity = ui.activity
+            ui.runOnUiThread { portraitActivity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
             ui.waitUntil(8_000) {
                 val bounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
                 bounds.right - bounds.left > bounds.bottom - bounds.top
@@ -310,7 +312,8 @@ class TeachingUiTest {
             assertTrue(control.left > scene.left)
             assertEquals(saved, state(lesson, "lever").lever)
         } finally {
-            ui.runOnUiThread { ui.activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+            val landscapeActivity = ui.activity
+            ui.runOnUiThread { landscapeActivity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
         }
         ui.waitUntil(8_000) {
             val bounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
@@ -333,6 +336,61 @@ class TeachingUiTest {
         ui.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
         back()
         await("课程大纲")
+    }
+
+    @Test fun relearningUsesCenteredModalAndRestoresRetryOnFailure() {
+        val ai = (ui.activity.application as FixtureApplication).ai
+        val course = runBlocking {
+            val direction = app.library.snapshot().childrenOf(null).first { it.name == "新领域" }
+            app.library.save(EntryEdit(null, direction.id, EntryKind.TREE, "重学遮罩测试"))
+        }
+        val lesson = runBlocking { app.library.save(EntryEdit(null, course.id, EntryKind.SKILL, "遮罩测试课时", "理解概念")) }
+        ai.reply("""{"kind":"teach","reply":"旧内容待替换"}""")
+        runBlocking { app.conversations.send(ChatScope(ChatMode.TUTOR, lesson.id), "开始学习") }
+        await("新领域")
+        ui.onNodeWithText("新领域").performScrollTo().performClick()
+        await(course.name)
+        ui.onNodeWithText(course.name).performClick()
+        await("课程大纲")
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(lesson.name))
+        ui.onNodeWithContentDescription(lesson.name).performClick()
+        ui.onNodeWithText("开始学习").performClick()
+        await("旧内容待替换")
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        ai.enqueue { started.complete(Unit); release.await(); """{"kind":"teach","reply":"新的学习内容"}""" }
+        fun restart() {
+            ui.onNodeWithContentDescription("更多操作").performClick()
+            ui.onNodeWithText("重新学习").performClick()
+            ui.onNodeWithText("开始新一轮").performClick()
+        }
+        try {
+            restart()
+            ui.waitUntil(8_000) { started.isCompleted }
+            ui.onNodeWithTag("restart-loading").assertIsDisplayed()
+            captureTeachingScreenshot("teaching-restart-loading.png")
+            ui.onNodeWithText("正在等待 AI 回复").assertDoesNotExist()
+            release.complete(Unit)
+            await("新的学习内容")
+            ui.onNodeWithTag("restart-loading").assertDoesNotExist()
+            val failRelease = kotlinx.coroutines.CompletableDeferred<Unit>()
+            ai.enqueue { failRelease.await(); error("模拟模型失败") }
+            restart()
+            ui.onNodeWithTag("restart-loading").assertIsDisplayed()
+            failRelease.complete(Unit)
+            await("重试")
+            ui.onNodeWithTag("restart-loading").assertDoesNotExist()
+            val retryRelease = kotlinx.coroutines.CompletableDeferred<Unit>()
+            ai.enqueue { retryRelease.await(); """{"kind":"teach","reply":"重试成功"}""" }
+            ui.onNodeWithText("重试").performClick()
+            ui.onNodeWithTag("restart-loading").assertIsDisplayed()
+            back()
+            await("课程大纲")
+            retryRelease.complete(Unit)
+        } finally {
+            release.complete(Unit)
+            runBlocking { app.library.delete(course.id) }
+        }
     }
 
     @Test fun deletedShowcaseCanBeRestoredWithoutReinstallingTheApp() {

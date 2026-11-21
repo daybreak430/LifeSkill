@@ -46,7 +46,7 @@ class TeachingInteractionsTest {
     @Test fun everyRegisteredTeachingTypeHasAnOfflineShowcaseLesson() {
         // 密封类型自动覆盖未来新增组件；停用类型仅保留旧记录兼容，不要求出现在当前演示目录。
         assertEquals(TeachingChartStyle.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>().map { it.style }.toSet())
-        assertEquals(ComparisonPalette.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingComparison>().map { it.palette }.toSet())
+        assertEquals(setOf(ComparisonPalette.BLUE_AMBER), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingComparison>().map { it.palette }.toSet())
         val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet() -
             setOf(TeachingClassification::class.java, TeachingStepTrace::class.java)
         assertFalse(legacyClassification.isAvailable)

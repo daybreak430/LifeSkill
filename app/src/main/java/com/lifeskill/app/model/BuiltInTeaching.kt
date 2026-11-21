@@ -25,7 +25,7 @@ internal object BuiltInTeaching {
     const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
     // 停用组件的旧安装标记仍属于演示课，主动恢复时一并清理；标记不得分配给新组件。
-    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_013, 1_015) +
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_007, 1_008, 1_013, 1_015) +
         lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
@@ -69,6 +69,9 @@ internal object BuiltInTeaching {
         prediction = TeachingQuestion("其他条件不变，奶茶从6元降到4元，需求量会怎样变化？", listOf("增加", "减少"), 0,
             "在这个教学模型中，6元对应60杯，4元对应80杯。价格下降，需求量增加。", "只改变商品自身价格，沿给定需求曲线观察。"),
         quantityUnit = "杯")
+    // 只用于辨认并清理未经修改的旧配色演示，不再安装为当前示例。
+    internal val retiredComparisonDemos get() = listOf(comparisonViolet, comparisonRose)
+
     private val line = TeachingChart("trend", "阅读趋势：先预测再观察", "月份", "借阅量（次）", listOf(
         TeachingPoint("一月", 20.0), TeachingPoint("二月", 34.0), TeachingPoint("三月", 29.0), TeachingPoint("四月", 46.0)
     ), style = TeachingChartStyle.LINE)
@@ -123,13 +126,11 @@ internal object BuiltInTeaching {
     // 课时按学习任务归类。新增同类组件只向对应课时追加 item，只有新类别才增加课时节点。
     val lessons: List<BuiltInTeachingLesson> = listOf(
         BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴、流程与对比表达，理解事件顺序和概念异同。",
-            EntryIcon.BOOK, "同一会话中组合时间线、分支流程和三种对比配色。先切换关注点，再比较表达方式。",
+            EntryIcon.BOOK, "同一会话中组合时间线、分支流程与对比卡。先切换关注点，再比较表达方式。",
             listOf(
                 BuiltInTeachingItem(1_001, timeline),
                 BuiltInTeachingItem(1_002, flow),
                 BuiltInTeachingItem(1_003, comparison),
-                BuiltInTeachingItem(1_007, comparisonViolet),
-                BuiltInTeachingItem(1_008, comparisonRose),
             )),
         BuiltInTeachingLesson("data", 2_002, "数据图表", "图表", "在同一会话中预测、比较并观察折线、柱状和面积图。",
             EntryIcon.CHART, "同一会话展示需求预测、趋势、分类比较和总量面积。切换表达时核对数值、单位与坐标。",
@@ -139,12 +140,15 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_009, bar),
                 BuiltInTeachingItem(1_010, area),
             )),
-        BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡和排序。",
+        BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡、排序和小游戏。",
             EntryIcon.TARGET, "统一遵循先提示、允许重试、主动查看完整答案。选择任意组件开始练习。",
             listOf(
                 BuiltInTeachingItem(1_005, quiz),
                 BuiltInTeachingItem(1_011, flip),
                 BuiltInTeachingItem(1_012, sorting),
+                BuiltInTeachingItem(1_022, TeachingGame("fraction-game", "凑出一整个", "通过组合分数理解分数和为1。",
+                    "点击分数块凑成1，超过1就清空重试。",
+                    """let sum=0;function show(){game.say('目标：凑成1。当前 '+sum+'/4');let d=[['text',sum+'/4',40,24,8,'#276B91']];for(let i=0;i<4;i++)d.push(['rect',10+i*21,45,18,24,i<sum?'#276B91':'#C8DCDD']);game.draw(d);}game.buttons([{id:'1',label:'加1/4'},{id:'2',label:'加1/2'},{id:'reset',label:'清空'}]);game.onAction(id=>{sum=id==='reset'?0:sum+Number(id);show();if(sum===4)game.finish('4/4就是1：分母相同时，把分子相加。你可以用两个1/2，或四个1/4凑成1。');else if(sum>4)game.say('超过1了。清空后试试另一种组合。');});show();""")),
             )),
         BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、对比、判断题与杠杆实验。",
             EntryIcon.LEAF, "先探索植物细胞热点，再回到数据观察与解释，比较不同媒介如何承担讲解。",

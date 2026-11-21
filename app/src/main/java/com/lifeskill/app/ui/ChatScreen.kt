@@ -136,6 +136,10 @@ internal fun ChatScreen(
     val newCelebrationId = timeline.celebrationId?.takeIf { it != lastCelebratedId }
     val celebration = newCelebrationId ?: openCelebrationId
     val statusMatches = status.requestId == null || status.requestId == pending?.id
+    val restartLoading = tutor && status.working && (status.restarting || pending?.kind == TurnKind.RESTART && statusMatches)
+    LaunchedEffect(restartLoading) {
+        if (restartLoading) { keyboard?.hide(); focus.clearFocus() }
+    }
     // 重试或撤回已提交时，旧历史快照可能晚一帧更新，不能重新出现重试按钮。
     val settled = status.requestId != null && statusMatches && !status.working && status.error == null
     val footerVisible = !status.clearing && !settled &&
@@ -323,7 +327,7 @@ internal fun ChatScreen(
                     }
                 }
             }
-            if (footerVisible) {
+            if (footerVisible && !restartLoading) {
                 item(key = CHAT_STATUS) {
                     // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
                     ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry) { turn ->
@@ -387,6 +391,7 @@ internal fun ChatScreen(
                 color = Muted, style = MaterialTheme.typography.bodySmall) }
         }
     }
+    if (pageActive && restartLoading) RestartLoadingDialog(onLeave = app::back)
     if (pageActive) attachmentPreview?.let { ChatAttachmentPreview(it, chat) { attachmentPreview = null } }
     if (pageActive && owner != null) {
         celebration?.let { id ->

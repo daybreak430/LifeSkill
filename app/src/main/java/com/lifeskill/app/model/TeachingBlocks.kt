@@ -91,6 +91,7 @@ data class TeachingState(
     val attempts: Int = 0, val prediction: Int? = null, val revealed: Boolean = false,
     val order: List<String> = emptyList(), val placements: Map<String, String> = emptyMap(), val step: Int = 0,
     val lever: LeverParameters? = null,
+    val gameOpened: Boolean = false,
 )
 
 sealed interface TeachingAction {
@@ -100,6 +101,7 @@ sealed interface TeachingAction {
     data class Predict(val index: Int) : TeachingAction
     data class Move(val key: String, val toIndex: Int) : TeachingAction
     data class Classify(val key: String, val category: String) : TeachingAction
+    data object OpenGame : TeachingAction
     data object Flip : TeachingAction
     data object Advance : TeachingAction
     data object Reveal : TeachingAction
@@ -110,6 +112,10 @@ sealed interface TeachingAction {
 internal object TeachingInteractions {
     fun apply(block: TeachingBlock, previous: TeachingState, action: TeachingAction): TeachingState = when (action) {
         TeachingAction.Reset -> TeachingState()
+        TeachingAction.OpenGame -> {
+            if (block !is TeachingGame) invalid()
+            previous.copy(gameOpened = true)
+        }
         is TeachingAction.Select -> {
             val quizCorrect = block is TeachingQuiz && previous.submitted &&
                 previous.selection?.toIntOrNull() == block.question.answer
@@ -127,7 +133,7 @@ internal object TeachingInteractions {
                         !previous.revealed
                 }
                 is TeachingHotspot -> block.hotspots.any { it.id == action.key }
-                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment,
+                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment, is TeachingGame,
                 -> false
             }
             if (!valid) invalid()
@@ -195,7 +201,7 @@ internal object TeachingInteractions {
                 is TeachingClassification -> previous.submitted && !previous.classificationComplete(block)
                 is TeachingStepTrace -> previous.submitted && !previous.currentStepCorrect(block)
                 is TeachingHotspot -> true
-                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard, is TeachingExperiment -> false
+                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard, is TeachingExperiment, is TeachingGame -> false
             }
             if (!valid) invalid()
             previous.copy(revealed = true)
@@ -256,6 +262,11 @@ internal fun TeachingBlock.markdown(): String = buildString {
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
             appendLine("教学模型：Q = 120 − 10P，价格 P 为 2–10 元，需求量 Q 的单位为${block.quantityUnit}，其他条件不变。")
         } else block.points.forEach { appendLine("- ${it.label}：${it.value}（${block.yLabel}）") }
+        is TeachingGame -> {
+            appendLine(block.goal)
+            appendLine("玩法：${block.instructions}")
+            appendLine("放大后游玩；小游戏反馈不计正式评估。")
+        }
         is TeachingExperiment -> {
             appendLine(block.prompt)
             appendLine("理想轻杆，两侧竖直受力；比较 F × 到支点的水平距离，平衡时两侧相等。倾角仅作方向示意。")
@@ -329,5 +340,6 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
         }.orEmpty()
     }
     is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
+    is TeachingGame -> if (state.gameOpened) "已打开小游戏：${block.goal}；游戏反馈不计正式评估" else "尚未打开小游戏"
     is TeachingText -> ""
 }

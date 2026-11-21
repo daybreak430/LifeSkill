@@ -32,6 +32,7 @@ import com.lifeskill.app.model.*
 
 @Composable
 internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, TeachingAction) -> Unit) {
+    var gameEpoch by rememberSaveable(turn.id) { mutableIntStateOf(0) }
     var expandedId by rememberSaveable(turn.id) { mutableStateOf<String?>(null) }
     val availableBlocks = turn.teachingBlocks.filter { it.isAvailable }
     if (availableBlocks.isEmpty()) return
@@ -39,7 +40,10 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
         availableBlocks.forEach { block ->
             key(block.id) {
                 TeachingCard(block, turn.teachingStates[block.id] ?: TeachingState(), enabled,
-                    { action -> onAction(block.id, action) }, onExpand = { expandedId = block.id })
+                    { action -> onAction(block.id, action) }, onExpand = {
+                        if (block is TeachingGame) onAction(block.id, TeachingAction.OpenGame)
+                        expandedId = block.id
+                    })
             }
         }
     }
@@ -66,12 +70,13 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
                     ) {
                         Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
                         if (expanded !is TeachingText) {
-                            GlyphButton(Glyph.RESTART, "重置${expanded.title}",
-                                { onAction(expanded.id, TeachingAction.Reset) }, enabled = enabled)
+                            GlyphButton(Glyph.RESTART, if (expanded is TeachingGame) "重新开始小游戏" else "重置${expanded.title}",
+                                { if (expanded is TeachingGame) gameEpoch++ else onAction(expanded.id, TeachingAction.Reset) }, enabled = enabled)
                         }
                         GlyphButton(Glyph.CLOSE, "关闭互动图示", { expandedId = null })
                     }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                    if (expanded is TeachingGame) TeachingGamePlayer(expanded, gameEpoch, Modifier.weight(1f).fillMaxWidth())
+                    else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
                         TeachingBlockBody(
                             expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
                             { action -> onAction(expanded.id, action) }, expanded = true,
@@ -95,7 +100,7 @@ private fun TeachingCard(
             .padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
-                if (block !is TeachingText) {
+                if (block !is TeachingText && block !is TeachingGame) {
                     if ((block is TeachingChart || block is TeachingExperiment) && onExpand != null) {
                         GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
                     }
@@ -103,7 +108,8 @@ private fun TeachingCard(
                         enabled = enabled, background = Panel)
                 }
             }
-            TeachingBlockBody(block, state, enabled, onAction)
+            if (block is TeachingGame) TeachingGamePreview(block, enabled) { onExpand?.invoke() }
+            else TeachingBlockBody(block, state, enabled, onAction)
         }
     }
 }
@@ -114,6 +120,7 @@ private fun TeachingBlockBody(
     expanded: Boolean = false,
 ) {
     when (block) {
+        is TeachingGame -> Unit
         is TeachingText -> LessonMarkdown(block.text)
         is TeachingTimeline -> TimelineContent(block, state, enabled, onAction)
         is TeachingFlow -> InteractiveFlowContent(block, state, enabled, onAction)

@@ -1,0 +1,54 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; child-src blob:; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#f6f9f9;color:#182e2b;font:17px system-ui,sans-serif}body{display:flex;flex-direction:column;padding:16px;gap:12px}#message{margin:0;min-height:2.8em;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}#stage{flex:1;min-height:120px;position:relative;overflow:hidden;border-radius:18px;background:#edf3f3}canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation}#actions{display:flex;flex-wrap:wrap;gap:8px}button{flex:1 1 100px;min-height:48px;padding:10px;border:1px solid #b1c9cb;border-radius:14px;background:#fff;color:#20596b;font:inherit;touch-action:manipulation}button:active{background:#d8e8eb}button:disabled{opacity:.55}@media(prefers-color-scheme:dark){html,body{background:#182421;color:#e4efeb}#stage{background:#23332f}button{background:#2c403b;color:#edf8f4;border-color:#688a80}}
+</style></head><body data-state="loading"><p id="message" role="status" aria-live="polite"></p><div id="stage"><canvas aria-label="小游戏互动场景"></canvas></div><div id="actions"></div>
+<script>
+// 生成代码仅拼接到Worker源码，不进入页面脚本或DOM；原生侧注入的是Base64数据。
+const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('__PAYLOAD__'),c=>c.charCodeAt(0))));
+const message=document.querySelector('#message'),actions=document.querySelector('#actions'),canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),stage=document.querySelector('#stage');
+let worker=null,timer=null,busy=false,commands=[],scale=1,ox=0,oy=0,seq=0,finished=false,messages=0,windowStart=performance.now(),sessionTimer=null;
+message.textContent=payload.instructions;
+function fail(text){if(worker)worker.terminate();worker=null;clearTimeout(timer);clearTimeout(sessionTimer);busy=false;document.body.dataset.state='failed';message.textContent=text;actions.textContent='';}
+function color(v){return typeof v==='string'&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)?v:'#276B91';}
+function number(v,min,max){return typeof v==='number'&&Number.isFinite(v)?Math.max(min,Math.min(max,v)):min;}
+// 只接收受限绘图指令与纯文本；统一坐标和重绘由宿主页掌握，脚本不能修改DOM。
+function redraw(){
+ const dpr=Math.min(devicePixelRatio||1,2),w=stage.clientWidth,h=stage.clientHeight;
+ canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);scale=Math.min(w,h)/100;ox=(w-100*scale)/2;oy=(h-100*scale)/2;ctx.translate(ox,oy);ctx.scale(scale,scale);
+ for(const c of commands){if(!Array.isArray(c))continue;ctx.save();
+  if(c[0]==='text'){ctx.fillStyle=color(c[5]);ctx.font=Math.max(number(c[4],2,10),12/scale)+'px system-ui,sans-serif';ctx.textBaseline='middle';ctx.fillText(String(c[1]).slice(0,160),number(c[2],-100,200),number(c[3],-100,200),100);}
+  else if(c[0]==='rect'){ctx.fillStyle=color(c[5]);ctx.fillRect(number(c[1],-100,200),number(c[2],-100,200),number(c[3],0,200),number(c[4],0,200));}
+  else if(c[0]==='circle'){ctx.fillStyle=color(c[4]);ctx.beginPath();ctx.arc(number(c[1],-100,200),number(c[2],-100,200),number(c[3],0,100),0,Math.PI*2);ctx.fill();}
+  else if(c[0]==='line'){ctx.strokeStyle=color(c[5]);ctx.lineWidth=number(c[6],.2,4);ctx.beginPath();ctx.moveTo(number(c[1],-100,200),number(c[2],-100,200));ctx.lineTo(number(c[3],-100,200),number(c[4],-100,200));ctx.stroke();}
+  ctx.restore();
+ }
+}
+// 一次只处理一个输入，超时计时器留在宿主页，Worker即使死循环也不能阻止它终止本局。
+function dispatch(event){if(!worker||busy||finished)return;busy=true;seq++;event.token=seq;timer=setTimeout(()=>fail('小游戏响应超时，请点击上方重新开始。'),900);worker.postMessage(event);}
+const bootstrap=`'use strict';
+const send=self.postMessage.bind(self),handlers={tap:null,action:null};
+const game=Object.freeze({draw:commands=>send({type:'draw',commands}),say:text=>send({type:'say',text:String(text)}),buttons:items=>send({type:'buttons',items}),onTap:fn=>handlers.tap=fn,onAction:fn=>handlers.action=fn,finish:text=>send({type:'finish',text:String(text)})});
+self.onmessage=e=>{try{const d=e.data;if(d.type==='tap'&&handlers.tap)handlers.tap(d.x,d.y);if(d.type==='action'&&handlers.action)handlers.action(d.id);send({type:'idle',token:d.token});}catch(error){send({type:'error'});}};
+`;
+try{
+ const blob=new Blob([bootstrap,'\ntry{\n',payload.code,'\nself.postMessage({type:"ready"});\n}catch(error){self.postMessage({type:"error"});}'],{type:'text/javascript'}),url=URL.createObjectURL(blob);
+ worker=new Worker(url);URL.revokeObjectURL(url);sessionTimer=setTimeout(()=>fail('本局已结束，请点击上方重新开始。'),90000);busy=true;timer=setTimeout(()=>fail('小游戏未能启动，请点击上方重新开始。'),1800);
+ worker.onerror=e=>{e.preventDefault();fail('小游戏运行出错，可关闭后请AI换一个小游戏。');};
+ // 限制消息频率和长度，避免生成代码逐帧刷消息或提交超大绘图列表。
+ worker.onmessage=e=>{
+  const now=performance.now();if(now-windowStart>1000){windowStart=now;messages=0;}if(++messages>160){fail('小游戏更新过于频繁，请重新开始。');return;}
+  const d=e.data;if(!d||typeof d!=='object')return;
+  try{if(JSON.stringify(d).length>20000){fail('小游戏内容过多，请重新开始。');return;}}catch(error){fail('小游戏数据无效，请重新开始。');return;}
+  if(d.type==='ready'||d.type==='idle'&&d.token===seq){clearTimeout(timer);busy=false;if(!finished)document.body.dataset.state='ready';}
+  else if(d.type==='draw'&&Array.isArray(d.commands)){commands=d.commands.slice(0,160);redraw();}
+  else if(d.type==='say'||d.type==='finish'){message.textContent=String(d.text).slice(0,400);if(d.type==='finish'){finished=true;document.body.dataset.state='finished';clearTimeout(timer);clearTimeout(sessionTimer);busy=false;actions.querySelectorAll('button').forEach(b=>b.disabled=true);worker.terminate();worker=null;}}
+  else if(d.type==='buttons'&&Array.isArray(d.items)&&!finished){actions.textContent='';d.items.slice(0,6).forEach(item=>{if(!item||typeof item.id!=='string'||typeof item.label!=='string')return;const b=document.createElement('button');b.textContent=item.label.slice(0,24);b.onclick=()=>dispatch({type:'action',id:item.id.slice(0,40)});actions.appendChild(b);});}
+  else if(d.type==='error')fail('小游戏运行出错，可关闭后请AI换一个小游戏。');
+ };
+}catch(error){fail('当前设备无法启动小游戏，请更新系统WebView后重试。');}
+canvas.addEventListener('pointerup',e=>{const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left-ox)/scale,y=(e.clientY-r.top-oy)/scale;if(x>=0&&x<=100&&y>=0&&y<=100)dispatch({type:'tap',x,y});});
+if(typeof ResizeObserver==='function')new ResizeObserver(redraw).observe(stage);else window.addEventListener('resize',redraw);
+window.pauseGame=()=>fail('本局已暂停，请点击上方重新开始。');
+</script></body></html>
