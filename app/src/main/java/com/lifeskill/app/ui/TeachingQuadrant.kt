@@ -179,7 +179,8 @@ internal fun TeachingQuadrantContent(
                 style = MaterialTheme.typography.titleSmall, color = aiColors.accent,
             )
             current.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Ink) }
-        } else {
+        } else if (block.caption == null) {
+            // 有脚注时不再重复默认提示，避免两句话意思一样。
             Text("拖动点位改判，点一下看依据。", style = MaterialTheme.typography.bodySmall, color = Muted)
         }
         block.caption?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Muted) }

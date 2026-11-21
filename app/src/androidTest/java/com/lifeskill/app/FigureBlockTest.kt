@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lifeskill.app.ai.TeachingBlockProtocol
 import com.lifeskill.app.model.BuiltInTeaching
@@ -88,5 +89,9 @@ class FigureBlockTest {
         ui.onNodeWithText("435").assertIsDisplayed()
         ui.onNodeWithText("要点二", substring = true).assertIsDisplayed()
         ui.onNodeWithText("一句话说明关系。").assertIsDisplayed()
+        // 同一行文字行数不同时，卡片高度必须一致。
+        val first = ui.onNodeWithTag("figure-node-部分一").getUnclippedBoundsInRoot()
+        val second = ui.onNodeWithTag("figure-node-部分二").getUnclippedBoundsInRoot()
+        assertEquals((first.bottom - first.top).value, (second.bottom - second.top).value, 0.5f)
     }
 }

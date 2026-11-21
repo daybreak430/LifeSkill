@@ -34,11 +34,16 @@ internal fun TeachingFigureContent(block: TeachingFigure) {
         block.rows.forEach { row ->
             when (row) {
                 is FigureRow.Nodes -> Row(
-                    Modifier.fillMaxWidth(),
+                    // 同一行按最高的一张卡片取整行高度，避免文字行数不同造成高低不齐。
+                    Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     row.items.forEach { item ->
-                        FigureNode(item, columns = row.items.size, modifier = Modifier.weight(1f))
+                        FigureNode(
+                            item, columns = row.items.size,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                                .testTag("figure-node-${item.title}"),
+                        )
                     }
                 }
                 is FigureRow.Relation -> Row(
@@ -65,7 +70,7 @@ internal fun TeachingFigureContent(block: TeachingFigure) {
 private fun FigureNode(item: FigureItem, columns: Int, modifier: Modifier = Modifier) {
     val horizontal = if (columns >= 3) 6.dp else 10.dp
     Surface(modifier = modifier, shape = ControlShape, color = Ground, border = BorderStroke(1.dp, Line)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
             item.tone?.let { tone ->
                 Box(Modifier.fillMaxWidth().height(3.dp).background(tone.color()))
             }
