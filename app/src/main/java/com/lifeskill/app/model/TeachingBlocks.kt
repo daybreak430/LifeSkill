@@ -18,9 +18,14 @@ data class TeachingFlow(
     internal val flow: LessonFlow? get() = LessonFlow.parse(diagram, mermaidFence = true)
 }
 data class ComparisonDimension(val id: String, val title: String, val values: List<String>)
+enum class ComparisonPalette { BLUE_AMBER, VIOLET_TEAL, ROSE_SAGE }
+
 data class TeachingComparison(
     override val id: String, override val title: String, val columns: List<String>, val dimensions: List<ComparisonDimension>,
+    val palette: ComparisonPalette = ComparisonPalette.BLUE_AMBER,
 ) : TeachingBlock
+enum class TeachingChartStyle { LINE, BAR, AREA }
+
 enum class TeachingChartMode { DATA, LINEAR_DEMAND }
 data class TeachingPoint(val label: String, val value: Double)
 data class TeachingQuestion(
@@ -31,6 +36,7 @@ data class TeachingChart(
     val points: List<TeachingPoint> = emptyList(), val mode: TeachingChartMode = TeachingChartMode.DATA,
     val prediction: TeachingQuestion? = null,
     val quantityUnit: String = "单位",
+    val style: TeachingChartStyle = TeachingChartStyle.LINE,
 ) : TeachingBlock {
     // 模板只允许应用实现并验证过的函数，不接收模型返回的表达式或可执行代码。
     fun demandAt(price: Double): Double = (120.0 - 10.0 * price.coerceIn(2.0, 10.0)).coerceAtLeast(0.0)

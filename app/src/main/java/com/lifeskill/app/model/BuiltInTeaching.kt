@@ -73,6 +73,24 @@ internal object BuiltInTeaching {
                     listOf("四月借阅量最高", "四月一定举办了读书节", "每个月都持续增长"), 0,
                     "四月为52次，高于其他月份。数据没有告诉我们增长原因，且三月低于二月。", "只选择能从图中直接读出的信息。")),
             )),
+        BuiltInTeachingLesson("comparison-violet", 1_007, "对比卡：紫青双栏", "紫青对比", "切换维度比较两种学习方法。", EntryIcon.BOOK,
+            "用同一组维度比较两种学习方法。颜色区分对象，不能代替内容判断。", listOf(
+                TeachingComparison("methods", "阅读与动手练习", listOf("阅读理解", "动手练习"), listOf(
+                    ComparisonDimension("task", "主要任务", listOf("建立概念，理解原理与术语。", "把概念用在具体任务中，发现实际困难。")),
+                    ComparisonDimension("check", "检验方式", listOf("用自己的话复述核心观点。", "独立完成任务，并解释为什么这样做。"))), ComparisonPalette.VIOLET_TEAL))),
+        BuiltInTeachingLesson("comparison-rose", 1_008, "对比卡：玫瑰与鼠尾草", "双色对比", "比较两种方案，识别适用条件。", EntryIcon.TARGET,
+            "以短途通勤为教学场景，切换维度查看选择依据。", listOf(
+                TeachingComparison("travel", "步行与骑行", listOf("步行", "骑行"), listOf(
+                    ComparisonDimension("scene", "适用场景", listOf("距离较短，不需要额外设备。", "距离稍长，有安全的骑行条件。")),
+                    ComparisonDimension("limit", "需要考虑", listOf("步行时间与天气。", "停车条件、道路安全和设备状态。"))), ComparisonPalette.ROSE_SAGE))),
+        BuiltInTeachingLesson("chart-bar", 1_009, "柱状图：比较分类数据", "柱状图", "点选柱子，比较不同类别的数量。", EntryIcon.CHART,
+            "下面是教学示例数据：比较图书角不同类别的借阅次数。点柱子或数据标签查看数值。", listOf(
+                TeachingChart("categories", "各类图书借阅量", "类别", "借阅量（次）", listOf(
+                    TeachingPoint("历史", 42.0), TeachingPoint("科学", 68.0), TeachingPoint("文学", 53.0), TeachingPoint("艺术", 31.0)), style = TeachingChartStyle.BAR))),
+        BuiltInTeachingLesson("chart-area", 1_010, "面积图：观察总量趋势", "面积图", "选择月份，观察总量的变化与回落。", EntryIcon.CHART,
+            "下面是教学示例数据：展示每月参加活动的人数。填充强调总量趋势，不代表把月份累加。", listOf(
+                TeachingChart("attendance", "每月活动参与人数", "月份", "人数（人）", listOf(
+                    TeachingPoint("一月", 20.0), TeachingPoint("二月", 35.0), TeachingPoint("三月", 28.0), TeachingPoint("四月", 48.0)), style = TeachingChartStyle.AREA))),
     )
 
     fun lesson(id: String?): BuiltInTeachingLesson? = lessons.find { it.id == id }

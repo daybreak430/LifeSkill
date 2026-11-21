@@ -59,7 +59,7 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
     }
     TeachingPlot(points, demand, selected,
         if (demand) "需求量（${block.quantityUnit}）" else block.xLabel,
-        if (demand) "价格（元）" else block.yLabel, enabled) { index ->
+        if (demand) "价格（元）" else block.yLabel, enabled, if (demand) TeachingChartStyle.LINE else block.style) { index ->
         onAction(if (demand) TeachingAction.SetValue(index + 2.0) else TeachingAction.Select(index.toString()))
     }
     if (demand) {
@@ -90,14 +90,15 @@ private data class PlotRange(val horizontalMin: Double, val horizontalMax: Doubl
 @Composable
 private fun TeachingPlot(
     points: List<PlotPoint>, demand: Boolean, selected: Int, xLabel: String, yLabel: String,
-    enabled: Boolean, onSelect: (Int) -> Unit,
+    enabled: Boolean, style: TeachingChartStyle, onSelect: (Int) -> Unit,
 ) {
-    val ranges = remember(points, demand) {
+    val ranges = remember(points, demand, style) {
         if (demand) PlotRange(0.0, 120.0, 0.0, 12.0)
         else {
             val minimum = minOf(0.0, points.minOf { it.vertical })
             val maximum = maxOf(0.0, points.maxOf { it.vertical }).coerceAtLeast(minimum + 1.0)
-            PlotRange(0.0, (points.size - 1).toDouble(), minimum, maximum)
+            PlotRange(if (style == TeachingChartStyle.BAR) -.5 else 0.0,
+                if (style == TeachingChartStyle.BAR) points.size - .5 else (points.size - 1).toDouble(), minimum, maximum)
         }
     }
     val density = LocalDensity.current
@@ -124,8 +125,8 @@ private fun TeachingPlot(
         }.pointerInput(points, enabled) {
             detectTapGestures { position ->
                 if (enabled) {
-                    val closest = points.indices.minByOrNull { (location(points[it], size.width.toFloat(), size.height.toFloat()) - position).getDistanceSquared() }
-                    if (closest != null && (location(points[closest], size.width.toFloat(), size.height.toFloat()) - position).getDistance() <= hitRadius) {
+                    val closest = points.indices.minByOrNull { if (style == TeachingChartStyle.BAR) kotlin.math.abs(location(points[it], size.width.toFloat(), size.height.toFloat()).x - position.x) else (location(points[it], size.width.toFloat(), size.height.toFloat()) - position).getDistanceSquared() }
+                    if (closest != null && (style == TeachingChartStyle.BAR && position.x in left..(size.width - right) && position.y in top..(size.height - bottom) || (location(points[closest], size.width.toFloat(), size.height.toFloat()) - position).getDistance() <= hitRadius)) {
                         onSelect(closest)
                     }
                 }
@@ -142,15 +143,31 @@ private fun TeachingPlot(
         }
         drawLine(lineColor, Offset(left, top), Offset(left, size.height - bottom), 1.dp.toPx())
         val sorted = points.sortedBy(PlotPoint::horizontal)
-        drawPath(Path().apply {
+        val trace = Path().apply {
             sorted.forEachIndexed { index, point ->
                 val offset = location(point, size.width, size.height)
                 if (index == 0) moveTo(offset.x, offset.y) else lineTo(offset.x, offset.y)
             }
-        }, accent, style = Stroke(2.dp.toPx()))
+        }
+        if (style == TeachingChartStyle.AREA) {
+            val baseline = location(PlotPoint(0.0, 0.0, ""), size.width, size.height).y
+            drawPath(Path().apply {
+                addPath(trace)
+                lineTo(location(sorted.last(), size.width, size.height).x, baseline)
+                lineTo(location(sorted.first(), size.width, size.height).x, baseline)
+                close()
+            }, accent.copy(alpha = .18f))
+        }
+        if (style != TeachingChartStyle.BAR) drawPath(trace, accent, style = Stroke(2.dp.toPx()))
         points.forEachIndexed { index, point ->
             val offset = location(point, size.width, size.height)
-            drawCircle(if (index == selected) marker else accent, if (index == selected) 6.dp.toPx() else 3.dp.toPx(), offset)
+            if (style == TeachingChartStyle.BAR) {
+                val halfWidth = ((size.width - left - right) / (points.size + 1) * .28f).coerceAtMost(16.dp.toPx())
+                val baseline = location(PlotPoint(0.0, 0.0, ""), size.width, size.height).y
+                drawRect(if (index == selected) marker else accent.copy(alpha = .55f),
+                    Offset(offset.x - halfWidth, minOf(offset.y, baseline)),
+                    androidx.compose.ui.geometry.Size(halfWidth * 2, kotlin.math.abs(baseline - offset.y).coerceAtLeast(2.dp.toPx())))
+            } else drawCircle(if (index == selected) marker else accent, if (index == selected) 6.dp.toPx() else 3.dp.toPx(), offset)
         }
         paint.textAlign = Paint.Align.CENTER
         if (demand) listOf(0, 60, 120).forEach { value ->

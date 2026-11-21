@@ -1,6 +1,11 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -82,17 +87,27 @@ private fun TeachingCard(
 @Composable
 private fun TimelineContent(block: TeachingTimeline, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit) {
     val selected = state.selection ?: block.events.first().id
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        block.events.forEach { event ->
+    val accent = aiColors.accent
+    val rail = accent.copy(alpha = .25f)
+    Column {
+        block.events.forEachIndexed { index, event ->
             val active = event.id == selected
-            Surface(onClick = { onAction(TeachingAction.Select(event.id)) }, enabled = enabled,
-                modifier = Modifier.fillMaxWidth().testTag("timeline-${event.id}").semantics { this.selected = active },
-                shape = ControlShape, color = if (active) aiColors.chip else Ground) {
-                Row(Modifier.heightIn(min = 52.dp).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(event.date, Modifier.widthIn(min = 62.dp, max = 82.dp), color = aiColors.accent,
-                        style = MaterialTheme.typography.labelMedium)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(event.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Ink)
+            // 轴线在整行高度上绘制，详情展开后仍连续；首尾只连接到各自节点。
+            Row(Modifier.fillMaxWidth().drawBehind {
+                val horizontal = 10.dp.toPx()
+                val center = 25.dp.toPx()
+                drawLine(rail, Offset(horizontal, if (index == 0) center else 0f),
+                    Offset(horizontal, if (index == block.events.lastIndex) center else size.height), 2.dp.toPx())
+                if (active) drawCircle(accent.copy(alpha = .15f), 9.dp.toPx(), Offset(horizontal, center))
+                drawCircle(accent, if (active) 5.dp.toPx() else 3.dp.toPx(), Offset(horizontal, center))
+            }.padding(start = 28.dp, bottom = 8.dp)) {
+                Surface(onClick = { onAction(TeachingAction.Select(event.id)) }, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().testTag("timeline-${event.id}").semantics { this.selected = active },
+                    shape = ControlShape, color = if (active) aiColors.chip else Ground,
+                    border = if (active) BorderStroke(1.dp, accent.copy(alpha = .4f)) else null) {
+                    Column(Modifier.heightIn(min = 52.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(event.date, color = accent, style = MaterialTheme.typography.labelMedium)
+                        Text(event.title, style = MaterialTheme.typography.titleSmall, color = Ink)
                         if (active) Text(event.detail, style = MaterialTheme.typography.bodyMedium, color = Muted)
                     }
                 }
@@ -127,12 +142,23 @@ private fun ComparisonContent(block: TeachingComparison, state: TeachingState, e
             TeachingOption(it.title, it.id == dimension.id, enabled, Modifier, { onAction(TeachingAction.Select(it.id)) })
         }
     }
+    val accents = when (block.palette) {
+        ComparisonPalette.BLUE_AMBER -> listOf(Color(0xFF276B91), Color(0xFFAD6422), Color(0xFF6674A6))
+        ComparisonPalette.VIOLET_TEAL -> listOf(Color(0xFF8060BD), Color(0xFF168479), Color(0xFFB17D3D))
+        ComparisonPalette.ROSE_SAGE -> listOf(Color(0xFFB35777), Color(0xFF588167), Color(0xFF577EAC))
+    }
+    val dark = Panel.luminance() < .3f
     Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         block.columns.forEachIndexed { index, label ->
-            Surface(Modifier.weight(1f).fillMaxHeight().testTag("comparison-column-$index"), shape = ControlShape, color = Ground) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(label, color = aiColors.accent, style = MaterialTheme.typography.labelLarge)
-                    Text(dimension.values[index], color = Ink, style = MaterialTheme.typography.bodyMedium)
+            val accent = if (dark) lerp(accents[index], Color.White, .35f) else accents[index]
+            Surface(Modifier.weight(1f).fillMaxHeight().testTag("comparison-column-$index"), shape = ControlShape,
+                color = lerp(Panel, accent, if (dark) .17f else .09f), border = BorderStroke(1.dp, accent.copy(alpha = .3f))) {
+                Column {
+                    Box(Modifier.fillMaxWidth().height(3.dp).drawBehind { drawRect(accent) })
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(label, color = accent, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(dimension.values[index], color = Ink, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }

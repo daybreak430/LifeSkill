@@ -10,6 +10,8 @@ class TeachingInteractionsTest {
 
     @Test fun everyRegisteredTeachingTypeHasAnOfflineShowcaseLesson() {
         // JVM17 的密封类型列表自动包含未来新增类型，防止只实现组件却忘记补入同一系列课。
+        assertEquals(TeachingChartStyle.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>().map { it.style }.toSet())
+        assertEquals(ComparisonPalette.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingComparison>().map { it.palette }.toSet())
         val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet()
         val showcased = BuiltInTeaching.lessons.flatMap { it.blocks }.map { it.javaClass }.toSet()
         assertEquals(required, showcased)

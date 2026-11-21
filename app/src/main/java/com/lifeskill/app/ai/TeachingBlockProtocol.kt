@@ -38,7 +38,8 @@ internal object TeachingBlockProtocol {
                                 dimension.array("values", columns.size..columns.size).strings(400))
                         }
                         require(dimensions.map(ComparisonDimension::id).distinct().size == dimensions.size)
-                        TeachingComparison(id, title, columns, dimensions)
+                        TeachingComparison(id, title, columns, dimensions,
+                            ComparisonPalette.entries.firstOrNull { it.name.equals(json.optString("palette"), true) } ?: ComparisonPalette.BLUE_AMBER)
                     }
                     "chart" -> {
                         val mode = when (json.optString("model", "data")) {
@@ -56,7 +57,9 @@ internal object TeachingBlockProtocol {
                         TeachingChart(id, title,
                             if (mode == TeachingChartMode.LINEAR_DEMAND) "需求量（$unit）" else json.text("xLabel", 40),
                             if (mode == TeachingChartMode.LINEAR_DEMAND) "价格（元）" else json.text("yLabel", 40), points, mode,
-                            json.optJSONObject("prediction")?.question(), unit)
+                            json.optJSONObject("prediction")?.question(), unit,
+                            if (mode == TeachingChartMode.LINEAR_DEMAND) TeachingChartStyle.LINE else
+                                TeachingChartStyle.entries.firstOrNull { it.name.equals(json.optString("style"), true) } ?: TeachingChartStyle.LINE)
                     }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
                     else -> null
@@ -73,14 +76,14 @@ internal object TeachingBlockProtocol {
                     block.events.forEach { put(JSONObject().put("id", it.id).put("date", it.date).put("title", it.title).put("detail", it.detail)) }
                 })
                 is TeachingFlow -> put("type", "flow").put("diagram", block.diagram).put("details", JSONObject(block.details))
-                is TeachingComparison -> put("type", "compare").put("columns", JSONArray(block.columns))
+                is TeachingComparison -> put("type", "compare").put("columns", JSONArray(block.columns)).put("palette", block.palette.name.lowercase())
                     .put("dimensions", JSONArray().apply { block.dimensions.forEach {
                         put(JSONObject().put("id", it.id).put("title", it.title).put("values", JSONArray(it.values)))
                     } })
                 is TeachingChart -> {
                     put("type", "chart").put("model", if (block.mode == TeachingChartMode.DATA) "data" else "linear_demand")
                         .put("xLabel", block.xLabel).put("yLabel", block.yLabel)
-                        .put("quantityUnit", block.quantityUnit)
+                        .put("quantityUnit", block.quantityUnit).put("style", block.style.name.lowercase())
                         .put("points", JSONArray().apply { block.points.forEach { put(JSONObject().put("label", it.label).put("value", it.value)) } })
                     block.prediction?.let { put("prediction", it.json()) }
                 }
@@ -134,6 +137,7 @@ internal object TeachingBlockProtocol {
         {"id":"c","type":"compare","title":"对比","columns":["概念一","概念二"],"dimensions":[{"id":"cause","title":"变化原因","values":["第一项的原因","第二项的原因"]}]}
         {"id":"p","type":"chart","title":"趋势","model":"data","xLabel":"年份","yLabel":"数量（件）","points":[{"label":"2024","value":20},{"label":"2025","value":30}]}
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
+        compare 可选 palette 为 blue_amber、violet_teal、rose_sage，按对比主题选择。chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
         也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。
         价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
         quiz 是随堂反馈，点击和答对均不能点亮课时。正式课后练习继续按原有kind、question、choices、exerciseId协议，不得用blocks绕过题序。正式评估或待答题期间不要附加blocks。历史中的互动记录仅是学习证据，不能单独作为通过课后练习的依据。

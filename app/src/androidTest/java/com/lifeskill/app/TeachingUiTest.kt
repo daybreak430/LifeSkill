@@ -122,6 +122,23 @@ class TeachingUiTest {
         assertEquals(left.bottom.value - left.top.value, right.bottom.value - right.top.value, 0.1f)
     }
 
+    @Test fun additionalChartAndComparisonStylesKeepInteractiveState() {
+        val lesson = openLesson("chart-bar")
+        scrollTo(hasText("科学 68"))
+        ui.onNodeWithText("科学 68").performTouchInput { click() }
+        ui.waitUntil(8_000) { state(lesson, "categories").selection == "1" }
+        ui.onNodeWithText("科学 · 68").assertExists()
+        back()
+        val area = BuiltInTeaching.lessons.first { it.key == "chart-area" }
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(area.name))
+        ui.onNodeWithContentDescription(area.name).performClick()
+        ui.onNodeWithText("开始学习").performClick()
+        scrollTo(hasText("三月 28"))
+        ui.onNodeWithText("三月 28").performTouchInput { click() }
+        ui.waitUntil(8_000) { state(area, "attendance").selection == "2" }
+        ui.onNodeWithText("三月 · 28").assertExists()
+    }
+
     private fun openLesson(key: String): BuiltInTeachingLesson {
         val lesson = BuiltInTeaching.lessons.first { it.key == key }
         await("新领域")
