@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `0dfdbcd`（完整哈希见 `git rev-parse v0.15.16`） |
-| 最新版本 | `0.15.16` |
-| `versionCode` | `103` |
-| 标签 | `v0.15.16` |
-| Release | [LifeSkill 0.15.16](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.16) |
-| APK 文件名 | `LifeSkill-0.15.16-release.apk` |
-| APK 大小 | `18,266,599` bytes |
-| APK SHA-256 | `2fd35dbd5f87efc7a3398e2cd67cfcdc300197842693cbdb54df14a915ac9a79` |
+| 最新产品与发布提交 | `804ec94`（完整哈希见 `git rev-parse v0.15.17`） |
+| 最新版本 | `0.15.17` |
+| `versionCode` | `104` |
+| 标签 | `v0.15.17` |
+| Release | [LifeSkill 0.15.17](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.17) |
+| APK 文件名 | `LifeSkill-0.15.17-release.apk` |
+| APK 大小 | `18,282,983` bytes |
+| APK SHA-256 | `d61e9b362d0f9a596b4f9a8898e495df2656944ab45b0e9db4f83148c6a34fb9` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.16..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.17..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.16` 已发布：标签指向 `0dfdbcd`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.15` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.17` 已发布：标签指向 `804ec94`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.16` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -84,6 +84,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.14` | 答题与翻卡支持1–3级提示阶梯；任意数据图表可先预测后揭晓；小游戏画布铺满、支持拖拽与自绘样式，修复遮挡与空缺；生成约束禁止换皮选择题。 |
 | `v0.15.15` | 小游戏放宽到8000字符与320条命令，新增多边形/圆弧/描边/透明色/帧回调；演示换成拖拽版「分配研究工时」。 |
 | `v0.15.16` | 新增结构图 figure：1–3列节点、关系行与脚注，支持数字与要点，语义色最多两种。 |
+| `v0.15.17` | 新增评分矩阵、区间条、漏斗/金字塔与公式；chart 增加散点样式。 |
 
 对应提交如下：
 
@@ -102,6 +103,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.14` | `22fec95` |
 | `v0.15.15` | `cd6359a` |
 | `v0.15.16` | `0dfdbcd` |
+| `v0.15.17` | `804ec94` |
+
+## 0.15.17 的验证证据
+
+- `./scripts/build-release.sh` 构建、签名并校验；证书沿用既有调试证书 `AD:01:E1:…:0A`。
+- 单元测试与 `lintDebug` 通过；教学相关仪器测试 57 项通过，新增 `StructuredBlocksTest` 4 项（四块往返、错误形状/方向/缺 x 拒绝、内置示例齐备、五种图形同时渲染）。
+- 单元测试中的类型覆盖检查要求每种块和每种图表样式都有内置示例，散点因此补了演示（标记 1028）。
+- 模拟器人工验证：矩阵着色与对齐、区间条范围带与当前值标记、漏斗四级递减、公式分式与根号排版均正常，无截断。
+- 从 `0.15.16` 覆盖升级到 `0.15.17`，`firstInstallTime` 保持不变；Release 附件与本地 APK SHA-256 一致。
+
+未完成：真机与 Android 8–9 WebView 验收；公式只覆盖 `frac`/`sqrt`/上下标与常用符号，复杂排版（矩阵、积分上下限、多层嵌套）会退化为原文；这些新块尚未在真实模型对话中抽样。
 
 ## 0.15.16 的验证证据
 
