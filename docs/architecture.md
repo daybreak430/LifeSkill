@@ -1,6 +1,6 @@
 # 架构与代码导航
 
-LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端，Room 保存本地记录。AI 功能由客户端直接访问用户选择的模型服务。
+LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端，Room 保存本地记录。AI 功能由客户端直接访问用户选择的模型服务。本页描述长期结构；当前版本、发布提交、验证证据和临时限制见[Agent 交接基线](agent-handoff.md)。
 
 ## 启动与数据流
 

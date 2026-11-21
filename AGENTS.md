@@ -1,6 +1,6 @@
 # LifeSkill 协作说明
 
-本文档是本项目的 AI 协作约定。项目入口见 [README](README.md)，提交与验证流程见[贡献指南](CONTRIBUTING.md)，模块边界见[架构与代码导航](docs/architecture.md)。
+本文档是本项目的 AI 协作约定。项目入口见 [README](README.md)，提交与验证流程见[贡献指南](CONTRIBUTING.md)，模块边界见[架构与代码导航](docs/architecture.md)，当前版本与交接状态见[Agent 交接基线](docs/agent-handoff.md)。
 
 ## 开发原则
 
@@ -83,6 +83,14 @@ AI Agent 工作规范：
 \- 不应未经确认引入新的技术方案。
 \- 不应随意重构无关代码。
 
+## Agent 交接
+
+- 新 Agent 接手时必须先阅读[Agent 交接基线](docs/agent-handoff.md)，再核对 `git status`、当前分支、近期提交、标签、Release 和未完成工作。
+- `AGENTS.md` 只记录长期有效的协作、质量、安全和发布规则；当前版本、提交、验证结果、已知限制和临期待办写入 `docs/agent-handoff.md`，不要长期堆积在本文件。
+- 产品入口和安装方式写入 `README.md`，架构与持久化约束写入 `docs/architecture.md`，教学组件协议与扩展边界写入 `docs/interactive-teaching.md`，命令与验收流程写入 `CONTRIBUTING.md`。
+- 发布新版本、改变架构或用户可见行为、产生稳定复现的已知限制，或向他人移交时，必须在同一变更中更新交接文档。
+- 移交前应提交代码并让工作区保持干净；确实存在未完成项时，在交接文档中写清当前进度、失败证据和下一步，不能只留在对话记录里。
+
 AI Agent 修改完成后需要说明：
 \- 修改了哪些文件。
 \- 修改了哪些内容。
@@ -152,6 +160,7 @@ UI 开发规范：
 \- 复杂逻辑有中文注释。
 \- Git 已提交。
 \- 修改内容可追踪。
+- 受影响的 `README.md`、`AGENTS.md`、`docs/` 与交接基线已同步。
 
 
 - 产品功能图标统一使用项目固定版本的 Lucide 资源，新增按钮不得另画近似图标；图形按钮保留可访问名称。
