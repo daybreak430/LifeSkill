@@ -36,7 +36,14 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
     var expandedId by rememberSaveable(turn.id) { mutableStateOf<String?>(null) }
     val availableBlocks = turn.teachingBlocks.filter { it.isAvailable }
     if (availableBlocks.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
+    // 内容自带滚动：超长课时消息不再撑成远超一屏的列表项。LazyColumn 的 item
+    // 超过约两屏后，超出区域的触摸派发会失效（画得出来、点不着），让滚动发生在
+    // 内容内部可以把外层列表的偏移一直压在安全范围内。
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(top = 12.dp).heightIn(max = 600.dp)
+            .verticalScroll(rememberScrollState()).testTag("teaching-content-scroll"),
+    ) {
         availableBlocks.forEach { block ->
             key(block.id) {
                 TeachingCard(block, turn.teachingStates[block.id] ?: TeachingState(), enabled,

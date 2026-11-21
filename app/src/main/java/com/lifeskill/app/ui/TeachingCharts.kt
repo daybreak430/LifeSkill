@@ -80,10 +80,16 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
             Text("10元", color = Muted, style = MaterialTheme.typography.labelSmall)
         }
         Text("教学模型：Q = 120 − 10P，其他条件不变。", style = MaterialTheme.typography.bodySmall, color = Muted)
-    } else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        block.points.forEachIndexed { index, point ->
-            TeachingOption("${point.label} ${number(point.value)}", index == selected, enabled,
-                onClick = { onAction(TeachingAction.Select(index.toString())) })
+    } else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // FlowRow 里的芯片在真实消息列表中收不到点击，改用固定每行三个的分行布局。
+        block.points.withIndex().chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (index, point) ->
+                    TeachingOption("${point.label} ${number(point.value)}", index == selected, enabled,
+                        modifier = Modifier.testTag("chart-chip-${block.id}-$index"),
+                        onClick = { onAction(TeachingAction.Select(index.toString())) })
+                }
+            }
         }
     }
     if (prediction != null) Text(

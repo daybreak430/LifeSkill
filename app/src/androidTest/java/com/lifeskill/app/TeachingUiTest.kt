@@ -9,6 +9,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.toRect
+import kotlin.math.roundToInt
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -136,7 +138,11 @@ class TeachingUiTest {
         val lesson = openLesson("data")
         scrollTo(hasText("科学 68"))
         ui.onNodeWithText("科学 68").performTouchInput { click() }
-        ui.waitUntil(8_000) { state(lesson, "categories").selection == "1" }
+        ui.waitUntil(8_000) {
+            val st = state(lesson, "categories")
+            android.util.Log.d("LSCHIP", "probe selection=${st.selection} turnId=${lesson.turnId}")
+            st.selection == "1"
+        }
         ui.onNodeWithText("科学 · 68").assertExists()
         back()
         val area = BuiltInTeaching.lessons.first { it.key == "data" }
@@ -147,6 +153,33 @@ class TeachingUiTest {
         ui.onNodeWithText("三月 28").performTouchInput { click() }
         ui.waitUntil(8_000) { state(area, "attendance").selection == "2" }
         ui.onNodeWithText("三月 · 28").assertExists()
+    }
+
+    @Test fun chartChipsAtLessonEndStayClickable() {
+        // 回归：超长课时消息曾是远超两屏的列表项，末端卡片的触摸会被吞掉
+        // （绘制正常但命中失效）。内容改为内滚动后，末位与早段的标签都必须
+        // 可点、可选中并持久化。
+        val lesson = openLesson("data")
+        // 先把内滚动窗口滚进外层列表的视口，再滚内部内容到目标芯片。
+        ui.onNodeWithTag("chat-messages").performScrollToNode(hasTestTag("teaching-content-scroll"))
+        val scroll = ui.onNodeWithTag("teaching-content-scroll")
+        scroll.performScrollToNode(hasTestTag("chart-chip-monthly-waterfall-3"))
+        ui.onNodeWithTag("chart-chip-monthly-waterfall-3").assertIsDisplayed()
+        ui.onNodeWithTag("chart-chip-monthly-waterfall-3").performClick()
+        ui.waitUntil(8_000) { state(lesson, "monthly-waterfall").selection == "3" }
+        ui.onNodeWithText("复购 · 15").assertExists()
+
+        scroll.performScrollToNode(hasTestTag("chart-chip-study-scatter-1"))
+        ui.onNodeWithTag("chart-chip-study-scatter-1").assertIsDisplayed()
+        ui.onNodeWithTag("chart-chip-study-scatter-1").performClick()
+        ui.waitUntil(8_000) { state(lesson, "study-scatter").selection == "1" }
+        ui.onNodeWithText("2班 · 58").assertExists()
+
+        // 早段卡片仍然可点。
+        scroll.performScrollToNode(hasTestTag("chart-chip-categories-1"))
+        ui.onNodeWithTag("chart-chip-categories-1").performClick()
+        ui.waitUntil(8_000) { state(lesson, "categories").selection == "1" }
+        ui.onNodeWithText("科学 · 68").assertExists()
     }
 
     @Test fun flipAndSortingUseRetryBeforeShowingAnswers() {
@@ -437,6 +470,8 @@ class TeachingUiTest {
     }
     private fun scrollTo(matcher: SemanticsMatcher) {
         ui.onNodeWithTag("chat-messages").performScrollToNode(matcher)
+        // 教学内容在内滚动窗口里，外层滚到位后还要滚内部窗口。
+        runCatching { ui.onNodeWithTag("teaching-content-scroll").performScrollToNode(matcher) }
     }
     private fun await(text: String) {
         try {

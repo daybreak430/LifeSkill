@@ -481,7 +481,6 @@ internal object TeachingBlockProtocol {
         - 逐级转化或层级依赖：funnel，mode 为 funnel 或 pyramid。
         - 需要精确书写数学式子：formula，只排版不求值。
         - 数量从期初到期末、要看清每项增减贡献：chart 用 style:waterfall，首尾点标 total : true。
-        - 对象要按两个维度定位（优先级、类型、取舍）：quadrant，x、y 都是 0–100。
         - 定量趋势、分类比较、累计走势、价格与数量关系：chart，并按line/bar/area或固定linear_demand模板选择。结论有明确对错预期时（涨还是跌、峰值在第几个月、两条线是否交叉、某点是否超过阈值），在chart上加prediction，先让学生预测，点“验证预测”后才显示图表；预测只做客观方向或取值判断，不出主观题，也不要每题都加。
         - 定义、条件、公式前提需要先回忆：flip。
         - 只需快速检验一个关键误区：quiz。
@@ -493,7 +492,7 @@ internal object TeachingBlockProtocol {
         experiment仅支持model:lever，initial四项必填：leftForce/rightForce为1–10 N整数；leftArm/rightArm为到支点的水平距离，1–4 m，步长0.5 m。坐标与动画由应用计算。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
         结构图 figure：用于讲“由哪些部分组成、谁对谁负责、几项并列但有主次”。一行只放一个层级；需要说明关系走向时单独插一条 arrow 行，写“立法、制衡、监督”这类概括关系，不要画成流程箭头。节点 title 用 4–12 字名词短语；value 只在讲解已给出确切数字时填写；note 只补一条关键限定；items 最多 2 条短语。每行 1–3 列，整图最多 6 行、8 个节点，一行最多 3 个；tone 只用于区分类别（两院、两派、两类因素），每图最多两种，不要给每个节点都上色。reply 负责因果与判断，figure 只承载结构与数量，不要把 reply 整段抄进节点，也不要用图代替推导过程。层级流程用 flow，纯并列对比用 compare，只有趋势与分布用 chart。
         矩阵 matrix：行 2–6、列 2–5、分值 0–5，每行每列都要有值。只在维度本身可打分、且能说明评分依据时使用，与 compare 的分界是“有没有分值”；依据写在 reply 或 caption，不许只给分不解释。颜色只表示高低。散点 chart(style:scatter)：每个点写 x（自变量）与 value（因变量），2–12 个点，两轴都要有单位；不要混入不同量纲，也不要用散点宣称因果。区间 range：用于单一数值的预估、风险档位与置信度，不用于多步骤计划。label 直接写结论（如“预计 3–5 天”），min/max 是整条轨道，low/high 是有把握的区间，value 是当前估计，单位不超过 6 字；区间为什么这么宽要在 reply 说明。漏斗与金字塔 funnel：mode=funnel 时 ratio 逐级递减（转化、筛选），mode=pyramid 时逐级递增（层级依赖），2–5 层，label 不超过 10 字；漏斗不是排名，金字塔不是流程。公式 formula：lines 1–6 行，每行一个式子，支持 frac{a}{b}、sqrt{x}、x^{2}、a_{i}，运算符直接写 × ÷ ± ≤ ≥ ≠ √ π 等符号（不要用反斜杠命令，JSON 转义容易出错），不求值、不写代码；多步推导一行一步，并在 reply 说明依据。
-        瀑布图 chart(style:waterfall)：首尾两个点必须 total:true 且写绝对量，中间是增减量（可为负），共 2–10 个点；普通分类比较不要用它。四象限 quadrant：x、y 都是 0–100，quadrants 四个名字按左上、右上、左下、右下排列，点 1–8 个、label 不超过 12 字、detail 一句话写判断依据；它和 matrix 的分界是“定位”还是“打分”，不要混用。
+        瀑布图 chart(style:waterfall)：首尾两个点必须 total:true 且写绝对量，中间是增减量（可为负），共 2–10 个点；普通分类比较不要用它。对象要做优先级或类型判断时用 matrix 的分值表达，不要生成四象限（已停用）。
         小游戏 game：先判断当前学习阶段是否需要学习者通过“操作→观察后果→调整策略”练习本节知识。只有玩的时候会实际用到目标知识才生成；简单定义、普通追问、已有组件已能表达或尚未讲清必要知识时不生成。不做换皮选择题：不得用按钮选答案、不得把文字选项归类或判断对错，这类内容用 quiz、sort 或文字。优先要求实际动手：拖动归位、配对连线、拼装组合、把参数调到目标、规划路径、分配资源、把握时机。通常0个，需要时本轮只给1个game主组件，reply短讲目标与入口，不重复代码。
         写完代码必须自查两件事：一是目标状态在允许的操作范围内真的可达（拖动的坐标上下限、步长、角度都要算进去，不能出现目标位置落在范围外或永远凑不出的数值）；二是画面里的算式和标签与实际判定条件一致。宁可减少元素，也不要把一局做成不可能完成或前后矛盾的谜题。
         game包含goal（可检验学习目标）、instructions（一句话玩法）、code（JavaScript代码）。代码目标1600–4500字符，硬上限8000字符（含空格），一个场景、一种核心操作、约30–90秒；没有外部库、素材、HTML/CSS/DOM替换、网络、音频或持久化。可以写小的状态机与绘制函数，但不要造通用引擎或整套UI框架。超过预算时简化玩法，不截断代码；只能使用JS基础语法和game API，代码直接执行初始化。
@@ -514,7 +513,6 @@ internal object TeachingBlockProtocol {
         {"id":"fn","type":"funnel","title":"从投递到录用","mode":"funnel","stages":[{"label":"投递","value":"240","ratio":100},{"label":"初筛","value":"96","ratio":78},{"label":"面试","value":"31","ratio":54},{"label":"录用","value":"8","ratio":32}],"caption":"每层相对上一层。"}
         {"id":"fm","type":"formula","title":"求根公式","lines":["x = frac{-b ± sqrt{b^{2}-4ac}}{2a}"],"caption":"判别式决定实根个数。"}
         {"id":"wf","type":"chart","title":"月活变化","style":"waterfall","xLabel":"项目","yLabel":"万人","points":[{"label":"期初","value":120,"total":true},{"label":"新客","value":40},{"label":"流失","value":-25},{"label":"复购","value":15},{"label":"期末","value":150,"total":true}],"caption":"净增 30，但背后有增有减。"}
-        {"id":"qd","type":"quadrant","title":"需求优先级","xLabel":"用户价值","yLabel":"实现成本","quadrants":["不做","值得谈","有空再说","先做"],"points":[{"id":"a","label":"登录改版","x":82,"y":30,"detail":"价值高、成本低"}],"caption":"拖动点位即可改判。"}
         {"id":"p","type":"chart","title":"趋势","model":"data","xLabel":"年份","yLabel":"数量（件）","points":[{"label":"2024","value":20},{"label":"2025","value":30}]}
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hints":["先回想要比较的两个量","注意基数不同"],"explanation":"原理与解释"}}
         {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hints":["先关注适用条件"]}

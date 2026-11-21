@@ -45,6 +45,16 @@ class StructuredBlocksTest {
         "每层相对上一层。",
     )
     private val formula = TeachingFormula("fm", "求根公式", listOf("x = frac{-b ± sqrt{b^{2}-4ac}}{2a}"), "判别式决定实根个数。")
+    private val waterfall = TeachingChart(
+        "wf", "月活变化", "项目", "万人",
+        listOf(
+            TeachingPoint("期初", 120.0, total = true),
+            TeachingPoint("新客", 40.0),
+            TeachingPoint("流失", -25.0),
+            TeachingPoint("期末", 135.0, total = true),
+        ),
+        style = TeachingChartStyle.WATERFALL,
+    )
     private val scatter = TeachingChart(
         "sc", "时长与得分", "每周时长（小时）", "得分",
         listOf(TeachingPoint("1班", 52.0, 1.0), TeachingPoint("2班", 61.0, 3.0), TeachingPoint("3班", 70.0, 5.0)),
@@ -53,14 +63,15 @@ class StructuredBlocksTest {
 
     @Test fun roundTripKeepsAllFourStructures() {
         val decoded = TeachingBlockProtocol.decode(
-            TeachingBlockProtocol.encode(listOf(matrix, range, funnel, formula, scatter)),
+            TeachingBlockProtocol.encode(listOf(matrix, range, funnel, formula, scatter, waterfall)),
         )
-        assertEquals(5, decoded.size)
+        assertEquals(6, decoded.size)
         assertEquals(matrix, decoded[0])
         assertEquals(range, decoded[1])
         assertEquals(funnel, decoded[2])
         assertEquals(formula, decoded[3])
         assertEquals(scatter, decoded[4])
+        assertEquals(waterfall, decoded[5])
     }
 
     @Test fun rejectsWrongShapesAndDirections() {
