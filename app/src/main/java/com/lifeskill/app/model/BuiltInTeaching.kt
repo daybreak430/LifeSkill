@@ -65,6 +65,45 @@ internal object BuiltInTeaching {
     ), ComparisonPalette.ROSE_SAGE)
 
     // 结构图示例：一个整体、一句关系、三个并列依据，演示“一行一层”的板书式表达。
+    private val studyScatter = TeachingChart(
+        "study-scatter", "学习时长与得分", "每周时长（小时）", "得分",
+        listOf(
+            TeachingPoint("1班", 52.0, 1.0),
+            TeachingPoint("2班", 58.0, 2.0),
+            TeachingPoint("3班", 61.0, 3.0),
+            TeachingPoint("4班", 68.0, 4.0),
+            TeachingPoint("5班", 74.0, 6.0),
+        ), style = TeachingChartStyle.SCATTER,
+    )
+
+    // 四种新图形各给一个最小示例，演示“同一份数据换一种图形”而不是堆装饰。
+    private val toolMatrix = TeachingMatrix(
+        "tool-matrix", "三种方案怎么选",
+        listOf("自建", "采购", "外包"), listOf("成本", "风险", "可维护"),
+        listOf(listOf(5.0, 3.0, 4.0), listOf(3.0, 5.0, 3.0), listOf(2.0, 2.0, 5.0)),
+        "1–5 分；分数只帮你比较，不替代判断。",
+    )
+    private val deliveryRange = TeachingRange(
+        "delivery-range", "预计多久能上线",
+        "预计 3–5 天", 0.0, 10.0, 3.0, 5.0, 4.2, "天",
+        "区间来自三个同类需求的历史耗时。",
+    )
+    private val quadratic = TeachingFormula(
+        "quadratic", "求根公式",
+        listOf("x = frac{-b ± sqrt{b^{2}-4ac}}{2a}"),
+        "判别式大于 0 时有两个实根。",
+    )
+    private val hiringFunnel = TeachingFunnel(
+        "hiring-funnel", "从投递到录用", FunnelMode.FUNNEL,
+        listOf(
+            FunnelStage("投递", "240", 100),
+            FunnelStage("初筛", "96", 78),
+            FunnelStage("面试", "31", 54),
+            FunnelStage("录用", "8", 32),
+        ),
+        "每层都相对上一层，不能跨层比较。",
+    )
+
     private val writingFigure = TeachingFigure(
         "writing-structure", "写作的三层结构",
         listOf(
@@ -156,6 +195,7 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_002, flow),
                 BuiltInTeachingItem(1_003, comparison),
                 BuiltInTeachingItem(1_023, writingFigure),
+                BuiltInTeachingItem(1_027, hiringFunnel),
             )),
         BuiltInTeachingLesson("data", 2_002, "数据图表", "图表", "在同一会话中预测、比较并观察折线、柱状和面积图。",
             EntryIcon.CHART, "同一会话展示需求预测、趋势、分类比较和总量面积。切换表达时核对数值、单位与坐标。",
@@ -164,6 +204,10 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_016, line),
                 BuiltInTeachingItem(1_009, bar),
                 BuiltInTeachingItem(1_010, area),
+                BuiltInTeachingItem(1_024, toolMatrix),
+                BuiltInTeachingItem(1_025, deliveryRange),
+                BuiltInTeachingItem(1_026, quadratic),
+                BuiltInTeachingItem(1_028, studyScatter),
             )),
         BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡、排序和小游戏。",
             EntryIcon.TARGET, "统一遵循先提示、允许重试、主动查看完整答案。选择任意组件开始练习。",

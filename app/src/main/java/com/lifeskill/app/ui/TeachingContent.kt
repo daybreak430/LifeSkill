@@ -69,7 +69,7 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
-                        if (expanded !is TeachingText && expanded !is TeachingFigure) {
+                        if (expanded !is TeachingText && expanded.isStaticVisual.not()) {
                             GlyphButton(Glyph.RESTART, if (expanded is TeachingGame) "重新开始小游戏" else "重置${expanded.title}",
                                 { if (expanded is TeachingGame) gameEpoch++ else onAction(expanded.id, TeachingAction.Reset) }, enabled = enabled)
                         }
@@ -100,7 +100,7 @@ private fun TeachingCard(
             .padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
-                if (block !is TeachingText && block !is TeachingGame && block !is TeachingFigure) {
+                if (block !is TeachingText && block !is TeachingGame && block.isStaticVisual.not()) {
                     if ((block is TeachingChart || block is TeachingExperiment) && onExpand != null) {
                         GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
                     }
@@ -133,6 +133,10 @@ private fun TeachingBlockBody(
         is TeachingClassification -> Unit
         is TeachingHotspot -> TeachingHotspotContent(block, state, enabled, onAction)
         is TeachingFigure -> TeachingFigureContent(block)
+        is TeachingMatrix -> TeachingMatrixContent(block)
+        is TeachingRange -> TeachingRangeContent(block)
+        is TeachingFunnel -> TeachingFunnelContent(block)
+        is TeachingFormula -> TeachingFormulaContent(block)
         is TeachingStepTrace -> Unit
     }
 }

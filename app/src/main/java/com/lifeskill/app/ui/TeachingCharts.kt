@@ -47,7 +47,10 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
     val selected = if (demand) price.roundToInt() - 2 else state.selection?.toIntOrNull() ?: 0
     val points = remember(block) {
         if (demand) (2..10).map { value -> PlotPoint(block.demandAt(value.toDouble()), value.toDouble(), "${value}元") }
-        else block.points.mapIndexed { index, point -> PlotPoint(index.toDouble(), point.value, point.label) }
+        else block.points.mapIndexed { index, point ->
+            // 散点用真实的 x；其他样式按顺序排列，避免模型乱填 x 把线画歪。
+            PlotPoint(if (block.style == TeachingChartStyle.SCATTER) point.x ?: index.toDouble() else index.toDouble(), point.value, point.label)
+        }
     }
     if (demand) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -98,8 +101,16 @@ private fun TeachingPlot(
         else {
             val minimum = minOf(0.0, points.minOf { it.vertical })
             val maximum = maxOf(0.0, points.maxOf { it.vertical }).coerceAtLeast(minimum + 1.0)
-            PlotRange(if (style == TeachingChartStyle.BAR) -.5 else 0.0,
-                if (style == TeachingChartStyle.BAR) points.size - .5 else (points.size - 1).toDouble(), minimum, maximum)
+            when (style) {
+                TeachingChartStyle.BAR -> PlotRange(-.5, points.size - .5, minimum, maximum)
+                TeachingChartStyle.SCATTER -> {
+                    val lowest = points.minOf { it.horizontal }
+                    val highest = points.maxOf { it.horizontal }
+                    val padding = ((highest - lowest).takeIf { it > 0 } ?: 1.0) * .08
+                    PlotRange(lowest - padding, highest + padding, minimum, maximum)
+                }
+                else -> PlotRange(0.0, (points.size - 1).toDouble(), minimum, maximum)
+            }
         }
     }
     val density = LocalDensity.current
@@ -159,7 +170,8 @@ private fun TeachingPlot(
                 close()
             }, accent.copy(alpha = .18f))
         }
-        if (style != TeachingChartStyle.BAR) drawPath(trace, accent, style = Stroke(2.dp.toPx()))
+        // 散点只画点，不连线：连线会暗示不存在的趋势。
+        if (style != TeachingChartStyle.BAR && style != TeachingChartStyle.SCATTER) drawPath(trace, accent, style = Stroke(2.dp.toPx()))
         points.forEachIndexed { index, point ->
             val offset = location(point, size.width, size.height)
             if (style == TeachingChartStyle.BAR) {
@@ -174,6 +186,12 @@ private fun TeachingPlot(
         if (demand) listOf(0, 60, 120).forEach { value ->
             val offset = location(PlotPoint(value.toDouble(), 0.0, ""), size.width, size.height)
             drawContext.canvas.nativeCanvas.drawText(value.toString(), offset.x, size.height - 8.dp.toPx(), paint)
+        } else if (style == TeachingChartStyle.SCATTER) {
+            listOf(ranges.horizontalMin, (ranges.horizontalMin + ranges.horizontalMax) / 2, ranges.horizontalMax)
+                .forEach { value ->
+                    val offset = location(PlotPoint(value, 0.0, ""), size.width, size.height)
+                    drawContext.canvas.nativeCanvas.drawText(number(value), offset.x, size.height - 8.dp.toPx(), paint)
+                }
         } else points.forEachIndexed { index, point ->
             if (points.size <= 6 || index == 0 || index == points.lastIndex) {
                 val offset = location(point, size.width, size.height)

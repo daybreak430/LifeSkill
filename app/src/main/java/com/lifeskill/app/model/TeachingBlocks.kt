@@ -11,6 +11,11 @@ sealed interface TeachingBlock {
 internal val TeachingBlock.isAvailable: Boolean
     get() = this !is TeachingClassification && this !is TeachingStepTrace
 
+// 纯展示块没有互动状态，工具栏不提供重置，也不需要放大。
+internal val TeachingBlock.isStaticVisual: Boolean
+    get() = this is TeachingFigure || this is TeachingMatrix || this is TeachingRange ||
+        this is TeachingFunnel || this is TeachingFormula
+
 data class TeachingText(override val id: String, override val title: String, val text: String) : TeachingBlock
 data class TimelineEvent(val id: String, val date: String, val title: String, val detail: String)
 data class TeachingTimeline(
@@ -54,9 +59,40 @@ data class TeachingFigure(
     override val id: String, override val title: String,
     val rows: List<FigureRow>, val caption: String? = null,
 ) : TeachingBlock
-enum class TeachingChartStyle { LINE, BAR, AREA }
+
+/** 热力矩阵：行×列的分数网格。分数只表示高低，颜色不承载对错。 */
+data class TeachingMatrix(
+    override val id: String, override val title: String,
+    val rows: List<String>, val columns: List<String>, val values: List<List<Double>>,
+    val caption: String? = null,
+) : TeachingBlock
+
+/** 区间条：一个值落在某段范围内的位置，用于预估、置信度和风险档位。 */
+data class TeachingRange(
+    override val id: String, override val title: String,
+    val label: String, val minimum: Double, val maximum: Double,
+    val low: Double, val high: Double, val value: Double? = null,
+    val unit: String = "", val caption: String? = null,
+) : TeachingBlock
+
+enum class FunnelMode { FUNNEL, PYRAMID }
+data class FunnelStage(val label: String, val value: String? = null, val ratio: Int)
+
+/** 漏斗强调逐级流失，金字塔强调层级依赖，靠 mode 区分而不用两个组件。 */
+data class TeachingFunnel(
+    override val id: String, override val title: String,
+    val mode: FunnelMode, val stages: List<FunnelStage>, val caption: String? = null,
+) : TeachingBlock
+
+/** 公式只接受受限记号，由应用排版；不执行任何表达式。 */
+data class TeachingFormula(
+    override val id: String, override val title: String,
+    val lines: List<String>, val caption: String? = null,
+) : TeachingBlock
+enum class TeachingChartStyle { LINE, BAR, AREA, SCATTER }
 enum class TeachingChartMode { DATA, LINEAR_DEMAND }
-data class TeachingPoint(val label: String, val value: Double)
+// 散点图用 x 表示自变量；折线、柱状和面积图省略 x，横轴按顺序排列。
+data class TeachingPoint(val label: String, val value: Double, val x: Double? = null)
 data class TeachingQuestion(
     val question: String, val options: List<String>, val answer: Int, val explanation: String, val hint: String,
     // 提示阶梯：由浅入深，最多三级。旧快照只有单个 hint，读取时回退为一级，避免升级后丢提示。
@@ -172,7 +208,7 @@ internal object TeachingInteractions {
                 }
                 is TeachingHotspot -> block.hotspots.any { it.id == action.key }
                 is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment,
-                is TeachingGame, is TeachingFigure,
+                is TeachingGame, is TeachingFigure, is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula,
                 -> false
             }
             if (!valid) invalid()
@@ -251,7 +287,8 @@ internal object TeachingInteractions {
                 is TeachingStepTrace -> previous.submitted && !previous.currentStepCorrect(block)
                 is TeachingHotspot -> true
                 is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard,
-                is TeachingExperiment, is TeachingGame, is TeachingFigure,
+                is TeachingExperiment, is TeachingGame, is TeachingFigure, is TeachingMatrix, is TeachingRange,
+                is TeachingFunnel, is TeachingFormula,
                 -> false
             }
             if (!valid) invalid()
@@ -319,6 +356,31 @@ internal fun TeachingBlock.markdown(): String = buildString {
                     is FigureRow.Relation -> appendLine("（${row.text}）")
                 }
             }
+            block.caption?.let { appendLine(it) }
+        }
+        is TeachingMatrix -> {
+            appendLine("｜ " + block.columns.joinToString(" ｜ "))
+            block.rows.forEachIndexed { index, row ->
+                appendLine("$row ｜ " + block.values.getOrNull(index).orEmpty().joinToString(" ｜ ") { score ->
+                    if (score == score.toLong().toDouble()) score.toLong().toString()
+                    else String.format(java.util.Locale.ROOT, "%.1f", score)
+                })
+            }
+            block.caption?.let { appendLine(it) }
+        }
+        is TeachingRange -> {
+            appendLine("${block.label}：${block.low}–${block.high}${block.unit}")
+            block.value?.let { appendLine("当前 ${it}${block.unit}，范围 ${block.minimum}–${block.maximum}${block.unit}") }
+            block.caption?.let { appendLine(it) }
+        }
+        is TeachingFunnel -> {
+            block.stages.forEach { stage ->
+                appendLine("- ${stage.label}${stage.value?.let { "：$it" }.orEmpty()}（${stage.ratio}%）")
+            }
+            block.caption?.let { appendLine(it) }
+        }
+        is TeachingFormula -> {
+            block.lines.forEach { line -> appendLine("公式：$line") }
             block.caption?.let { appendLine(it) }
         }
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
@@ -413,6 +475,7 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
     }
     is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
     is TeachingFigure -> ""
+    is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula -> ""
     is TeachingGame -> if (state.gameOpened) "已打开小游戏：${block.goal}；游戏反馈不计正式评估" else "尚未打开小游戏"
     is TeachingText -> ""
 }
