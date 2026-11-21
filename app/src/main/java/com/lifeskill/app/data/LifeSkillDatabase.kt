@@ -134,6 +134,9 @@ internal abstract class SkillDao {
     @Insert
     abstract suspend fun insertBootstrap(row: BootstrapRow)
 
+    @Query("DELETE FROM bootstrap WHERE id IN (:ids)")
+    abstract suspend fun deleteBootstrap(ids: List<Int>)
+
     @Query("SELECT COALESCE(MAX(position), 0) + 1 FROM entries")
     abstract suspend fun nextPosition(): Long
 

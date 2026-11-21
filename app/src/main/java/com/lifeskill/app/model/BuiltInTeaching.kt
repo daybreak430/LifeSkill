@@ -21,7 +21,11 @@ internal data class LegacyTeachingDemo(
 internal object BuiltInTeaching {
     const val COURSE_ID = "lifeskill:teaching-showcase"
     const val INSTALL_MARKER = 1_000
+    const val PREFERRED_PARENT_ID = "preset-4"
+    const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER) +
+        lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
         TimelineEvent("unify", "前221年", "统一六国", "秦建立统一国家，治理范围与行政任务随之变化。"),
@@ -211,4 +215,6 @@ internal object BuiltInTeaching {
 
     fun lesson(id: String?): BuiltInTeachingLesson? = lessons.find { it.id == id }
     fun lessonByKey(key: String): BuiltInTeachingLesson? = lessons.find { it.key == key }
+    fun canHostShowcase(directionId: String): Boolean =
+        directionId == PREFERRED_PARENT_ID || directionId == FALLBACK_PARENT_ID
 }

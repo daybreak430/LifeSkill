@@ -89,8 +89,8 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         // 安装标记独立于课程行：升级可追加新类型，但不会重建用户主动删除的课程或课时。
         if (dao.initialized(BuiltInTeaching.INSTALL_MARKER) && course == null) return
         if (course == null) {
-            val parent = dao.entry("preset-4") ?: dao.siblings(null).firstOrNull() ?: Entry(
-                "lifeskill:showcase-direction", null, EntryKind.DIRECTION, "新领域",
+            val parent = dao.entry(BuiltInTeaching.PREFERRED_PARENT_ID) ?: dao.siblings(null).firstOrNull() ?: Entry(
+                BuiltInTeaching.FALLBACK_PARENT_ID, null, EntryKind.DIRECTION, "新领域",
             ).row(dao.nextPosition()).also { dao.insertEntry(it) }
             course = Entry(BuiltInTeaching.COURSE_ID, parent.id, EntryKind.TREE, BuiltInTeaching.COURSE_NAME,
                 icon = EntryIcon.EXPLORE).row(dao.nextPosition())
@@ -114,6 +114,16 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
         // 只清理确认未被改名、改写目标或追加对话的旧示例；其余内容作为用户项目保留。
         removableLegacy.forEach { dao.deleteEntry(it.demo.id) }
         if (!dao.initialized(BuiltInTeaching.INSTALL_MARKER)) dao.insertBootstrap(BootstrapRow(BuiltInTeaching.INSTALL_MARKER))
+    }
+
+    suspend fun restoreTeachingShowcase(): Entry = database.withTransaction {
+        dao.entry(BuiltInTeaching.COURSE_ID)?.let { return@withTransaction it.toEntry() }
+        // 只有用户主动选择恢复时才清除内置课程自己的标记；其他学习方向、课程和对话不参与。
+        dao.deleteBootstrap(BuiltInTeaching.installMarkerIds)
+        installTeachingShowcase()
+        checkNotNull(dao.entry(BuiltInTeaching.COURSE_ID)) {
+            "内置演示课程恢复失败。"
+        }.toEntry()
     }
 
     private suspend fun collectSafeLegacyDemos(): List<SafeLegacyDemo> = buildList {

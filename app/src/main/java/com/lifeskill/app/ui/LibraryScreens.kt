@@ -44,6 +44,7 @@ import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.HomeStudyState
 import com.lifeskill.app.model.Library
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.BuiltInTeaching
 import com.lifeskill.app.model.homeStudy
 import kotlinx.coroutines.flow.first
 
@@ -149,6 +150,8 @@ internal fun DirectionScreen(
     addedEntryId: String?,
 ) {
     val trees = library.childrenOf(direction.id)
+    val canRestoreShowcase = BuiltInTeaching.canHostShowcase(direction.id) &&
+        library.byId[BuiltInTeaching.COURSE_ID] == null
     val state = rememberLazyListState()
     val addition = trees.indexOfFirst { it.id == addedEntryId }.takeIf { it >= 0 }?.plus(3)
     RevealListAddition(addedEntryId, addition, state, app::finishShowingAddition)
@@ -189,7 +192,15 @@ internal fun DirectionScreen(
                 }
             }
             item { LibrarySection("课程", Modifier.padding(top = 12.dp, bottom = 2.dp)) }
-            if (trees.isEmpty()) item { LibraryEmpty("暂无课程", Glyph.TREE) }
+            if (canRestoreShowcase) {
+                item {
+                    LibraryAction(
+                        "恢复演示课", Glyph.RESTART, app::restoreTeachingShowcase,
+                        modifier = Modifier.fillMaxWidth().animateItem(), primary = true, trailing = true,
+                    )
+                }
+            }
+            if (trees.isEmpty() && !canRestoreShowcase) item { LibraryEmpty("暂无课程", Glyph.TREE) }
             items(trees, key = Entry::id) { tree ->
                 SkillTreeCard(
                     tree, library.progress(tree.id), latest = tree.id == latestTreeId,

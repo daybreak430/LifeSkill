@@ -244,6 +244,19 @@ internal class AppViewModel(
         if (_addedEntryId.value == id) _addedEntryId.value = null
     }
 
+    fun restoreTeachingShowcase() {
+        viewModelScope.launch {
+            try {
+                val course = container.library.restoreTeachingShowcase()
+                _addedEntryId.value = course.id
+                _notice.value = "已恢复交互教学体验"
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _notice.value = readable(error, "无法恢复演示课程，请重试。")
+            }
+        }
+    }
+
     fun chooseIcon(icon: EntryIcon?) {
         val editor = _editor.value?.takeUnless { it.saving || it.suggesting } ?: return
         _editor.value = editor.copy(icon = icon, iconError = null)

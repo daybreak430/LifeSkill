@@ -50,6 +50,30 @@ class TeachingStorageTest {
         } finally { database.close() }
     }
 
+    @Test fun explicitRestoreRecreatesTheShowcaseWithoutTouchingOtherLearning() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        try {
+            val app = fixture(database, ScriptedGateway())
+            app.library.initialize()
+            val direction = app.library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            val personalCourse = app.library.save(EntryEdit(null, direction.id, EntryKind.TREE, "保留的用户课程"))
+            app.library.save(EntryEdit(null, personalCourse.id, EntryKind.SKILL, "保留的用户课时", "验证学习记录不受影响"))
+
+            app.library.delete(BuiltInTeaching.COURSE_ID)
+            app.library.initialize()
+            assertNull(app.library.entry(BuiltInTeaching.COURSE_ID))
+
+            val restored = app.library.restoreTeachingShowcase()
+
+            assertEquals(BuiltInTeaching.COURSE_ID, restored.id)
+            assertEquals(4, app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID).size)
+            assertNotNull(app.library.entry(personalCourse.id))
+            assertEquals("保留的用户课时", app.library.snapshot().childrenOf(personalCourse.id).single().name)
+            assertEquals(restored.id, app.library.restoreTeachingShowcase().id)
+            assertEquals(4, app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID).size)
+        } finally { database.close() }
+    }
+
     @Test fun laterComponentsAppendToTheExistingCategorySession() = runBlocking {
         val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
         val secret = SecretBox("lifeskill-tests")

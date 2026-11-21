@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.lifeskill.app.data.EntryEdit
 import com.lifeskill.app.model.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -229,6 +230,29 @@ class TeachingUiTest {
         val traceBlock = trace.blocks.filterIsInstance<TeachingStepTrace>().single()
         scrollTo(hasText(traceBlock.summary))
         ui.onNodeWithText(traceBlock.summary).assertExists()
+    }
+
+    @Test fun deletedShowcaseCanBeRestoredWithoutReinstallingTheApp() {
+        val library = app.library
+        val personalCourse = runBlocking {
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
+            library.save(EntryEdit(null, direction.id, EntryKind.TREE, "保留的用户课程"))
+        }
+        try {
+            await("新领域")
+            ui.onNodeWithText("新领域").performClick()
+            await(BuiltInTeaching.COURSE_NAME)
+
+            runBlocking { library.delete(BuiltInTeaching.COURSE_ID) }
+            await("恢复演示课")
+            ui.onNodeWithText("恢复演示课").performClick()
+            await(BuiltInTeaching.COURSE_NAME)
+
+            assertEquals(4, runBlocking { library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID).size })
+            assertNotNull(runBlocking { library.entry(personalCourse.id) })
+        } finally {
+            runBlocking { library.delete(personalCourse.id) }
+        }
     }
 
     private fun openLesson(key: String): BuiltInTeachingLesson {
