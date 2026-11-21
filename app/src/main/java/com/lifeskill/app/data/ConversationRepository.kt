@@ -7,6 +7,10 @@ import com.lifeskill.app.ai.ModelSettings
 import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.ai.TutorReply
+import com.lifeskill.app.ai.TeachingBlockProtocol
+import com.lifeskill.app.model.TeachingAction
+import com.lifeskill.app.model.TeachingInteractions
+import com.lifeskill.app.model.TeachingState
 import com.lifeskill.app.ai.searchInstructions
 import com.lifeskill.app.ai.searchQuery
 import com.lifeskill.app.ai.searchSources
@@ -58,6 +62,22 @@ internal class ConversationRepository(
     fun watch(scope: ChatScope) = dao.watchTurns(scope.id)
         .map { turns -> turns.map { it.toTurn() } }
         .flowOn(Dispatchers.IO)
+
+    suspend fun interact(scope: ChatScope, turnId: String, blockId: String, action: TeachingAction) = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            val owner = requireOwner(scope)
+            requireUnlockedLesson(scope, owner)
+            val row = dao.turn(scope.id, turnId) ?: throw RuleViolation("这条教学消息已不存在。")
+            if (scope.mode != ChatMode.TUTOR || row.speaker != Speaker.ASSISTANT.name || row.contentVersion != owner?.contentVersion) {
+                throw RuleViolation("这条教学内容已更新，请重新学习。")
+            }
+            val turn = row.toTurn()
+            val block = turn.teachingBlocks.find { it.id == blockId } ?: throw RuleViolation("这个教学组件已不存在。")
+            val updated = TeachingInteractions.apply(block, turn.teachingStates[blockId] ?: TeachingState(), action)
+            val states = turn.teachingStates + (blockId to updated)
+            dao.updateTurn(row.copy(teachingStates = secret.seal(TeachingBlockProtocol.encodeStates(states), "$turnId:interactions")))
+        }
+    }
 
     suspend fun exportConversation(entryId: String): ConversationExport = withContext(Dispatchers.IO) {
         val (entry, lessons, turns) = database.withTransaction {
@@ -494,7 +514,8 @@ internal class ConversationRepository(
             else -> null
         }
         return Turn(id, Speaker.ASSISTANT, kind, text, context.input.contentVersion, exerciseId,
-            choices = reply.choices, exerciseNumber = exerciseNumber)
+            choices = reply.choices, exerciseNumber = exerciseNumber,
+            teachingBlocks = reply.blocks.takeIf { context.pending == null && kind in TutorRules.teachingReplyKinds }.orEmpty())
     }
 
     private suspend fun requireOwner(scope: ChatScope): Entry? {
@@ -590,6 +611,12 @@ internal class ConversationRepository(
             }
             secret.seal(metadata.toString(), "$id:attachments")
         },
+        teachingBlocks = teachingBlocks.takeIf { it.isNotEmpty() }?.let {
+            secret.seal(TeachingBlockProtocol.encode(it).toString(), "$id:blocks")
+        },
+        teachingStates = teachingStates.takeIf { it.isNotEmpty() }?.let {
+            secret.seal(TeachingBlockProtocol.encodeStates(it), "$id:interactions")
+        },
     )
 
     private fun TurnRow.toTurn(): Turn {
@@ -633,7 +660,9 @@ internal class ConversationRepository(
                     ChatAttachment(file.getString("id"), file.getString("name"), file.getString("mimeType"),
                         file.optBoolean("partial"), credit)
                 }
-            }.orEmpty(), deepThinking = deepThinking)
+            }.orEmpty(), deepThinking = deepThinking,
+            teachingBlocks = teachingBlocks?.let { TeachingBlockProtocol.decode(JSONArray(secret.open(it, "$id:blocks"))) }.orEmpty(),
+            teachingStates = TeachingBlockProtocol.decodeStates(teachingStates?.let { secret.open(it, "$id:interactions") }))
     }
 
     private data class Request(

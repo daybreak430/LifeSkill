@@ -69,6 +69,8 @@ data class Turn(
     val searchSources: String? = null,
     val attachments: List<ChatAttachment> = emptyList(),
     val deepThinking: Boolean = false,
+    val teachingBlocks: List<TeachingBlock> = emptyList(),
+    val teachingStates: Map<String, TeachingState> = emptyMap(),
 ) {
     val modelText get() = if (choices.isEmpty()) text else "$text\n" +
         choices.mapIndexed { index, choice -> choiceAnswer(index, choice) }.joinToString("\n")

@@ -13,6 +13,8 @@ import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.Turn
 import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
+import com.lifeskill.app.model.TeachingBlock
+import com.lifeskill.app.model.interactionSummary
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -67,6 +69,7 @@ internal data class GenerationReply(
 )
 internal data class TutorReply(
     val reply: String, val kind: TurnKind, val exerciseId: String?, val choices: List<String>, val imageQuery: String? = null,
+    val blocks: List<TeachingBlock> = emptyList(),
 )
 
 internal object AiProtocol {
@@ -236,6 +239,7 @@ internal object AiProtocol {
             收到 App 发起重新学习的消息时，以当前学习目标和本次学习要求为准，从头安排讲解并直接开始第一小节。不要假设用户已经学过旧课。只有用户明确要求先出题时才以练习开场。
             reply 支持 Markdown。用小标题、加粗、列表或代码帮助阅读，比较时可用表格。凡是流程、步骤、交易链路、因果、循环或分支关系，必须使用完整的 Markdown 代码围栏，语言标记为 mermaid，围栏内首行写 flowchart TD。每行一条 A[简短步骤] --> B{简短判断}，可用 -->|是| 标记分支，必要时可用 E --> A 表达反馈回路。禁止用 ASCII、Unicode 框线、箭头链或 diagram 围栏代替流程图，即使历史回复使用字符图也必须改写为 mermaid。每个节点标签尽量在 12 个字以内，最多 8 个节点，不使用样式或子图。少量使用 💡、🎯、🧩 等 emoji 点出重点，无需每段都加。
             $DIAGRAM_FORMAT
+            ${TeachingBlockProtocol.instructions}
             只输出一个完整的 json 对象，不在对象外输出文字。Markdown 只写在 reply 字符串里，换行写成 \n，英文双引号用 \" 转义。每次讲清一个步骤，通常控制在 800 个中文字以内。讲解例：{"kind":"teach","reply":"**核心概念**：先从实际例子看起。"}。
             kind 为 teach、offer_check、exercise、next_exercise、passed、retry、off_topic 中的一个。邀请检验例：{"kind":"offer_check","reply":"以上就是核对账单的三个步骤。"}。
             exercise 和 next_exercise 必须在 question 字段给出一道能直接作答的完整题干，不写 reply。question 中不写上一题的点评、过渡语、答案或「接下来看第几题」之类预告。优先单选，choices 只写 3 或 4 个同类选项的文字（App 会加 A、B 等按钮）。出题例：{"kind":"exercise","question":"哪一步应先做？","choices":["核对输入","提交结果","归档文件"]}。开放作答时可省略 choices，但 question 必须写清作答要求。
@@ -297,7 +301,7 @@ internal object AiProtocol {
         .toString()
 
     fun tutor(raw: String): TutorReply = parse(raw) { json ->
-        json.only("kind", "reply", "exerciseId", "choices", "question", "imageQuery")
+        json.only("kind", "reply", "exerciseId", "choices", "question", "imageQuery", "blocks")
         val kind = tutorKinds[json.text("kind", 32)] ?: invalid()
         val asksQuestion = kind == TurnKind.EXERCISE || kind == TurnKind.NEXT_EXERCISE
         val reply = if (asksQuestion) {
@@ -321,7 +325,8 @@ internal object AiProtocol {
             )
         }
         val imageQuery = (json.opt("imageQuery") as? String)?.takeIf { kind in TutorRules.teachingReplyKinds }
-        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery)
+        TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery,
+            if (kind in TutorRules.teachingReplyKinds) TeachingBlockProtocol.decode(json.optJSONArray("blocks")) else emptyList())
     }
 
     private fun containsAsciiFlow(markdown: String): Boolean = fencedBlocks.findAll(markdown).any { block ->
@@ -336,6 +341,12 @@ internal object AiProtocol {
         put(if (turn.kind == TurnKind.EXERCISE) "question" else "reply", turn.text)
         if (turn.choices.isNotEmpty()) put("choices", JSONArray(turn.choices))
         put("exerciseId", turn.exerciseId)
+        if (turn.teachingBlocks.isNotEmpty()) {
+            put("blocks", TeachingBlockProtocol.encode(turn.teachingBlocks))
+            put("interactions", JSONArray(turn.teachingBlocks.mapNotNull { block ->
+                turn.teachingStates[block.id]?.let { block.interactionSummary(it) }?.takeIf(String::isNotBlank)
+            }))
+        }
     }.toString()
 
     fun iconPrompt(): String = "根据给出的学习项目数据，从图标库选择一个最贴合的图标。只返回 json，例如 " +

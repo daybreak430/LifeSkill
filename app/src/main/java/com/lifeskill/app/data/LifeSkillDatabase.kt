@@ -92,6 +92,8 @@ internal data class TurnRow(
     val searchContext: String? = null,
     val attachments: String? = null,
     @ColumnInfo(defaultValue = "0") val deepThinking: Boolean = false,
+    val teachingBlocks: String? = null,
+    val teachingStates: String? = null,
 )
 
 @Entity(
@@ -246,7 +248,7 @@ internal abstract class SkillDao {
     entities = [EntryRow::class, EdgeRow::class, ChatRow::class, TurnRow::class, BootstrapRow::class,
         ExamAttemptRow::class, TreeChallengeRow::class, PersonalProfileRow::class, CollectedCertificateRow::class,
         AiUsageRow::class, ChatAttachmentPart::class],
-    version = 12,
+    version = 13,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
@@ -254,6 +256,7 @@ internal abstract class SkillDao {
         AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9),
         AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11),
         AutoMigration(from = 11, to = 12),
+        AutoMigration(from = 12, to = 13),
     ],
 )
 internal abstract class LifeSkillDatabase : RoomDatabase() {

@@ -4,6 +4,12 @@ import androidx.room.withTransaction
 import com.lifeskill.app.ai.GenerationDraft
 import com.lifeskill.app.ai.SkillDraft
 import com.lifeskill.app.ai.TreeDraft
+import com.lifeskill.app.ai.TeachingBlockProtocol
+import com.lifeskill.app.model.BuiltInTeaching
+import com.lifeskill.app.model.ChatMode
+import com.lifeskill.app.model.ChatScope
+import com.lifeskill.app.model.Speaker
+import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.DirectionColor
 import com.lifeskill.app.model.Edge
 import com.lifeskill.app.model.Entry
@@ -69,6 +75,36 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             }
             dao.insertBootstrap(BootstrapRow())
         }
+        installTeachingShowcase()
+    }
+
+    private suspend fun installTeachingShowcase() {
+        var course = dao.entry(BuiltInTeaching.COURSE_ID)
+        // 安装标记独立于课程行：升级可追加新类型，但不会重建用户主动删除的课程或课时。
+        if (dao.initialized(BuiltInTeaching.INSTALL_MARKER) && course == null) return
+        if (course == null) {
+            val parent = dao.entry("preset-4") ?: dao.siblings(null).firstOrNull() ?: Entry(
+                "lifeskill:showcase-direction", null, EntryKind.DIRECTION, "新领域",
+            ).row(dao.nextPosition()).also { dao.insertEntry(it) }
+            course = Entry(BuiltInTeaching.COURSE_ID, parent.id, EntryKind.TREE, BuiltInTeaching.COURSE_NAME,
+                icon = EntryIcon.EXPLORE).row(dao.nextPosition())
+            dao.insertEntry(course)
+        }
+        for (lesson in BuiltInTeaching.lessons) {
+            if (dao.initialized(lesson.installMarker)) continue
+            if (dao.entry(lesson.id) == null) {
+                dao.insertEntry(Entry(lesson.id, course.id, EntryKind.SKILL, lesson.name, lesson.goal,
+                    icon = lesson.icon, shortName = lesson.shortName).row(dao.nextPosition()))
+                val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+                dao.insertChat(ChatRow(scope.id, lesson.id))
+                dao.insertTurn(TurnRow(id = lesson.turnId, chatId = scope.id, speaker = Speaker.ASSISTANT.name,
+                    kind = TurnKind.MESSAGE.name, text = secret.seal(lesson.introduction, "${lesson.turnId}:turn"),
+                    contentVersion = 0, exerciseId = null, resultId = null, choices = null,
+                    teachingBlocks = secret.seal(TeachingBlockProtocol.encode(lesson.blocks).toString(), "${lesson.turnId}:blocks")))
+            }
+            dao.insertBootstrap(BootstrapRow(lesson.installMarker))
+        }
+        if (!dao.initialized(BuiltInTeaching.INSTALL_MARKER)) dao.insertBootstrap(BootstrapRow(BuiltInTeaching.INSTALL_MARKER))
     }
 
     suspend fun snapshot(): Library = dao.library().let { rows ->

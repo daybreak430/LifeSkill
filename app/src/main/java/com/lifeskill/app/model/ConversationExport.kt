@@ -25,11 +25,18 @@ internal fun conversationExport(entry: Entry, transcripts: List<LessonTranscript
                 }
                 appendLine("**$label**")
                 if (turn.text.isNotEmpty() || turn.choices.isNotEmpty() || turn.searchSources != null ||
-                    turn.attachments.isNotEmpty()
+                    turn.attachments.isNotEmpty() || turn.teachingBlocks.isNotEmpty()
                 ) {
                     appendLine()
                     // 用引用保留每条消息的 Markdown 结构，消息中的标题不会混入课时分节。
                     if (turn.text.isNotEmpty()) appendQuoted(turn.text)
+                    turn.teachingBlocks.forEach { block ->
+                        appendLine(">")
+                        appendQuoted(block.markdown())
+                        turn.teachingStates[block.id]?.let { state ->
+                            block.interactionSummary(state).takeIf(String::isNotBlank)?.let { appendQuoted("互动记录：$it") }
+                        }
+                    }
                     for (attachment in turn.attachments) {
                         val credit = attachment.imageCredit
                         if (credit == null) appendLine("> 附件：${attachment.name.markdownInline()}")
