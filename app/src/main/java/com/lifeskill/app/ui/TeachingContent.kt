@@ -1,5 +1,8 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
@@ -85,7 +88,9 @@ private fun TeachingCard(
 ) {
     Surface(Modifier.fillMaxWidth().testTag("teaching-block-${block.id}"), shape = PanelShape,
         color = Panel, border = BorderStroke(1.dp, aiColors.outline)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 时间轴由每行协调展开，其余组件由卡片协调高度，避免嵌套尺寸动画互相追赶。
+        Column(Modifier.then(if (block is TeachingTimeline) Modifier else Modifier.animateContentSize(tween(220)))
+            .padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
                 if (block !is TeachingText) {
@@ -141,7 +146,7 @@ private fun TimelineContent(block: TeachingTimeline, state: TeachingState, enabl
                     modifier = Modifier.fillMaxWidth().testTag("timeline-${event.id}").semantics { this.selected = active },
                     shape = ControlShape, color = if (active) aiColors.chip else Ground,
                     border = if (active) BorderStroke(1.dp, accent.copy(alpha = .4f)) else null) {
-                    Column(Modifier.heightIn(min = 52.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.animateContentSize(tween(220)).heightIn(min = 52.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(event.date, color = accent, style = MaterialTheme.typography.labelMedium)
                         Text(event.title, style = MaterialTheme.typography.titleSmall, color = Ink)
                         if (active) Text(event.detail, style = MaterialTheme.typography.bodyMedium, color = Muted)
@@ -239,8 +244,9 @@ private fun PracticeContent(block: TeachingQuiz, state: TeachingState, enabled: 
 
 @Composable
 internal fun TeachingOption(text: String, active: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val background by animateColorAsState(if (active) aiColors.chip else Ground, tween(180), label = "教学选项颜色")
     Surface(onClick = onClick, enabled = enabled, shape = ControlShape,
-        color = if (active) aiColors.chip else Ground,
+        color = background,
         border = BorderStroke(1.dp, if (active) aiColors.accent else Line),
         modifier = modifier.semantics { selected = active }) {
         // 最小高度属于容器，文字只按自身行高测量，再在容器内居中；不能把最小高度直接加在 Text 上。

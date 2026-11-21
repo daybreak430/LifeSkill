@@ -348,6 +348,61 @@ class TeachingUiTest {
         ui.onNodeWithText(traceBlock.summary).assertExists()
     }
 
+    @Test fun hotspotMarkersStaySmallWithFullTouchTargets() {
+        val lesson = openLesson("visual")
+        val block = lesson.blocks.filterIsInstance<TeachingHotspot>().single()
+        scrollTo(hasTestTag("hotspot-image"))
+        val image = ui.onNodeWithTag("hotspot-image").getUnclippedBoundsInRoot()
+        block.hotspots.forEach { hotspot ->
+            val target = ui.onNodeWithTag("hotspot-${hotspot.id}")
+            val bounds = target.getUnclippedBoundsInRoot()
+            val marker = ui.onNodeWithTag("hotspot-marker-${hotspot.id}", useUnmergedTree = true)
+                .getUnclippedBoundsInRoot()
+            assertEquals(48f, (bounds.right - bounds.left).value, .1f)
+            assertEquals(48f, (bounds.bottom - bounds.top).value, .1f)
+            assertEquals(18f, (marker.right - marker.left).value, .1f)
+            assertTrue(bounds.left >= image.left && bounds.right <= image.right)
+            assertTrue(bounds.top >= image.top && bounds.bottom <= image.bottom)
+            // 点击可见标记以外、触控框以内的位置，不能只让小圆点可点。
+            target.performTouchInput { click(Offset(width / 2f + 18f, height / 2f)) }
+            ui.waitUntil(8_000) { state(lesson, block.id).selection == hotspot.id }
+        }
+    }
+
+    @Test fun flipKeepsBothFaceHeightsStableThroughoutMotion() {
+        val lesson = BuiltInTeaching.lessonByKey("practice")!!
+        runBlocking {
+            app.conversations.interact(
+                ChatScope(ChatMode.TUTOR, lesson.id), lesson.turnId, "flip", TeachingAction.Reset,
+            )
+        }
+        openLesson("practice")
+        scrollTo(hasTestTag("flip-card"))
+        val beforeBounds = ui.onNodeWithTag("flip-card").getUnclippedBoundsInRoot()
+        val before = beforeBounds.bottom - beforeBounds.top
+        ui.mainClock.autoAdvance = false
+        try {
+            ui.onNodeWithTag("flip-card-turn").performClick()
+            ui.mainClock.advanceTimeByFrame()
+            // 等待仓库提交后再手动推进动画，检查切面前后与完成时的高度。
+            ui.waitUntil(8_000) {
+                state(BuiltInTeaching.lessonByKey("practice")!!, "flip").selection == "back"
+            }
+            repeat(6) {
+                ui.mainClock.advanceTimeBy(100)
+                val currentBounds = ui.onNodeWithTag("flip-card").getUnclippedBoundsInRoot()
+                val current = currentBounds.bottom - currentBounds.top
+                assertEquals(before.value, current.value, .5f)
+            }
+        } finally {
+            ui.mainClock.autoAdvance = true
+        }
+        ui.onNodeWithTag("flip-card-turn").assertIsEnabled().performClick()
+        ui.waitForIdle()
+        val after = ui.onNodeWithTag("flip-card").getUnclippedBoundsInRoot()
+        assertEquals(before.value, (after.bottom - after.top).value, .5f)
+    }
+
     @Test fun deletedShowcaseCanBeRestoredWithoutReinstallingTheApp() {
         val library = app.library
         val personalCourse = runBlocking {

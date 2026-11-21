@@ -1,5 +1,6 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -28,6 +31,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -38,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.*
 import sh.calvin.reorderable.ReorderableColumn
 import sh.calvin.reorderable.ReorderableItem
@@ -62,30 +67,40 @@ internal fun TeachingFlipCardContent(
             }
             .semantics { stateDescription = if (back) "答案面" else "问题面" },
         shape = ControlShape,
-        color = if (back) aiColors.chip else Ground,
-        border = BorderStroke(1.dp, if (back) aiColors.accent.copy(alpha = .45f) else Line),
+        color = if (rotation > 90f) aiColors.chip else Ground,
+        border = BorderStroke(1.dp, if (rotation > 90f) aiColors.accent.copy(alpha = .45f) else Line),
     ) {
         val showBack = rotation > 90f
-        Column(Modifier.fillMaxSize().graphicsLayer {
-            if (showBack) rotationY = 180f
-        }.padding(20.dp), verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (showBack) "答案" else "先回忆", color = aiColors.accent,
-                style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(if (showBack) block.answer else block.prompt,
-                style = if (showBack) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                color = Ink)
-            Spacer(Modifier.height(14.dp))
-            Text(if (showBack) block.hint else "想好后翻开核对", style = MaterialTheme.typography.bodySmall, color = Muted)
-            Spacer(Modifier.height(18.dp))
-            Button(
-                onClick = { onAction(TeachingAction.Flip) },
-                enabled = enabled,
-                modifier = Modifier.testTag("flip-card-turn"),
-            ) {
-                Mark(Glyph.RESTART, MaterialTheme.colorScheme.onPrimary, Modifier.size(17.dp))
-                Text(if (showBack) "翻回" else "翻面", Modifier.padding(start = 7.dp))
+        // 两面同时参与测量，以较高的一面确定卡片高度；切面时不改变布局，也不暴露隐藏面的读屏节点。
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            listOf(false, true).forEach { answerFace ->
+                val visible = showBack == answerFace
+                Column(
+                    Modifier.fillMaxWidth().zIndex(if (visible) 1f else 0f).alpha(if (visible) 1f else 0f)
+                        .then(if (!visible) Modifier.clearAndSetSemantics { } else Modifier)
+                        .graphicsLayer { if (answerFace) rotationY = 180f }.padding(20.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(if (answerFace) "答案" else "先回忆", color = aiColors.accent,
+                        style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.height(8.dp))
+                    Text(if (answerFace) block.answer else block.prompt,
+                        style = if (answerFace) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                        color = Ink)
+                    Spacer(Modifier.height(14.dp))
+                    Text(if (answerFace) block.hint else "想好后翻开核对",
+                        style = MaterialTheme.typography.bodySmall, color = Muted)
+                    Spacer(Modifier.height(18.dp))
+                    Button(
+                        onClick = { onAction(TeachingAction.Flip) },
+                        enabled = enabled && visible,
+                        modifier = Modifier.then(if (visible) Modifier.testTag("flip-card-turn") else Modifier),
+                    ) {
+                        Mark(Glyph.RESTART, MaterialTheme.colorScheme.onPrimary, Modifier.size(17.dp))
+                        Text(if (answerFace) "翻回" else "翻面", Modifier.padding(start = 7.dp))
+                    }
+                }
             }
         }
     }
@@ -195,6 +210,10 @@ internal fun TeachingClassificationContent(
                     block.categories.forEachIndexed { categoryIndex, category ->
                         val active = assigned == category.id
                         val categoryColor = classificationColor(categoryIndex)
+                        val chipColor by animateColorAsState(
+                            if (active) lerp(Panel, categoryColor, .18f) else Panel,
+                            tween(180), label = "分类选中颜色",
+                        )
                         Box {
                             Surface(
                                 onClick = { onAction(TeachingAction.Classify(item.id, category.id)) },
@@ -203,7 +222,7 @@ internal fun TeachingClassificationContent(
                                     .testTag("classification-${item.id}-${category.id}")
                                     .semantics { selected = active },
                                 shape = CircleShape,
-                                color = if (active) lerp(Panel, categoryColor, .18f) else Panel,
+                                color = chipColor,
                                 border = BorderStroke(1.dp, if (active) categoryColor else Line),
                             ) {
                                 Box(
@@ -331,25 +350,37 @@ private fun PlantCellHotspotImage(
                 size = Size(size.width * .14f, size.height * .10f))
         }
         block.hotspots.forEachIndexed { index, hotspot ->
-            val x = maxWidth * (hotspot.horizontalPercent.toFloat() / 100f) - 21.dp
-            val y = maxHeight * (hotspot.verticalPercent.toFloat() / 100f) - 21.dp
+            // 可见数字只有 18dp，触控框保留 48dp；边缘热点向内约束，避免被图像裁剪吞掉点击。
+            val x = (maxWidth * (hotspot.horizontalPercent.toFloat() / 100f) - 24.dp)
+                .coerceIn(0.dp, (maxWidth - 48.dp).coerceAtLeast(0.dp))
+            val y = (maxHeight * (hotspot.verticalPercent.toFloat() / 100f) - 24.dp)
+                .coerceIn(0.dp, (maxHeight - 48.dp).coerceAtLeast(0.dp))
             val active = state.selection == hotspot.id
+            val markerColor by animateColorAsState(if (active) Gold else aiColors.accent,
+                tween(180), label = "热点选中颜色")
             Surface(
                 onClick = { onSelect(hotspot.id) },
                 enabled = enabled,
-                modifier = Modifier.offset(x, y).size(42.dp).testTag("hotspot-${hotspot.id}")
+                modifier = Modifier.offset(x, y).size(48.dp).testTag("hotspot-${hotspot.id}")
                     .semantics {
                         selected = active
                         contentDescription = "热点${index + 1}：${hotspot.label}"
                     },
                 shape = CircleShape,
-                color = if (active) Gold else aiColors.accent,
-                border = BorderStroke(2.dp, Panel),
-                shadowElevation = 3.dp,
+                color = Color.Transparent,
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("${index + 1}", color = Color.White, style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold)
+                    Surface(
+                        Modifier.size(18.dp).testTag("hotspot-marker-${hotspot.id}"),
+                        shape = CircleShape,
+                        color = markerColor,
+                        border = BorderStroke(1.dp, Panel),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("${index + 1}", color = Color.White, fontSize = 10.sp,
+                                lineHeight = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -364,7 +395,7 @@ internal fun TeachingStepTraceContent(
     var observedStep by remember { mutableIntStateOf(state.step) }
     LaunchedEffect(state.step, state.revealed) {
         if (!state.revealed && state.step > observedStep) {
-            delay(80)
+            delay(240)
             currentStepRequester.bringIntoView()
         }
         observedStep = state.step

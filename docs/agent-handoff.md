@@ -23,17 +23,17 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `4b1ee9cffc61e59c61ee49711a111091ef66eb69` |
-| 最新版本 | `0.15.9` |
-| `versionCode` | `96` |
-| 标签 | `v0.15.9` |
-| Release | [LifeSkill 0.15.9](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.9) |
-| APK 文件名 | `LifeSkill-0.15.9-release.apk` |
+| 最新产品与发布提交 | 见 `v0.15.10` 标签指向的源码提交 |
+| 最新版本 | `0.15.10` |
+| `versionCode` | `97` |
+| 标签 | `v0.15.10` |
+| Release | [LifeSkill 0.15.10](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.10) |
+| APK 文件名 | `LifeSkill-0.15.10-release.apk` |
 | APK 大小 | `18,213,272` bytes |
-| APK SHA-256 | `cff03b5b91f5a170faa9927aebe8d4caadf262c284b1ffc3aee62e48ae66a6ac` |
+| APK SHA-256 | `099b2be69af2fcee83e408a7fb8e65f7b2c9452c3b459a5f91f40841d61ca14a` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.9..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.10..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -75,10 +75,11 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.7` | 完善分步推演推进和主题组件选择，并记录五主题 DeepSeek Flash 实测。 |
 | `v0.15.8` | 分类题答对后仍可重新选择；修正胶囊选中态与宽度问题。 |
 | `v0.15.9` | 分类胶囊文字垂直居中；提交错误或展开答案后仍可改选，改选会退出答案展开并重新启用提交；选中对勾不占内容宽度。 |
+| `v0.15.10` | 热点小标记与独立触控框、热点适用性提示词、稳定翻卡高度、组件尺寸和选中颜色过渡。 |
 
-对应提交依次为 `841d06f`、`f9569f0`、`3587331`、`3a72517`、`3d9a6cf`、`4b1ee9c`。
+以上至 `v0.15.9` 对应提交依次为 `841d06f`、`f9569f0`、`3587331`、`3a72517`、`3d9a6cf`、`4b1ee9c`。
 
-## 0.15.9 的验证证据
+## 0.15.10 的验证证据
 
 本次发布使用 Android Studio JBR、Android SDK Platform 37 和 Build-Tools 36.0.0，已验证：
 
@@ -89,10 +90,11 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 ./gradlew :app:assembleRelease
 ```
 
-- Debug 构建、单元测试和 lint 通过。
-- Android 16 / Pixel 9 Pro AVD 上 `TeachingUiTest` 的 11 项测试全部通过。
+- Debug 构建、单元测试、Release 构建和 lint 通过。
+- 新增热点18dp标记／48dp触控框边界与外圈点击测试、翻卡分阶段高度稳定测试。第一次全套运行12/13通过，新翻卡测试因未重置已保存状态超时；补充显式重置后重跑。
+- Android 16 / Pixel 9 Pro AVD 上 `TeachingUiTest` 的 13 项测试全部通过。
 - 正式 APK 通过 APK Signature Scheme v2、v3 和 zipalign 校验。
-- 已从 `0.15.8` 覆盖升级到 `0.15.9`，`firstInstallTime` 保持不变。
+- 已从 `0.15.9` 覆盖升级到 `0.15.10`，`firstInstallTime` 保持不变。
 - GitHub Release 附件已重新下载并与本地 APK 逐字节比较，SHA-256 一致。
 
 本次没有运行整个 `connectedDebugAndroidTest` 套件，也没有在真机或其他 Android 版本验收。仪器测试可能重置测试设备上的应用包状态，使用已有学习数据的主设备时应避免直接跑全量测试。
@@ -101,6 +103,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 ## 已知边界与限制
 
+- 本次平滑性验证覆盖布局尺寸、实际交互和动画推进，不是帧率基准；模拟器 Debug 渲染统计不能代表真机表现，尚未完成真机帧耗时测量。热点提示词已更新，但本次没有重新请求真实模型做输出抽样。
 - 组件选择只对 DeepSeek Flash 的五个主题做了针对性实测，不能据此宣称所有模型、所有学科和所有课程长度都能稳定选对组件。
 - 图片热点目前只支持内置 `plant_cell` 植物细胞模板，其他空间主题不能传入模型图片 URL。
 - 演示课和组件遵循用户删除优先。覆盖安装不会自动恢复，必须由用户在「新领域」主动恢复。
