@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `21705df`（完整哈希见 `git rev-parse v0.15.18`） |
-| 最新版本 | `0.15.18` |
-| `versionCode` | `105` |
-| 标签 | `v0.15.18` |
-| Release | [LifeSkill 0.15.18](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.18) |
-| APK 文件名 | `LifeSkill-0.15.18-release.apk` |
+| 最新产品与发布提交 | `1dc0359`（完整哈希见 `git rev-parse v0.15.19`） |
+| 最新版本 | `0.15.19` |
+| `versionCode` | `106` |
+| 标签 | `v0.15.19` |
+| Release | [LifeSkill 0.15.19](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.19) |
+| APK 文件名 | `LifeSkill-0.15.19-release.apk` |
 | APK 大小 | `18,299,367` bytes |
-| APK SHA-256 | `2c60765fa2fa252a4297a30c503f9c2d1fc211c1e140016cf1a71d5f233d4d2d` |
+| APK SHA-256 | `2cce71d9e3829e19300d65fd6263d9ba1636f78f91fe2f26cb78ceac3b0695aa` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.18..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.19..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.18` 已发布：标签指向 `21705df`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.17` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.19` 已发布：标签指向 `1dc0359`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.18` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -86,6 +86,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.16` | 新增结构图 figure：1–3列节点、关系行与脚注，支持数字与要点，语义色最多两种。 |
 | `v0.15.17` | 新增评分矩阵、区间条、漏斗/金字塔与公式；chart 增加散点样式。 |
 | `v0.15.18` | 新增瀑布图与四象限；提示词校准 compare/matrix、timeline/range 判定。 |
+| `v0.15.19` | 修复结构图同行卡片高度不一致；去掉四象限重复提示。 |
 
 对应提交如下：
 
@@ -106,6 +107,14 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.16` | `0dfdbcd` |
 | `v0.15.17` | `804ec94` |
 | `v0.15.18` | `21705df` |
+| `v0.15.19` | `1dc0359` |
+
+## 0.15.19 的验证证据
+
+- 结构图同一行改为 `IntrinsicSize.Min` + `fillMaxHeight`，三列卡片高度一致；`FigureBlockTest` 增加等高断言（0.5dp 容差）。
+- 四象限在存在脚注时不再追加默认提示，避免两句话重复。
+- `FigureBlockTest`、`WaterfallQuadrantTest` 9 项通过；单元测试与 `lintDebug` 通过；模拟器截图确认三卡上下边对齐。
+- 从 `0.15.18` 覆盖升级到 `0.15.19`，`firstInstallTime` 保持不变；Release 附件与本地 APK SHA-256 一致。
 
 ## 0.15.18 的验证证据
 
