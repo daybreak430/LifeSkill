@@ -187,7 +187,7 @@ class MvpFlowTest {
         await("本职工作")
         val library = fixture.container.library
         val (direction, course) = runBlocking {
-            val direction = library.snapshot().childrenOf(null).first()
+            val direction = library.snapshot().childrenOf(null).first { it.name == "本职工作" }
             val course = library.save(EntryEdit(null, direction.id, EntryKind.TREE, "方向颜色验证"))
             val lesson = library.save(EntryEdit(null, course.id, EntryKind.SKILL, "第一节", "了解基础"))
             library.save(EntryEdit(null, course.id, EntryKind.SKILL, "第二节", "练习巩固"))
@@ -200,6 +200,7 @@ class MvpFlowTest {
             ui.onNodeWithText("编辑方向").performClick()
         }
         try {
+            card.performScrollTo()
             await("1/2")
             card.performTouchInput { click() }
             await(course.name)
@@ -210,6 +211,7 @@ class MvpFlowTest {
             ui.waitUntil(8_000) { ui.onAllNodesWithText("保存").fetchSemanticsNodes().isEmpty() }
             assertEquals(DirectionColor.ORANGE, runBlocking { library.entry(direction.id)?.directionColor })
             pressBack()
+            card.performScrollTo()
             await("1/2")
 
             val pixels = card.captureToImage().toPixelMap()

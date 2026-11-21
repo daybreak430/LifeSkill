@@ -6,6 +6,8 @@ import com.lifeskill.app.ai.SkillDraft
 import com.lifeskill.app.ai.TreeDraft
 import com.lifeskill.app.ai.TeachingBlockProtocol
 import com.lifeskill.app.model.BuiltInTeaching
+import com.lifeskill.app.model.BuiltInTeachingItem
+import com.lifeskill.app.model.BuiltInTeachingLesson
 import com.lifeskill.app.model.ChatMode
 import com.lifeskill.app.model.ChatScope
 import com.lifeskill.app.model.Speaker
@@ -17,14 +19,17 @@ import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GeneratedEntryIcons
 import com.lifeskill.app.model.Library
+import com.lifeskill.app.model.LegacyTeachingDemo
 import com.lifeskill.app.model.LibraryRules
 import com.lifeskill.app.model.Mastery
 import com.lifeskill.app.model.RuleViolation
 import com.lifeskill.app.model.SkillGraph
 import com.lifeskill.app.model.SkillState
+import com.lifeskill.app.model.TeachingState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
 import java.util.UUID
 
 internal data class EntryEdit(
@@ -52,6 +57,7 @@ internal enum class AssessmentLight { LIT, LOCKED, UNCHANGED }
 internal class LibraryRepository(private val database: LifeSkillDatabase, private val secret: SecretBox) {
     private val dao = database.skills()
     private data class DecodedEntry(val row: EntryRow, val entry: Entry)
+    private data class SafeLegacyDemo(val demo: LegacyTeachingDemo, val states: Map<String, TeachingState>)
 
     // 只复用与本次 Room 读出的行匹配的解密结果，避免每次变更都重新解密整个库。
     @Volatile private var observedEntries = emptyMap<String, DecodedEntry>()
@@ -90,21 +96,89 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
                 icon = EntryIcon.EXPLORE).row(dao.nextPosition())
             dao.insertEntry(course)
         }
+        val removableLegacy = collectSafeLegacyDemos()
         for (lesson in BuiltInTeaching.lessons) {
-            if (dao.initialized(lesson.installMarker)) continue
-            if (dao.entry(lesson.id) == null) {
+            val installed = dao.initialized(lesson.installMarker)
+            val existing = dao.entry(lesson.id)
+            // 课程节点被用户删除后不再重建；组件标记仍可用于确认曾经安装过。
+            if (installed && existing == null) continue
+            if (existing == null) {
                 dao.insertEntry(Entry(lesson.id, course.id, EntryKind.SKILL, lesson.name, lesson.goal,
                     icon = lesson.icon, shortName = lesson.shortName).row(dao.nextPosition()))
-                val scope = ChatScope(ChatMode.TUTOR, lesson.id)
-                dao.insertChat(ChatRow(scope.id, lesson.id))
-                dao.insertTurn(TurnRow(id = lesson.turnId, chatId = scope.id, speaker = Speaker.ASSISTANT.name,
-                    kind = TurnKind.MESSAGE.name, text = secret.seal(lesson.introduction, "${lesson.turnId}:turn"),
-                    contentVersion = 0, exerciseId = null, resultId = null, choices = null,
-                    teachingBlocks = secret.seal(TeachingBlockProtocol.encode(lesson.blocks).toString(), "${lesson.turnId}:blocks")))
             }
-            dao.insertBootstrap(BootstrapRow(lesson.installMarker))
+            val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+            if (dao.chat(scope.id) == null) dao.insertChat(ChatRow(scope.id, lesson.id))
+            installTeachingItems(lesson, installed, removableLegacy)
+            if (!installed) dao.insertBootstrap(BootstrapRow(lesson.installMarker))
         }
+        // 只清理确认未被改名、改写目标或追加对话的旧示例；其余内容作为用户项目保留。
+        removableLegacy.forEach { dao.deleteEntry(it.demo.id) }
         if (!dao.initialized(BuiltInTeaching.INSTALL_MARKER)) dao.insertBootstrap(BootstrapRow(BuiltInTeaching.INSTALL_MARKER))
+    }
+
+    private suspend fun collectSafeLegacyDemos(): List<SafeLegacyDemo> = buildList {
+        for (demo in BuiltInTeaching.legacyDemos) {
+            val row = dao.entry(demo.id) ?: continue
+            if (row.parentId != BuiltInTeaching.COURSE_ID || row.kind != EntryKind.SKILL.name ||
+                secret.open(row.name, "${row.id}:name") != demo.name ||
+                secret.open(row.goal, "${row.id}:goal") != demo.goal
+            ) continue
+            val scope = ChatScope(ChatMode.TUTOR, demo.id)
+            val turns = dao.turnsForChat(scope.id)
+            if (turns.any { it.id != demo.turnId }) continue
+            val example = turns.find { it.id == demo.turnId } ?: continue
+            add(SafeLegacyDemo(demo, example.teachingStates?.let {
+                TeachingBlockProtocol.decodeStates(secret.open(it, "${demo.turnId}:interactions"))
+            }.orEmpty()))
+        }
+    }
+
+    private suspend fun installTeachingItems(
+        lesson: BuiltInTeachingLesson, installed: Boolean, legacy: List<SafeLegacyDemo>,
+    ) {
+        val missing = if (installed) {
+            lesson.items.filterNot { dao.initialized(it.installMarker) }
+        } else lesson.items
+        if (missing.isEmpty()) return
+        val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+        val existing = dao.turn(scope.id, lesson.turnId)
+        val existingBlocks = existing?.teachingBlocks?.let {
+            TeachingBlockProtocol.decode(JSONArray(secret.open(it, "${lesson.turnId}:blocks")))
+        }.orEmpty()
+        val additions = missing.map(BuiltInTeachingItem::block).filterNot { candidate ->
+            existingBlocks.any { it.id == candidate.id }
+        }
+        val validIds = lesson.blocks.map { it.id }.toSet()
+        val existingStates = existing?.teachingStates?.let {
+            TeachingBlockProtocol.decodeStates(secret.open(it, "${lesson.turnId}:interactions"))
+        }.orEmpty()
+        // 首次分类安装时继承旧节点的互动记录；按组件 ID 合并后仍可重开继续。
+        val inheritedStates = if (installed) emptyMap() else legacy
+            .filter { it.demo.categoryKey == lesson.key }
+            .flatMap { it.states.entries }
+            .associate { it.key to it.value }
+        val states = (existingStates + inheritedStates).filterKeys(validIds::contains)
+        val blocks = (existingBlocks + additions).distinctBy { it.id }
+        val row = existing?.copy(
+            teachingBlocks = blocks.takeIf { it.isNotEmpty() }?.let {
+                secret.seal(TeachingBlockProtocol.encode(it).toString(), "${lesson.turnId}:blocks")
+            },
+            teachingStates = states.takeIf { it.isNotEmpty() }?.let {
+                secret.seal(TeachingBlockProtocol.encodeStates(it), "${lesson.turnId}:interactions")
+            },
+        ) ?: TurnRow(
+            id = lesson.turnId, chatId = scope.id, speaker = Speaker.ASSISTANT.name,
+            kind = TurnKind.MESSAGE.name, text = secret.seal(lesson.introduction, "${lesson.turnId}:turn"),
+            contentVersion = 0, exerciseId = null, resultId = null, choices = null,
+            teachingBlocks = secret.seal(TeachingBlockProtocol.encode(blocks).toString(), "${lesson.turnId}:blocks"),
+            teachingStates = states.takeIf { it.isNotEmpty() }?.let {
+                secret.seal(TeachingBlockProtocol.encodeStates(it), "${lesson.turnId}:interactions")
+            },
+        )
+        if (existing == null) dao.insertTurn(row) else dao.updateTurn(row)
+        missing.forEach {
+            if (!dao.initialized(it.installMarker)) dao.insertBootstrap(BootstrapRow(it.installMarker))
+        }
     }
 
     suspend fun snapshot(): Library = dao.library().let { rows ->

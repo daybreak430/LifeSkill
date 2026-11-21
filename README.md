@@ -4,11 +4,11 @@ LifeSkill 是一款原生 Android 学习应用。你可以按学习方向整理�
 
 ## 安装
 
-LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.15.2，本地签名安装包路径为 `release/LifeSkill-0.15.2-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
+LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.15.3，本地签名安装包路径为 `release/LifeSkill-0.15.3-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
 
 手动管理课程无需模型账户。要使用 AI 功能，在「我的 → 设置 → 模型设置」填入自己的服务商 API Key。自定义服务使用 HTTPS Base URL、模型名和 API Key。详见 [使用指南](docs/user-guide.md)。
 
-「新领域 → 交互教学体验」预置十节可离线操作的示例课，展示连续时间轴、三组对比配色、折线／柱状／面积图、流程分支、随堂答题和混合讲解。普通 AI 教学也可组合这些原生组件。以后新增交互类型时，继续向同一门课追加展示课时，详见[交互教学与扩展约定](docs/interactive-teaching.md)。
+「新领域 → 交互教学体验」预置四个可离线操作的学习会话：结构与过程、数据图表、互动练习、图像与综合。同类组件集中在一个会话中，覆盖时间轴、流程、对比、图表、答题、翻卡、排序、分类、图片热点和分步推演。普通 AI 教学也可组合这些原生组件。以后新增同类组件时继续归入现有会话，只有新交互类别才增加课时节点，详见[交互教学与扩展约定](docs/interactive-teaching.md)。
 
 ## 从源码运行
 

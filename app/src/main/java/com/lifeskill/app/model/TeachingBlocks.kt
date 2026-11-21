@@ -45,15 +45,57 @@ data class TeachingQuiz(
     override val id: String, override val title: String, val question: TeachingQuestion,
 ) : TeachingBlock
 
+data class TeachingFlipCard(
+    override val id: String, override val title: String, val prompt: String, val answer: String, val hint: String,
+) : TeachingBlock
+
+data class TeachingSortItem(val id: String, val text: String)
+data class TeachingSorting(
+    override val id: String, override val title: String, val prompt: String, val items: List<TeachingSortItem>,
+    val correctOrder: List<String>, val hint: String, val explanation: String,
+) : TeachingBlock
+
+data class ClassificationCategory(val id: String, val title: String)
+data class ClassificationItem(
+    val id: String, val text: String, val categoryId: String, val explanation: String,
+)
+data class TeachingClassification(
+    override val id: String, override val title: String, val prompt: String,
+    val categories: List<ClassificationCategory>, val items: List<ClassificationItem>,
+    val hint: String, val explanation: String,
+) : TeachingBlock
+
+enum class TeachingHotspotImage { PLANT_CELL }
+data class ImageHotspot(
+    val id: String, val label: String, val horizontalPercent: Double, val verticalPercent: Double, val detail: String,
+)
+data class TeachingHotspot(
+    override val id: String, override val title: String, val prompt: String,
+    val image: TeachingHotspotImage, val hotspots: List<ImageHotspot>, val hint: String,
+) : TeachingBlock
+
+data class TeachingTraceStep(
+    val id: String, val title: String, val checkpoint: TeachingQuestion, val result: String,
+)
+data class TeachingStepTrace(
+    override val id: String, override val title: String, val introduction: String,
+    val steps: List<TeachingTraceStep>, val summary: String,
+) : TeachingBlock
+
 data class TeachingState(
     val selection: String? = null, val value: Double? = null, val submitted: Boolean = false,
     val attempts: Int = 0, val prediction: Int? = null, val revealed: Boolean = false,
+    val order: List<String> = emptyList(), val placements: Map<String, String> = emptyMap(), val step: Int = 0,
 )
 
 sealed interface TeachingAction {
     data class Select(val key: String) : TeachingAction
     data class SetValue(val value: Double) : TeachingAction
     data class Predict(val index: Int) : TeachingAction
+    data class Move(val key: String, val toIndex: Int) : TeachingAction
+    data class Classify(val key: String, val category: String) : TeachingAction
+    data object Flip : TeachingAction
+    data object Advance : TeachingAction
     data object Reveal : TeachingAction
     data object Submit : TeachingAction
     data object Reset : TeachingAction
@@ -63,17 +105,27 @@ internal object TeachingInteractions {
     fun apply(block: TeachingBlock, previous: TeachingState, action: TeachingAction): TeachingState = when (action) {
         TeachingAction.Reset -> TeachingState()
         is TeachingAction.Select -> {
+            val quizCorrect = block is TeachingQuiz && previous.submitted &&
+                previous.selection?.toIntOrNull() == block.question.answer
+            val traceCorrect = block is TeachingStepTrace && previous.currentStepCorrect(block)
             val valid = when (block) {
                 is TeachingTimeline -> block.events.any { it.id == action.key }
                 is TeachingFlow -> action.key in block.details
                 is TeachingComparison -> block.dimensions.any { it.id == action.key }
                 is TeachingChart -> block.mode == TeachingChartMode.DATA && action.key.toIntOrNull() in block.points.indices
-                is TeachingQuiz -> action.key.toIntOrNull() in block.question.options.indices
-                is TeachingText -> false
+                is TeachingQuiz -> action.key.toIntOrNull() in block.question.options.indices && !previous.revealed
+                is TeachingStepTrace -> {
+                    val checkpoint = block.steps.getOrNull(previous.step)?.checkpoint
+                    val index = action.key.toIntOrNull()
+                    checkpoint != null && index != null && index in checkpoint.options.indices &&
+                        !previous.revealed
+                }
+                is TeachingHotspot -> block.hotspots.any { it.id == action.key }
+                is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification,
+                -> false
             }
             if (!valid) invalid()
-            if (block is TeachingQuiz && previous.submitted && previous.selection?.toIntOrNull() == block.question.answer) previous
-            else previous.copy(selection = action.key, submitted = false)
+            if (quizCorrect || traceCorrect) previous else previous.copy(selection = action.key, submitted = false)
         }
         is TeachingAction.SetValue -> {
             if (block !is TeachingChart || block.mode != TeachingChartMode.LINEAR_DEMAND ||
@@ -87,18 +139,87 @@ internal object TeachingInteractions {
             ) invalid()
             previous.copy(prediction = action.index)
         }
+        is TeachingAction.Move -> {
+            if (block !is TeachingSorting || previous.revealed || previous.sortComplete(block)) invalid()
+            val order = previous.sortOrder(block)
+            val from = order.indexOf(action.key)
+            if (from < 0 || action.toIndex !in order.indices) invalid()
+            previous.copy(order = order.toMutableList().apply {
+                add(action.toIndex, removeAt(from))
+            }, submitted = false)
+        }
+        is TeachingAction.Classify -> {
+            if (block !is TeachingClassification || previous.revealed || previous.classificationComplete(block) ||
+                block.items.none { it.id == action.key } || block.categories.none { it.id == action.category }
+            ) invalid()
+            previous.copy(
+                placements = previous.placements.filterValues { category ->
+                    block.categories.any { it.id == category }
+                } + (action.key to action.category),
+                submitted = false,
+            )
+        }
+        TeachingAction.Flip -> {
+            if (block !is TeachingFlipCard) invalid()
+            previous.copy(selection = if (previous.selection == "back") null else "back", submitted = false)
+        }
+        TeachingAction.Advance -> {
+            if (block !is TeachingStepTrace || previous.revealed || previous.step !in block.steps.indices ||
+                !previous.currentStepCorrect(block) || previous.step >= block.steps.lastIndex
+            ) invalid()
+            previous.copy(selection = null, submitted = false, step = previous.step + 1)
+        }
         TeachingAction.Reveal -> {
-            if (block !is TeachingChart || block.prediction == null || previous.prediction !in block.prediction.options.indices) invalid()
+            val valid = when (block) {
+                is TeachingChart -> block.prediction != null && previous.prediction in block.prediction.options.indices
+                is TeachingQuiz -> previous.submitted && previous.selection?.toIntOrNull() != block.question.answer
+                is TeachingSorting -> previous.submitted && !previous.sortComplete(block)
+                is TeachingClassification -> previous.submitted && !previous.classificationComplete(block)
+                is TeachingStepTrace -> previous.submitted && !previous.currentStepCorrect(block)
+                is TeachingHotspot -> true
+                is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard -> false
+            }
+            if (!valid) invalid()
             previous.copy(revealed = true)
         }
         TeachingAction.Submit -> {
-            if (block !is TeachingQuiz || previous.selection?.toIntOrNull() !in block.question.options.indices) invalid()
-            // 重复点击提交不增加次数；更换答案后才能进入下一次随堂尝试。
-            if (previous.submitted) previous else previous.copy(submitted = true, attempts = (previous.attempts + 1).coerceAtMost(1_000))
+            val valid = when (block) {
+                is TeachingQuiz -> previous.selection?.toIntOrNull() in block.question.options.indices && !previous.revealed
+                is TeachingSorting -> !previous.revealed
+                is TeachingClassification -> !previous.revealed && block.items.all { previous.placements[it.id] != null }
+                is TeachingStepTrace -> {
+                    val checkpoint = block.steps.getOrNull(previous.step)?.checkpoint
+                    checkpoint != null && !previous.revealed &&
+                        previous.selection?.toIntOrNull() in checkpoint.options.indices
+                }
+                else -> false
+            }
+            if (!valid) invalid()
+            // 重复点击提交不增加次数；更换顺序、分类或答案后才进入下一次尝试。
+            if (previous.submitted) previous else previous.copy(
+                submitted = true, attempts = (previous.attempts + 1).coerceAtMost(1_000),
+            )
         }
     }
 
     private fun invalid(): Nothing = throw RuleViolation("这个互动操作已失效，请重新打开课时。")
+}
+
+internal fun TeachingState.sortOrder(block: TeachingSorting): List<String> {
+    val validIds = block.items.map(TeachingSortItem::id).toSet()
+    return order.distinct().filter(validIds::contains) +
+        block.items.map(TeachingSortItem::id).filterNot(order::contains)
+}
+
+internal fun TeachingState.sortComplete(block: TeachingSorting): Boolean =
+    submitted && sortOrder(block) == block.correctOrder
+
+internal fun TeachingState.classificationComplete(block: TeachingClassification): Boolean =
+    submitted && block.items.all { placements[it.id] == it.categoryId }
+
+internal fun TeachingState.currentStepCorrect(block: TeachingStepTrace): Boolean {
+    val checkpoint = block.steps.getOrNull(step)?.checkpoint ?: return false
+    return submitted && selection?.toIntOrNull() == checkpoint.answer
 }
 
 internal fun TeachingBlock.markdown(): String = buildString {
@@ -121,6 +242,24 @@ internal fun TeachingBlock.markdown(): String = buildString {
             appendLine(block.question.question)
             block.question.options.forEachIndexed { index, option -> appendLine("- ${choiceAnswer(index, option)}") }
         }
+        is TeachingFlipCard -> appendLine(block.prompt)
+        is TeachingSorting -> {
+            appendLine(block.prompt)
+            block.items.forEachIndexed { index, item -> appendLine("${index + 1}. ${item.text}") }
+        }
+        is TeachingClassification -> {
+            appendLine(block.prompt)
+            appendLine("分类：${block.categories.joinToString("、") { it.title }}")
+            block.items.forEach { appendLine("- ${it.text}") }
+        }
+        is TeachingHotspot -> {
+            appendLine(block.prompt)
+            block.hotspots.forEach { appendLine("- ${it.label}") }
+        }
+        is TeachingStepTrace -> {
+            appendLine(block.introduction)
+            block.steps.forEach { appendLine("**${it.title}**：${it.checkpoint.question}") }
+        }
     }
 }.trim()
 
@@ -135,8 +274,36 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
         else "预测：${prediction ?: "无"}；已观察价格 ${price.roundToInt()} 元，需求量 ${block.demandAt(price).roundToInt()} ${block.quantityUnit}"
     } else state.selection?.toIntOrNull()?.let { block.points.getOrNull(it) }?.let { "查看 ${it.label}：${it.value}" }.orEmpty()
     is TeachingQuiz -> state.selection?.toIntOrNull()?.let { index ->
-        "随堂作答：${block.question.options.getOrNull(index).orEmpty()}；" +
-            if (!state.submitted) "未提交" else "${if (index == block.question.answer) "答对" else "答错"}，尝试 ${state.attempts} 次（不计课时完成）"
+        "随堂作答：${block.question.options.getOrNull(index).orEmpty()}；" + when {
+            !state.submitted -> "未提交"
+            state.revealed -> "已查看完整答案，正确选项为 ${choiceAnswer(block.question.answer, block.question.options[block.question.answer])}"
+            index == block.question.answer -> "答对"
+            else -> "答错，尝试 ${state.attempts} 次（不计课时完成）"
+        }
     }.orEmpty()
+    is TeachingFlipCard -> if (state.selection == "back") "已翻看答案" else "仍在回忆"
+    is TeachingSorting -> when {
+        state.revealed -> "已查看正确顺序"
+        !state.submitted -> "已调整顺序，尚未提交"
+        else -> "${if (state.sortComplete(block)) "顺序正确" else "顺序仍需调整"}，尝试 ${state.attempts} 次"
+    }
+    is TeachingClassification -> when {
+        state.revealed -> "已查看完整分类答案"
+        !state.submitted -> "已归类 ${state.placements.keys.count { key -> block.items.any { it.id == key } }} / ${block.items.size} 项"
+        else -> "${if (state.classificationComplete(block)) "分类正确" else "分类仍需调整"}，尝试 ${state.attempts} 次"
+    }
+    is TeachingHotspot -> if (state.revealed) "已查看全部热点解释" else block.hotspots.find {
+        it.id == state.selection
+    }?.let { "查看热点：${it.label}" }.orEmpty()
+    is TeachingStepTrace -> {
+        val current = block.steps.getOrNull(state.step)
+        if (state.revealed) "已查看完整推演与结论" else current?.let {
+            "推演 ${state.step + 1}/${block.steps.size}：${it.title}；" + when {
+                state.currentStepCorrect(block) -> "预测正确"
+                state.submitted -> "预测错误，等待重试"
+                else -> "尚未提交"
+            }
+        }.orEmpty()
+    }
     is TeachingText -> ""
 }

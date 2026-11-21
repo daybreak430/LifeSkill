@@ -33,11 +33,12 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
     if (prediction != null && !state.revealed) {
         Text(prediction.question, color = Ink, style = MaterialTheme.typography.bodyLarge)
         prediction.options.forEachIndexed { index, text ->
-            TeachingOption(text, state.prediction == index, enabled, Modifier.fillMaxWidth(),
+            TeachingOption(text, state.prediction == index, enabled,
+                Modifier.fillMaxWidth().testTag("prediction-${block.id}-choice-$index"),
                 { onAction(TeachingAction.Predict(index)) })
         }
         Button(onClick = { onAction(TeachingAction.Reveal) }, enabled = enabled && state.prediction != null,
-            modifier = Modifier.fillMaxWidth()) { Text("验证预测") }
+            modifier = Modifier.fillMaxWidth().testTag("prediction-${block.id}-reveal")) { Text("验证预测") }
         return
     }
     val demand = block.mode == TeachingChartMode.LINEAR_DEMAND
@@ -66,7 +67,7 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
         Slider(value = price, onValueChange = { price = it.roundToInt().toFloat() },
             onValueChangeFinished = { onAction(TeachingAction.SetValue(price.toDouble())) },
             valueRange = 2f..10f, steps = 7, enabled = enabled,
-            modifier = Modifier.testTag("teaching-price").semantics { contentDescription = "调整价格，单位元" })
+            modifier = Modifier.testTag("teaching-price-${block.id}").semantics { contentDescription = "调整价格，单位元" })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("2元", color = Muted, style = MaterialTheme.typography.labelSmall)
             Text("10元", color = Muted, style = MaterialTheme.typography.labelSmall)

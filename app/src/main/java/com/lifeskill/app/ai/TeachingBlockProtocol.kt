@@ -9,7 +9,7 @@ internal object TeachingBlockProtocol {
 
     // 单个组件坏数据只降级该组件，reply 仍可阅读；数量、文本、引用与有限数值均在进入 UI 前校验。
     fun decode(array: JSONArray?): List<TeachingBlock> {
-        if (array == null || array.length() !in 1..4 || array.toString().length > 18_000) return emptyList()
+        if (array == null || array.length() !in 1..16 || array.toString().length > 48_000) return emptyList()
         val seen = mutableSetOf<String>()
         return (0 until array.length()).mapNotNull { index ->
             runCatching {
@@ -62,6 +62,57 @@ internal object TeachingBlockProtocol {
                                 TeachingChartStyle.entries.firstOrNull { it.name.equals(json.optString("style"), true) } ?: TeachingChartStyle.LINE)
                     }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
+                    "flip" -> TeachingFlipCard(id, title, json.text("prompt", 600), json.text("answer", 1_200),
+                        json.text("hint", 400))
+                    "sort" -> {
+                        val items = json.array("items", 3..6).objects().map { item ->
+                            TeachingSortItem(item.key("id"), item.text("text", 300))
+                        }
+                        val itemIds = items.map(TeachingSortItem::id)
+                        require(itemIds.distinct().size == itemIds.size)
+                        val correctOrder = json.array("correctOrder", items.size..items.size).strings(40)
+                        require(correctOrder.distinct().size == correctOrder.size && correctOrder.toSet() == itemIds.toSet())
+                        TeachingSorting(id, title, json.text("prompt", 600), items, correctOrder,
+                            json.text("hint", 400), json.text("explanation", 1_200))
+                    }
+                    "classify" -> {
+                        val categories = json.array("categories", 2..3).objects().map { category ->
+                            ClassificationCategory(category.key("id"), category.text("title", 60))
+                        }
+                        require(categories.map(ClassificationCategory::id).distinct().size == categories.size)
+                        val categoryIds = categories.map(ClassificationCategory::id).toSet()
+                        val items = json.array("items", 3..6).objects().map { item ->
+                            ClassificationItem(item.key("id"), item.text("text", 300), item.key("category"),
+                                item.text("explanation", 400))
+                        }
+                        require(items.map(ClassificationItem::id).distinct().size == items.size)
+                        require(items.all { it.categoryId in categoryIds })
+                        TeachingClassification(id, title, json.text("prompt", 600), categories, items,
+                            json.text("hint", 400), json.text("explanation", 1_200))
+                    }
+                    "hotspot" -> {
+                        val image = when (json.text("image", 32)) {
+                            "plant_cell" -> TeachingHotspotImage.PLANT_CELL
+                            else -> error("不支持的热点图片")
+                        }
+                        val hotspots = json.array("hotspots", 2..6).objects().map { hotspot ->
+                            ImageHotspot(hotspot.key("id"), hotspot.text("label", 60),
+                                hotspot.number("x", 0.0..100.0), hotspot.number("y", 0.0..100.0),
+                                hotspot.text("detail", 600))
+                        }
+                        require(hotspots.map(ImageHotspot::id).distinct().size == hotspots.size)
+                        TeachingHotspot(id, title, json.text("prompt", 600), image, hotspots,
+                            json.text("hint", 400))
+                    }
+                    "steps" -> {
+                        val steps = json.array("steps", 2..5).objects().map { step ->
+                            TeachingTraceStep(step.key("id"), step.text("title", 80),
+                                step.getJSONObject("checkpoint").question(), step.text("result", 800))
+                        }
+                        require(steps.map(TeachingTraceStep::id).distinct().size == steps.size)
+                        TeachingStepTrace(id, title, json.text("introduction", 600), steps,
+                            json.text("summary", 1_000))
+                    }
                     else -> null
                 }
             }.getOrNull()
@@ -88,26 +139,81 @@ internal object TeachingBlockProtocol {
                     block.prediction?.let { put("prediction", it.json()) }
                 }
                 is TeachingQuiz -> put("type", "quiz").put("question", block.question.json())
+                is TeachingFlipCard -> put("type", "flip").put("prompt", block.prompt).put("answer", block.answer)
+                    .put("hint", block.hint)
+                is TeachingSorting -> {
+                    put("type", "sort").put("prompt", block.prompt).put("items", JSONArray().apply {
+                        block.items.forEach { put(JSONObject().put("id", it.id).put("text", it.text)) }
+                    }).put("correctOrder", JSONArray(block.correctOrder)).put("hint", block.hint)
+                        .put("explanation", block.explanation)
+                }
+                is TeachingClassification -> {
+                    put("type", "classify").put("prompt", block.prompt).put("categories", JSONArray().apply {
+                        block.categories.forEach { put(JSONObject().put("id", it.id).put("title", it.title)) }
+                    }).put("items", JSONArray().apply {
+                        block.items.forEach {
+                            put(JSONObject().put("id", it.id).put("text", it.text).put("category", it.categoryId)
+                                .put("explanation", it.explanation))
+                        }
+                    }).put("hint", block.hint).put("explanation", block.explanation)
+                }
+                is TeachingHotspot -> {
+                    put("type", "hotspot").put("prompt", block.prompt).put("image", block.image.name.lowercase())
+                        .put("hotspots", JSONArray().apply {
+                            block.hotspots.forEach {
+                                put(JSONObject().put("id", it.id).put("label", it.label)
+                                    .put("x", it.horizontalPercent).put("y", it.verticalPercent).put("detail", it.detail))
+                            }
+                        }).put("hint", block.hint)
+                }
+                is TeachingStepTrace -> {
+                    put("type", "steps").put("introduction", block.introduction).put("steps", JSONArray().apply {
+                        block.steps.forEach {
+                            put(JSONObject().put("id", it.id).put("title", it.title)
+                                .put("checkpoint", it.checkpoint.json()).put("result", it.result))
+                        }
+                    }).put("summary", block.summary)
+                }
             }
         }) }
     }
 
     fun encodeStates(states: Map<String, TeachingState>): String = JSONObject().apply {
         states.forEach { (id, state) -> put(id, JSONObject().put("selection", state.selection).put("value", state.value)
-            .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction).put("revealed", state.revealed)) }
+            .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction)
+            .put("revealed", state.revealed).put("order", JSONArray(state.order))
+            .put("placements", JSONObject(state.placements)).put("step", state.step)) }
     }.toString()
 
     fun decodeStates(raw: String?): Map<String, TeachingState> = runCatching {
-        if (raw == null || raw.length > 8_000) return emptyMap()
+        if (raw == null || raw.length > 48_000) return emptyMap()
         val json = JSONObject(raw)
-        require(json.length() <= 4)
+        require(json.length() <= 16)
         json.keys().asSequence().associateWith { id ->
             val state = json.getJSONObject(id)
             val value = state.opt("value") as? Number
             require(value == null || value.toDouble().isFinite())
-            TeachingState(state.optString("selection").takeIf { !state.isNull("selection") }, value?.toDouble(),
-                state.optBoolean("submitted"), state.optInt("attempts").coerceIn(0, 1_000),
-                (state.opt("prediction") as? Number)?.toInt(), state.optBoolean("revealed"))
+            val order = if (state.isNull("order")) emptyList() else state.getJSONArray("order").let { array ->
+                require(array.length() <= 8)
+                List(array.length()) { index -> array.getString(index) }.also { values ->
+                    require(values.all { it.length in 1..40 })
+                }
+            }
+            val placements = if (state.isNull("placements")) emptyMap() else state.getJSONObject("placements").let { objectValue ->
+                require(objectValue.length() <= 8)
+                objectValue.keys().asSequence().associateWith { key ->
+                    require(key.length in 1..40)
+                    objectValue.getString(key).also { require(it.length in 1..40) }
+                }
+            }
+            TeachingState(
+                selection = if (state.isNull("selection")) null else state.optString("selection"),
+                value = value?.toDouble(), submitted = state.optBoolean("submitted"),
+                attempts = state.optInt("attempts").coerceIn(0, 1_000),
+                prediction = (state.opt("prediction") as? Number)?.toInt(),
+                revealed = state.optBoolean("revealed"), order = order, placements = placements,
+                step = state.optInt("step").coerceAtLeast(0),
+            )
         }
     }.getOrDefault(emptyMap())
 
@@ -124,12 +230,14 @@ internal object TeachingBlockProtocol {
     private fun JSONObject.text(name: String, limit: Int): String = (get(name) as String).trim().also {
         require(it.length in 1..limit && '\u0000' !in it)
     }
+    private fun JSONObject.number(name: String, range: ClosedFloatingPointRange<Double>): Double =
+        (get(name) as Number).toDouble().also { require(it.isFinite() && it in range) }
     private fun JSONObject.array(name: String, range: IntRange): JSONArray = getJSONArray(name).also { require(it.length() in range) }
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
     val instructions = """
-        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
+        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、分类、图片热点、分步推演或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
         使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
         {"id":"t","type":"timeline","title":"事件顺序","events":[{"id":"e1","date":"第一天","title":"提出问题","detail":"背景与影响"},{"id":"e2","date":"第二天","title":"验证假设","detail":"观察结果"}]}
@@ -137,8 +245,14 @@ internal object TeachingBlockProtocol {
         {"id":"c","type":"compare","title":"对比","columns":["概念一","概念二"],"dimensions":[{"id":"cause","title":"变化原因","values":["第一项的原因","第二项的原因"]}]}
         {"id":"p","type":"chart","title":"趋势","model":"data","xLabel":"年份","yLabel":"数量（件）","points":[{"label":"2024","value":20},{"label":"2025","value":30}]}
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
+        {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hint":"先关注适用条件。"}
+        {"id":"s","type":"sort","title":"排出顺序","prompt":"调整为合理步骤。","items":[{"id":"a","text":"第一步文本"},{"id":"b","text":"第二步文本"},{"id":"c","text":"第三步文本"}],"correctOrder":["a","b","c"],"hint":"先确定起点。","explanation":"完整顺序和原因"}
+        {"id":"k","type":"classify","title":"归入类别","prompt":"为每项选择类别。","categories":[{"id":"observe","title":"观察"},{"id":"explain","title":"解释"}],"items":[{"id":"i1","text":"可直接读到的变化","category":"observe","explanation":"为何属于该类别"},{"id":"i2","text":"一种原因假设","category":"explain","explanation":"为何属于该类别"},{"id":"i3","text":"另一个可直接观察的结果","category":"observe","explanation":"为何属于该类别"}],"hint":"先看内容是否可直接观察到。","explanation":"完整分类依据"}
+        {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
+        {"id":"z","type":"steps","title":"分步推演","introduction":"先预测每一步结果。","steps":[{"id":"s1","title":"第一次变化","checkpoint":{"text":"这一步会怎样？","options":["增加","减少"],"answer":1,"hint":"只比较相邻两个数。","explanation":"该步的解释"},"result":"该步展开后的结果"},{"id":"s2","title":"第二次变化","checkpoint":{"text":"相对哪个基数？","options":["原数","中间结果"],"answer":1,"hint":"看变化从哪个数开始。","explanation":"该步的解释"},"result":"第二步展开后的结果"}],"summary":"完整结论"}
         compare 可选 palette 为 blue_amber、violet_teal、rose_sage，按对比主题选择。chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
-        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。
+        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；分类2–3类、3–6项，每项必须指向一个类别并提供独立解释；分步推演2–5步，每步都有一个先预测后展开的checkpoint。热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
+        反馈统一采用“先提示、允许重试、由学生主动查看完整答案”：错误反馈先给不解题的hint，不要直接在reply重复正确答案；explanation和correctOrder等答案字段只供原生组件在学生查看答案后使用。
         价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
         quiz 是随堂反馈，点击和答对均不能点亮课时。正式课后练习继续按原有kind、question、choices、exerciseId协议，不得用blocks绕过题序。正式评估或待答题期间不要附加blocks。历史中的互动记录仅是学习证据，不能单独作为通过课后练习的依据。
     """.trimIndent()

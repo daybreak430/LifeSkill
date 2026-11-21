@@ -24,7 +24,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 | 首页、导航和「学习 / 我的」 | [LifeSkillApp.kt](../app/src/main/java/com/lifeskill/app/ui/LifeSkillApp.kt)、[ViewModels.kt](../app/src/main/java/com/lifeskill/app/ui/ViewModels.kt) |
 | 课程、先修关系和课程大纲 | [LibraryRepository.kt](../app/src/main/java/com/lifeskill/app/data/LibraryRepository.kt)、[Library.kt](../app/src/main/java/com/lifeskill/app/model/Library.kt)、[SkillMapLayout.kt](../app/src/main/java/com/lifeskill/app/model/SkillMapLayout.kt)、[SkillTreeScreen.kt](../app/src/main/java/com/lifeskill/app/ui/SkillTreeScreen.kt) |
 | AI 生成、草稿确认和课时教学 | [ConversationRepository.kt](../app/src/main/java/com/lifeskill/app/data/ConversationRepository.kt)、[AiProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/AiProtocol.kt)、[ChatScreen.kt](../app/src/main/java/com/lifeskill/app/ui/ChatScreen.kt) |
-| 交互教学与内置系列课 | [TeachingBlocks.kt](../app/src/main/java/com/lifeskill/app/model/TeachingBlocks.kt)、[TeachingBlockProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TeachingBlockProtocol.kt)、[TeachingContent.kt](../app/src/main/java/com/lifeskill/app/ui/TeachingContent.kt)、[BuiltInTeaching.kt](../app/src/main/java/com/lifeskill/app/model/BuiltInTeaching.kt) |
+| 交互教学与内置系列课 | [TeachingBlocks.kt](../app/src/main/java/com/lifeskill/app/model/TeachingBlocks.kt)、[TeachingBlockProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TeachingBlockProtocol.kt)、[TeachingContent.kt](../app/src/main/java/com/lifeskill/app/ui/TeachingContent.kt)、[TeachingActiveContent.kt](../app/src/main/java/com/lifeskill/app/ui/TeachingActiveContent.kt)、[BuiltInTeaching.kt](../app/src/main/java/com/lifeskill/app/model/BuiltInTeaching.kt) |
 | 模型设置和网络请求 | [ModelSettings.kt](../app/src/main/java/com/lifeskill/app/ai/ModelSettings.kt)、[AiGateway.kt](../app/src/main/java/com/lifeskill/app/ai/AiGateway.kt)、[LocalSettings.kt](../app/src/main/java/com/lifeskill/app/data/LocalSettings.kt) |
 | AI 用量与费用 | [ModelUsage.kt](../app/src/main/java/com/lifeskill/app/ai/ModelUsage.kt)、[AiUsageRepository.kt](../app/src/main/java/com/lifeskill/app/data/AiUsageRepository.kt) |
 | 结业考试和课后复习 | [TreeAssessment.kt](../app/src/main/java/com/lifeskill/app/model/TreeAssessment.kt)、[TreeAssessmentProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TreeAssessmentProtocol.kt)、[TreeAssessmentRepository.kt](../app/src/main/java/com/lifeskill/app/data/TreeAssessmentRepository.kt)、[ExamScreen.kt](../app/src/main/java/com/lifeskill/app/ui/ExamScreen.kt) |
@@ -40,7 +40,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 **数据、加密与迁移。** [LifeSkillDatabase.kt](../app/src/main/java/com/lifeskill/app/data/LifeSkillDatabase.kt) 使用 Room v13，保留 v1 到 v13 的逐版本自动迁移和[导出 schema](../app/schemas/com.lifeskill.app.data.LifeSkillDatabase)。v12 在消息上记录发出时的深度思考选项，旧消息按关闭读取。v13 增加可空的加密教学组件和互动状态，旧消息按无组件读取。[SecretBox.kt](../app/src/main/java/com/lifeskill/app/data/SecretBox.kt) 通过 Android Keystore 加密用户内容和 API Key。索引需要的标识、关系和状态独立保存。系统备份与设备迁移的数据提取已关闭。
 
-**交互教学。** 原生组件由模型的可选 `blocks` 驱动，正文始终作为独立可读的降级内容。纯领域状态转换与仓库事务负责校验选择、预测、固定计算模板和随堂反馈，UI 不直接写数据库。随堂组件不能点亮课时或绕过正式练习。内置「交互教学体验」使用稳定课时ID和独立安装标记，升级只追加新类型的展示课，不覆盖编辑或复活删除。后续每种新交互都必须追加到同一系列课。协议、边界和扩展步骤见[交互教学](interactive-teaching.md)。
+**交互教学。** 原生组件由模型的可选 `blocks` 驱动，正文始终作为独立可读的降级内容。纯领域状态转换与仓库事务负责校验选择、预测、固定计算模板和互动反馈，UI 不直接写数据库。随堂组件不能点亮课时或绕过正式练习。内置「交互教学体验」按四类学习任务组织，同类组件共用一个会话和稳定分类 ID，每个组件保留独立安装标记；升级只向对应会话追加缺少的组件，不覆盖编辑或复活删除。协议、迁移和扩展步骤见[交互教学](interactive-teaching.md)。
 
 **证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和领取日期。证书档案独立于课程，删除课程后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书带展示日期，可隐藏和销毁。课程列表的「已领证书」与已领取证书统计均基于未销毁的正式证书。
 

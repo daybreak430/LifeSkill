@@ -29,6 +29,7 @@ class TeachingStorageTest {
             app.library.initialize()
             app.library.initialize()
             val lessons = app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID)
+            assertEquals(4, lessons.size)
             assertEquals(BuiltInTeaching.lessons.size, lessons.size)
             assertTrue(lessons.all { app.library.snapshot().prerequisitesOf(it.id).isEmpty() })
             val first = lessons.first()
@@ -49,16 +50,105 @@ class TeachingStorageTest {
         } finally { database.close() }
     }
 
+    @Test fun laterComponentsAppendToTheExistingCategorySession() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        val secret = SecretBox("lifeskill-tests")
+        try {
+            val app = fixture(database, ScriptedGateway())
+            app.library.initialize()
+            val practice = checkNotNull(BuiltInTeaching.lessonByKey("practice"))
+            val scope = ChatScope(ChatMode.TUTOR, practice.id)
+            val original = checkNotNull(database.skills().turn(scope.id, practice.turnId))
+            val blocks = TeachingBlockProtocol.decode(JSONArray(secret.open(original.teachingBlocks.orEmpty(), "${practice.turnId}:blocks")))
+            val newest = practice.items.last()
+            val shortened = blocks.filterNot { it.id == newest.block.id }
+            database.skills().updateTurn(original.copy(
+                teachingBlocks = secret.seal(
+                    TeachingBlockProtocol.encode(shortened).toString(), "${practice.turnId}:blocks",
+                ),
+            ))
+            database.openHelper.writableDatabase.execSQL("DELETE FROM bootstrap WHERE id = ${newest.installMarker}")
+
+            app.library.initialize()
+
+            val lessons = app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID)
+            assertEquals(4, lessons.size)
+            val restored = checkNotNull(database.skills().turn(scope.id, practice.turnId))
+            val restoredBlocks = TeachingBlockProtocol.decode(
+                JSONArray(secret.open(restored.teachingBlocks.orEmpty(), "${practice.turnId}:blocks")),
+            )
+            assertTrue(restoredBlocks.any { it.id == newest.block.id })
+            assertEquals(1, database.skills().turnsForChat(scope.id).size)
+        } finally { database.close() }
+    }
+
+    @Test fun uneditedLegacyShowcaseNodesMergeIntoFourCategorySessions() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        val secret = SecretBox("lifeskill-tests")
+        try {
+            val app = fixture(database, ScriptedGateway())
+            app.library.initialize()
+            val course = checkNotNull(database.skills().entry(BuiltInTeaching.COURSE_ID))
+            database.skills().siblings(course.id).forEach { database.skills().deleteEntry(it.id) }
+            BuiltInTeaching.lessons.forEach {
+                database.openHelper.writableDatabase.execSQL("DELETE FROM bootstrap WHERE id = ${it.installMarker}")
+            }
+
+            val legacy = listOf("timeline", "flow").map { key ->
+                checkNotNull(BuiltInTeaching.legacyDemos.find { it.key == key })
+            }
+            val blocks = legacy.map { demo ->
+                when (demo.key) {
+                    "timeline" -> BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingTimeline>().first()
+                    else -> BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingFlow>().first()
+                }.also { block ->
+                    database.skills().insertEntry(EntryRow(
+                        demo.id, course.id, EntryKind.SKILL.name,
+                        secret.seal(demo.name, "${demo.id}:name"), secret.seal(demo.goal, "${demo.id}:goal"),
+                        Mastery.UNLIT.name, 0, 0, database.skills().nextPosition(),
+                        EntryIcon.BOOK.name, "旧示例", null,
+                    ))
+                    val scope = ChatScope(ChatMode.TUTOR, demo.id)
+                    database.skills().insertChat(ChatRow(scope.id, demo.id))
+                    database.skills().insertTurn(TurnRow(
+                        id = demo.turnId, chatId = scope.id, speaker = Speaker.ASSISTANT.name,
+                        kind = TurnKind.MESSAGE.name, text = secret.seal("旧版内置示例", "${demo.turnId}:turn"),
+                        contentVersion = 0, exerciseId = null, resultId = null, choices = null,
+                        teachingBlocks = secret.seal(
+                            TeachingBlockProtocol.encode(listOf(block)).toString(), "${demo.turnId}:blocks",
+                        ),
+                    ))
+                }
+            }
+
+            app.library.initialize()
+
+            val categories = app.library.snapshot().childrenOf(BuiltInTeaching.COURSE_ID)
+            assertEquals(4, categories.size)
+            legacy.forEach { assertNull(app.library.entry(it.id)) }
+            val structure = checkNotNull(BuiltInTeaching.lessonByKey("structure"))
+            val turn = checkNotNull(database.skills().turn(ChatScope(ChatMode.TUTOR, structure.id).id, structure.turnId))
+            val merged = TeachingBlockProtocol.decode(
+                JSONArray(secret.open(turn.teachingBlocks.orEmpty(), "${structure.turnId}:blocks")),
+            )
+            assertTrue(merged.any { it.id == "timeline" })
+            assertTrue(merged.any { it.id == "flow" })
+            assertEquals(1, database.skills().turnsForChat(ChatScope(ChatMode.TUTOR, structure.id).id).size)
+            assertTrue(blocks.size == 2)
+        } finally { database.close() }
+    }
+
     @Test fun statesAreEncryptedSurviveReopenAndNeverLightTheLesson() = runBlocking {
         val name = "teaching-state-${UUID.randomUUID()}"
-        val sample = BuiltInTeaching.lessons.first { it.key == "quiz" }
+        val sample = BuiltInTeaching.lessons.first { it.key == "practice" }
         val scope = ChatScope(ChatMode.TUTOR, sample.id)
         try {
             Room.databaseBuilder(context, LifeSkillDatabase::class.java, name).build().let { database ->
                 try {
                     val app = fixture(database, ScriptedGateway())
                     app.library.initialize()
-                    val block = app.conversations.watch(scope).first().single().teachingBlocks.single() as TeachingQuiz
+                    val block = app.conversations.watch(scope).first().single().teachingBlocks
+                        .filterIsInstance<TeachingQuiz>().first { it.id == "quiz" }
                     app.conversations.interact(scope, sample.turnId, block.id, TeachingAction.Select(block.question.answer.toString()))
                     app.conversations.interact(scope, sample.turnId, block.id, TeachingAction.Submit)
                     val row = checkNotNull(database.skills().turn(scope.id, sample.turnId))
@@ -91,12 +181,26 @@ class TeachingStorageTest {
         BuiltInTeaching.lessons.forEach { lesson ->
             assertEquals(lesson.blocks, TeachingBlockProtocol.decode(TeachingBlockProtocol.encode(lesson.blocks)))
         }
-        val valid = TeachingBlockProtocol.encode(BuiltInTeaching.lessons.first().blocks)
+        val richState = TeachingState(
+            selection = "2", submitted = true, attempts = 2, revealed = true,
+            order = listOf("observe", "goal", "validate", "decide"),
+            placements = mapOf("april" to "observation", "festival" to "explanation"), step = 1,
+        )
+        assertEquals(richState, TeachingBlockProtocol.decodeStates(
+            TeachingBlockProtocol.encodeStates(mapOf("rich" to richState)),
+        ).getValue("rich"))
+        val valid = JSONArray().put(
+            TeachingBlockProtocol.encode(listOf(BuiltInTeaching.lessons.first().blocks.first())).getJSONObject(0),
+        )
         valid.put(JSONObject().put("id", "future").put("type", "future").put("title", "未来组件"))
         val turn = AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", "仍能独立阅读的讲解").put("blocks", valid).toString())
         assertEquals(1, turn.blocks.size)
         val malformed = JSONArray("""[{"id":"f","title":"无效流程","type":"flow","diagram":"flowchart TD\nA[A] --> B[B]","details":{"A":"缺少B"}}]""")
         assertTrue(TeachingBlockProtocol.decode(malformed).isEmpty())
+        val invalidOrder = JSONArray("""[{"id":"s","title":"排序","type":"sort","prompt":"排序","items":[
+            {"id":"a","text":"甲"},{"id":"b","text":"乙"},{"id":"c","text":"丙"}],
+            "correctOrder":["a","a","c"],"hint":"提示","explanation":"解释"}]""")
+        assertTrue(TeachingBlockProtocol.decode(invalidOrder).isEmpty())
         val formal = AiProtocol.tutor(JSONObject().put("kind", "exercise").put("question", "正式题目").put("blocks", valid).toString())
         assertTrue(formal.blocks.isEmpty())
         val history = AiProtocol.tutorHistory(Turn("reply", Speaker.ASSISTANT, TurnKind.MESSAGE, "讲解",

@@ -161,6 +161,9 @@ internal abstract class SkillDao {
     @Query("SELECT * FROM turns WHERE chatId = :chatId ORDER BY sequence")
     abstract fun watchTurns(chatId: String): Flow<List<TurnRow>>
 
+    @Query("SELECT * FROM turns WHERE chatId = :chatId ORDER BY sequence")
+    abstract suspend fun turnsForChat(chatId: String): List<TurnRow>
+
     @Insert
     abstract suspend fun insertAttachmentPart(part: ChatAttachmentPart)
 

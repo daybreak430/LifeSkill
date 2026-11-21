@@ -79,6 +79,11 @@ private fun TeachingCard(
                 is TeachingComparison -> ComparisonContent(block, state, enabled, onAction)
                 is TeachingChart -> TeachingChartContent(block, state, enabled, onAction)
                 is TeachingQuiz -> PracticeContent(block, state, enabled, onAction)
+                is TeachingFlipCard -> TeachingFlipCardContent(block, state, enabled, onAction)
+                is TeachingSorting -> TeachingSortingContent(block, state, enabled, onAction)
+                is TeachingClassification -> TeachingClassificationContent(block, state, enabled, onAction)
+                is TeachingHotspot -> TeachingHotspotContent(block, state, enabled, onAction)
+                is TeachingStepTrace -> TeachingStepTraceContent(block, state, enabled, onAction)
             }
         }
     }
@@ -151,7 +156,7 @@ private fun ComparisonContent(block: TeachingComparison, state: TeachingState, e
     Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         block.columns.forEachIndexed { index, label ->
             val accent = if (dark) lerp(accents[index], Color.White, .35f) else accents[index]
-            Surface(Modifier.weight(1f).fillMaxHeight().testTag("comparison-column-$index"), shape = ControlShape,
+            Surface(Modifier.weight(1f).fillMaxHeight().testTag("comparison-${block.id}-column-$index"), shape = ControlShape,
                 color = lerp(Panel, accent, if (dark) .17f else .09f), border = BorderStroke(1.dp, accent.copy(alpha = .3f))) {
                 Column {
                     Box(Modifier.fillMaxWidth().height(3.dp).drawBehind { drawRect(accent) })
@@ -171,21 +176,33 @@ private fun PracticeContent(block: TeachingQuiz, state: TeachingState, enabled: 
     val correct = state.submitted && state.selection?.toIntOrNull() == question.answer
     Text(question.question, style = MaterialTheme.typography.bodyLarge, color = Ink)
     question.options.forEachIndexed { index, text ->
-        TeachingOption(choiceAnswer(index, text), state.selection == index.toString(), enabled && !correct,
+        TeachingOption(choiceAnswer(index, text), state.selection == index.toString(),
+            enabled && !correct && !state.revealed,
             Modifier.fillMaxWidth().testTag("practice-choice-$index"), { onAction(TeachingAction.Select(index.toString())) })
     }
     if (state.submitted) {
         Surface(shape = ControlShape, color = aiColors.chip) {
             Column(Modifier.fillMaxWidth().padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(if (correct) "理解正确" else "再想一步", color = aiColors.accent, style = MaterialTheme.typography.titleSmall)
-                Text(if (correct) question.explanation else question.hint, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                Text(if (correct) "理解正确" else if (state.revealed) "完整答案" else "再想一步",
+                    color = aiColors.accent, style = MaterialTheme.typography.titleSmall)
+                Text(if (correct || state.revealed) question.explanation else question.hint,
+                    color = Ink, style = MaterialTheme.typography.bodyMedium)
+                if (!correct && state.revealed) {
+                    Text("正确选项：${choiceAnswer(question.answer, question.options[question.answer])}",
+                        color = Ink, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (!correct && !state.revealed) {
+                    TextButton(onClick = { onAction(TeachingAction.Reveal) }, enabled = enabled,
+                        modifier = Modifier.fillMaxWidth()) { Text("查看完整答案") }
+                }
             }
         }
     }
     if (!correct) Button(onClick = { onAction(TeachingAction.Submit) },
-        enabled = enabled && state.selection != null && !state.submitted, modifier = Modifier.fillMaxWidth()) {
-        Text("提交随堂答案")
+        enabled = enabled && state.selection != null && !state.submitted && !state.revealed,
+        modifier = Modifier.fillMaxWidth()) {
+        Text(if (state.submitted) "更改答案后可重试" else "提交随堂答案")
     }
 }
 

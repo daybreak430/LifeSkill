@@ -23,16 +23,18 @@ class TeachingUiTest {
     private val app get() = (ui.activity.application as FixtureApplication).container
 
     @Test fun predictionSliderTouchPersistenceAndSystemBack() {
-        val lesson = openLesson("chart")
+        val lesson = openLesson("data")
         ui.onNodeWithText("验证预测").assertIsNotEnabled()
-        ui.onNodeWithText("增加").performTouchInput { click() }
-        ui.onNodeWithText("验证预测").assertIsEnabled().performClick()
-        scrollTo(hasTestTag("teaching-price"))
-        ui.onNodeWithTag("teaching-price").performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+        ui.onNodeWithTag("prediction-demand-choice-0").performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) { state(lesson, "demand").prediction == 0 }
+        ui.onNodeWithTag("prediction-demand-reveal").assertIsEnabled()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        scrollTo(hasTestTag("teaching-price-demand"))
+        ui.onNodeWithTag("teaching-price-demand").performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
         await("价格 4 元")
         ui.waitUntil(8_000) { state(lesson, "demand").value == 4.0 }
         ui.onNodeWithText("需求量 80 杯").assertExists()
-        val slider = ui.onNodeWithTag("teaching-price")
+        val slider = ui.onNodeWithTag("teaching-price-demand")
         slider.performTouchInput { swipe(Offset(width * .25f, height / 2f), Offset(width * .75f, height / 2f), 500) }
         ui.waitUntil(8_000) { (state(lesson, "demand").value ?: 0.0) > 6.0 }
         scrollTo(hasContentDescription("放大价格与需求量"))
@@ -49,7 +51,7 @@ class TeachingUiTest {
     }
 
     @Test fun practiceWrongAnswerRetryNeverCompletesTheLesson() {
-        val lesson = openLesson("quiz")
+        val lesson = openLesson("practice")
         scrollTo(hasTestTag("practice-choice-0"))
         val option = ui.onNodeWithTag("practice-choice-0")
         val containerBounds = option.getUnclippedBoundsInRoot()
@@ -71,11 +73,15 @@ class TeachingUiTest {
     }
 
     @Test fun flowHorizontalAndVerticalScrollingDoesNotTriggerNodesAndBackClosesOnlyTheDiagram() {
-        val lesson = openLesson("flow")
+        val lesson = openLesson("structure")
+        scrollTo(hasTestTag("flow-node-B"))
+        ui.onNodeWithTag("flow-node-B").performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) { state(lesson, "flow").selection == "B" }
+        scrollTo(hasTestTag("flow-node-C"))
+        ui.onNodeWithTag("flow-node-C").performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) { state(lesson, "flow").selection == "C" }
         scrollTo(hasTestTag("flow-node-C"))
         val node = ui.onNodeWithTag("flow-node-C")
-        node.performTouchInput { click() }
-        ui.waitUntil(8_000) { state(lesson, "flow").selection == "C" }
         // 在节点上起手横滑只移动流程图，不把滑动误判成节点点击。
         node.performTouchInput { swipe(Offset(width*.8f,height/2f),Offset(width*.1f,height/2f),450) }
         assertEquals("C", state(lesson, "flow").selection)
@@ -93,7 +99,7 @@ class TeachingUiTest {
     }
 
     @Test fun timelineComparisonAndComposerRemainUsableTogether() {
-        val lesson = openLesson("timeline")
+        val lesson = openLesson("structure")
         scrollTo(hasTestTag("timeline-uprising"))
         ui.onNodeWithTag("timeline-uprising").performTouchInput { click() }
         ui.waitUntil(8_000) { state(lesson, "timeline").selection == "uprising" }
@@ -108,7 +114,7 @@ class TeachingUiTest {
         await("AI 老师")
         back()
         await("课程大纲")
-        val comparison = BuiltInTeaching.lessons.first { it.key == "comparison" }
+        val comparison = BuiltInTeaching.lessons.first { it.key == "structure" }
         ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(comparison.name))
         ui.onNodeWithContentDescription(comparison.name).performClick()
         await("学习目标")
@@ -117,19 +123,19 @@ class TeachingUiTest {
         ui.onNodeWithText("图上表现").performTouchInput { click() }
         ui.waitUntil(8_000) { state(comparison, "comparison").selection == "graph" }
         ui.onNodeWithText("需求曲线整体移动，相同价格下的需求量改变。").assertExists()
-        val left = ui.onNodeWithTag("comparison-column-0").getUnclippedBoundsInRoot()
-        val right = ui.onNodeWithTag("comparison-column-1").getUnclippedBoundsInRoot()
+        val left = ui.onNodeWithTag("comparison-comparison-column-0").getUnclippedBoundsInRoot()
+        val right = ui.onNodeWithTag("comparison-comparison-column-1").getUnclippedBoundsInRoot()
         assertEquals(left.bottom.value - left.top.value, right.bottom.value - right.top.value, 0.1f)
     }
 
     @Test fun additionalChartAndComparisonStylesKeepInteractiveState() {
-        val lesson = openLesson("chart-bar")
+        val lesson = openLesson("data")
         scrollTo(hasText("科学 68"))
         ui.onNodeWithText("科学 68").performTouchInput { click() }
         ui.waitUntil(8_000) { state(lesson, "categories").selection == "1" }
         ui.onNodeWithText("科学 · 68").assertExists()
         back()
-        val area = BuiltInTeaching.lessons.first { it.key == "chart-area" }
+        val area = BuiltInTeaching.lessons.first { it.key == "data" }
         ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(area.name))
         ui.onNodeWithContentDescription(area.name).performClick()
         ui.onNodeWithText("开始学习").performClick()
@@ -137,6 +143,92 @@ class TeachingUiTest {
         ui.onNodeWithText("三月 28").performTouchInput { click() }
         ui.waitUntil(8_000) { state(area, "attendance").selection == "2" }
         ui.onNodeWithText("三月 · 28").assertExists()
+    }
+
+    @Test fun flipSortingAndClassificationUseRetryBeforeShowingAnswers() {
+        val flip = openLesson("practice")
+        scrollTo(hasTestTag("flip-card"))
+        ui.onNodeWithTag("flip-card").performTouchInput { click() }
+        await("其他条件不变时，价格下降会让更多消费者愿意且能够购买，因此需求曲线上的对应点向右移动。")
+        assertEquals("back", state(flip, "flip").selection)
+        back()
+
+        val sorting = BuiltInTeaching.lessons.first { it.key == "practice" }
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(sorting.name))
+        ui.onNodeWithContentDescription(sorting.name).performClick()
+        ui.onNodeWithText("开始学习").performClick()
+        scrollTo(hasContentDescription("上移记录用户在什么场景遇到困难"))
+        ui.onNodeWithContentDescription("上移记录用户在什么场景遇到困难").performClick()
+        ui.waitUntil(8_000) { state(sorting, "sorting").order.firstOrNull() == "observe" }
+        scrollTo(hasText("提交顺序"))
+        ui.onNodeWithText("提交顺序").performClick()
+        scrollTo(hasText("再想一步"))
+        ui.onNodeWithText("再想一步").assertIsDisplayed()
+        scrollTo(hasText("查看完整答案"))
+        ui.onNodeWithText("查看完整答案").performClick()
+        ui.waitUntil(8_000) { state(sorting, "sorting").revealed }
+        assertTrue(state(sorting, "sorting").attempts >= 1)
+        back()
+
+        val classification = BuiltInTeaching.lessons.first { it.key == "practice" }
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(classification.name))
+        ui.onNodeWithContentDescription(classification.name).performClick()
+        ui.onNodeWithText("开始学习").performClick()
+        val block = classification.blocks.filterIsInstance<TeachingClassification>().single()
+        block.items.forEach { item ->
+            scrollTo(hasTestTag("classification-${item.id}-observation"))
+            ui.onNodeWithTag("classification-${item.id}-observation").performTouchInput { click() }
+        }
+        scrollTo(hasText("提交分类"))
+        ui.onNodeWithText("提交分类").performClick()
+        scrollTo(hasTestTag("feedback-classification"))
+        ui.onNodeWithTag("feedback-classification").assertIsDisplayed()
+        scrollTo(hasTestTag("feedback-classification-reveal"))
+        ui.onNodeWithTag("feedback-classification-reveal").performClick()
+        ui.waitUntil(8_000) { state(classification, "classification").revealed }
+        scrollTo(hasText(block.items.first().explanation))
+        ui.onNodeWithText(block.items.first().explanation).assertExists()
+    }
+
+    @Test fun hotspotZoomAndStepTraceExplicitRevealRemainInteractive() {
+        val hotspot = openLesson("visual")
+        scrollTo(hasTestTag("hotspot-nucleus"))
+        ui.onNodeWithTag("hotspot-nucleus").performTouchInput { click() }
+        await("细胞核含有遗传物质，参与控制细胞活动。")
+        scrollTo(hasContentDescription("放大观察植物细胞"))
+        ui.onNodeWithContentDescription("放大观察植物细胞").performClick()
+        ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
+        awaitDialogFocus()
+        back()
+        ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
+        scrollTo(hasText("查看全部热点"))
+        ui.onNodeWithText("查看全部热点").performClick()
+        ui.waitUntil(8_000) { state(hotspot, "hotspot").revealed }
+        scrollTo(hasText("叶绿体 · 叶绿体是植物进行光合作用的场所。"))
+        ui.onNodeWithText("叶绿体 · 叶绿体是植物进行光合作用的场所。").assertExists()
+        back()
+
+        val trace = BuiltInTeaching.lessons.first { it.key == "practice" }
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(trace.name))
+        ui.onNodeWithContentDescription(trace.name).performClick()
+        ui.onNodeWithText("开始学习").performClick()
+        scrollTo(hasTestTag("trace-choice-down-0"))
+        ui.onNodeWithTag("trace-choice-down-0").performTouchInput { click() }
+        scrollTo(hasText("提交预测"))
+        ui.onNodeWithText("提交预测").performClick()
+        scrollTo(hasText("进入下一步"))
+        ui.onNodeWithText("进入下一步").performClick()
+        ui.waitUntil(8_000) { state(trace, "trace").step == 1 }
+        scrollTo(hasTestTag("trace-choice-up-0"))
+        ui.onNodeWithTag("trace-choice-up-0").performTouchInput { click() }
+        scrollTo(hasText("提交预测"))
+        ui.onNodeWithText("提交预测").performClick()
+        scrollTo(hasText("查看完整推演"))
+        ui.onNodeWithText("查看完整推演").performClick()
+        ui.waitUntil(8_000) { state(trace, "trace").revealed }
+        val traceBlock = trace.blocks.filterIsInstance<TeachingStepTrace>().single()
+        scrollTo(hasText(traceBlock.summary))
+        ui.onNodeWithText(traceBlock.summary).assertExists()
     }
 
     private fun openLesson(key: String): BuiltInTeachingLesson {

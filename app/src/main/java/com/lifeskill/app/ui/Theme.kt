@@ -186,7 +186,7 @@ internal fun LifeSkillTheme(dark: Boolean, content: @Composable () -> Unit) {
 internal enum class Glyph {
     TREE, SPARK, ADD, BACK, NEXT, SETTINGS, EDIT, MORE, CHECK, DIAMOND, TARGET, SEND, LOCK,
     WORK, SIDE, HOBBY, PRACTICAL, EXPLORE, GLOBE, CLOSE, BOOK, CODE, CHART, SPEECH, MUSIC, CAMERA, LEAF, TOOLS, RESTART, PERSON,
-    PHOTO, ATTACHMENT, THINK, EXPAND,
+    PHOTO, ATTACHMENT, THINK, EXPAND, MOVE, UP, DOWN,
 }
 
 // 功能图标统一使用随应用打包的 Lucide 矢量资源，避免手绘近似图形产生风格差异。
@@ -227,6 +227,9 @@ internal fun Mark(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
         Glyph.ATTACHMENT -> com.lifeskill.app.R.drawable.lucide_paperclip
         Glyph.THINK -> com.lifeskill.app.R.drawable.lucide_atom
         Glyph.EXPAND -> com.lifeskill.app.R.drawable.lucide_maximize_2
+        Glyph.MOVE -> com.lifeskill.app.R.drawable.lucide_grip_vertical
+        Glyph.UP -> com.lifeskill.app.R.drawable.lucide_arrow_up
+        Glyph.DOWN -> com.lifeskill.app.R.drawable.lucide_arrow_down
     }
     androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(resource), contentDescription = null,
         tint = color, modifier = modifier.size(22.dp))
