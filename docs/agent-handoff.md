@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `804ec94`（完整哈希见 `git rev-parse v0.15.17`） |
-| 最新版本 | `0.15.17` |
-| `versionCode` | `104` |
-| 标签 | `v0.15.17` |
-| Release | [LifeSkill 0.15.17](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.17) |
-| APK 文件名 | `LifeSkill-0.15.17-release.apk` |
-| APK 大小 | `18,282,983` bytes |
-| APK SHA-256 | `d61e9b362d0f9a596b4f9a8898e495df2656944ab45b0e9db4f83148c6a34fb9` |
+| 最新产品与发布提交 | `21705df`（完整哈希见 `git rev-parse v0.15.18`） |
+| 最新版本 | `0.15.18` |
+| `versionCode` | `105` |
+| 标签 | `v0.15.18` |
+| Release | [LifeSkill 0.15.18](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.18) |
+| APK 文件名 | `LifeSkill-0.15.18-release.apk` |
+| APK 大小 | `18,299,367` bytes |
+| APK SHA-256 | `2c60765fa2fa252a4297a30c503f9c2d1fc211c1e140016cf1a71d5f233d4d2d` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.17..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.18..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.17` 已发布：标签指向 `804ec94`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.16` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.18` 已发布：标签指向 `21705df`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.17` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -58,8 +58,8 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 | 稳定分类 | 已有内容 |
 | --- | --- |
-| 结构与过程 `structure` | 时间轴、流程图、结构图、漏斗、一个对比卡示例 |
-| 数据图表 `data` | 需求预测模板、折线图、柱状图、面积图、散点图、评分矩阵、区间条、公式 |
+| 结构与过程 `structure` | 时间轴、流程图、结构图、漏斗、四象限、一个对比卡示例 |
+| 数据图表 `data` | 需求预测模板、折线图、柱状图、面积图、散点图、瀑布图、评分矩阵、区间条、公式 |
 | 互动练习 `practice` | 随堂答题、知识翻卡（均支持 1–3 级提示阶梯）、拖放排序、可拖拽的短小游戏 |
 | 图像与综合 `visual` | 植物细胞图片热点，杠杆实验，以及数据观察、文字、对比和判断题组合 |
 
@@ -85,6 +85,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.15` | 小游戏放宽到8000字符与320条命令，新增多边形/圆弧/描边/透明色/帧回调；演示换成拖拽版「分配研究工时」。 |
 | `v0.15.16` | 新增结构图 figure：1–3列节点、关系行与脚注，支持数字与要点，语义色最多两种。 |
 | `v0.15.17` | 新增评分矩阵、区间条、漏斗/金字塔与公式；chart 增加散点样式。 |
+| `v0.15.18` | 新增瀑布图与四象限；提示词校准 compare/matrix、timeline/range 判定。 |
 
 对应提交如下：
 
@@ -104,6 +105,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.15` | `cd6359a` |
 | `v0.15.16` | `0dfdbcd` |
 | `v0.15.17` | `804ec94` |
+| `v0.15.18` | `21705df` |
+
+## 0.15.18 的验证证据
+
+- `./scripts/build-release.sh` 构建、签名并校验；证书沿用既有调试证书 `AD:01:E1:…:0A`。
+- 单元测试与 `lintDebug` 通过；教学相关仪器测试 63 项通过，新增 `WaterfallQuadrantTest` 5 项（往返、首尾合计校验、象限非法数据、坐标动作与持久化、真实拖拽）与 `GraphModelSamplesTest` 1 项（六条真实模型回复解码为记录的类型）。
+- 真实 DeepSeek Flash 六场景抽样：矩阵、散点、区间、漏斗、公式、结构图各命中一次，耗时 1.8–3.4 秒；`选型`与`时间预估`在旧提示词下曾分别漂移为 `compare` 与纯文字，补充判定标准后稳定。
+- 模拟器人工验证：瀑布图五柱与虚线连接、数值标签正确；四象限四点可拖，右边界标签自动移到点左侧，未再被裁切。
+- 从 `0.15.17` 覆盖升级到 `0.15.18`，`firstInstallTime` 保持不变；Release 附件与本地 APK SHA-256 一致。
+
+未完成：真机与 Android 8–9 WebView 验收；四象限未做多点同时拖动，公式仍为受限子集。
 
 ## 0.15.17 的验证证据
 
