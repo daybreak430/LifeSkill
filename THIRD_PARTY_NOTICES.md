@@ -7,6 +7,7 @@
 | Kyant Backdrop 1.0.6、Shapes 1.2.0 | 液态玻璃底栏及底层形状支持 | 发布物 POM 标记为 Apache-2.0，仓库保留[许可证副本](app/src/main/assets/licenses/kyant-apache-2.0.txt) |
 | commonmark-java、commonmark-ext-gfm-tables 0.32.0 | 教学消息的 Markdown 和表格解析 | BSD-2-Clause，[版权与许可证原文](docs/licenses/commonmark-bsd-2-clause.txt)来自发布 JAR |
 | AndroidX Activity、Compose、Material 3、Lifecycle、Room | 界面、状态和本地存储 | 发布物采用 Apache-2.0，具体声明随各 AndroidX 发布物提供 |
+| Calvin-LL Reorderable 3.1.0 | Compose 列表与分组的按住拖放排序 | Apache-2.0，[项目仓库](https://github.com/Calvin-LL/Reorderable)与[许可证副本](app/src/main/assets/licenses/reorderable-apache-2.0.txt) |
 | PdfBox-Android | 读取 PDF 文字 | [Apache-2.0](https://github.com/TomRoush/PdfBox-Android/blob/master/LICENSE) |
 | Kotlin 标准库、kotlinx.coroutines | Kotlin 运行时和协程 | 发布物采用 Apache-2.0，具体声明随发布物提供 |
 | Lucide 图标 | 全应用功能图标、课程图标与附件图标 | [Lucide](https://github.com/lucide-icons/lucide/tree/55782beff3a0133df79c417eb68f96e8f19e2404) 的 ISC 与 Feather 衍生图标 MIT 声明，随 APK 保留[许可证副本](app/src/main/assets/licenses/lucide.txt) |

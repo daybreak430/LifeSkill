@@ -149,7 +149,7 @@ class TeachingUiTest {
     @Test fun flipSortingAndClassificationUseRetryBeforeShowingAnswers() {
         val flip = openLesson("practice")
         scrollTo(hasTestTag("flip-card"))
-        ui.onNodeWithTag("flip-card").performTouchInput { click() }
+        ui.onNodeWithTag("flip-card-turn").performClick()
         await("其他条件不变时，价格下降会让更多消费者愿意且能够购买，因此需求曲线上的对应点向右移动。")
         assertEquals("back", state(flip, "flip").selection)
         back()
@@ -191,6 +191,23 @@ class TeachingUiTest {
         ui.onNodeWithText(block.items.first().explanation).assertExists()
     }
 
+    @Test fun sortingHandleSupportsLongPressDragReordering() {
+        val lesson = openLesson("practice")
+        scrollTo(hasTestTag("sort-handle-validate"))
+        ui.onNodeWithTag("sort-handle-validate").performTouchInput {
+            down(center)
+            advanceEventTime(650)
+            moveBy(Offset(0f, 110f))
+            advanceEventTime(250)
+            up()
+        }
+        ui.waitUntil(8_000) {
+            state(lesson, "sorting").sortOrder(
+                BuiltInTeaching.lessonByKey("practice")!!.blocks.filterIsInstance<TeachingSorting>().single(),
+            ).take(2) == listOf("observe", "validate")
+        }
+    }
+
     @Test fun hotspotZoomAndStepTraceExplicitRevealRemainInteractive() {
         val hotspot = openLesson("visual")
         scrollTo(hasTestTag("hotspot-nucleus"))
@@ -199,6 +216,12 @@ class TeachingUiTest {
         scrollTo(hasContentDescription("放大观察植物细胞"))
         ui.onNodeWithContentDescription("放大观察植物细胞").performClick()
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
+        val expandedBounds = ui.onNodeWithTag("teaching-expanded").getUnclippedBoundsInRoot()
+        val screenBounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
+        assertTrue(expandedBounds.left > screenBounds.left)
+        assertTrue(expandedBounds.top > screenBounds.top)
+        assertTrue(expandedBounds.right < screenBounds.right)
+        assertTrue(expandedBounds.bottom < screenBounds.bottom)
         awaitDialogFocus()
         back()
         ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()

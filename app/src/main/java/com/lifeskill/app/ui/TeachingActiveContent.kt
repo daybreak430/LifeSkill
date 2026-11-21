@@ -3,10 +3,13 @@ package com.lifeskill.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,9 +19,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -31,38 +37,53 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lifeskill.app.model.*
-import kotlin.math.abs
+import sh.calvin.reorderable.ReorderableColumn
+import sh.calvin.reorderable.ReorderableItem
 
 @Composable
 internal fun TeachingFlipCardContent(
     block: TeachingFlipCard, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
 ) {
     val back = state.selection == "back"
+    val density = LocalDensity.current
+    val rotation by animateFloatAsState(
+        targetValue = if (back) 180f else 0f,
+        animationSpec = tween(520, easing = FastOutSlowInEasing),
+        label = "知识翻卡",
+    )
     Surface(
-        onClick = { onAction(TeachingAction.Flip) },
-        enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp).testTag("flip-card")
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 12f * density.density
+            }
             .semantics { stateDescription = if (back) "答案面" else "问题面" },
         shape = ControlShape,
         color = if (back) aiColors.chip else Ground,
         border = BorderStroke(1.dp, if (back) aiColors.accent.copy(alpha = .45f) else Line),
     ) {
-        Column(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                if (back) block.answer else block.prompt,
-                style = if (back) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                color = Ink,
-            )
+        val showBack = rotation > 90f
+        Column(Modifier.fillMaxSize().graphicsLayer {
+            if (showBack) rotationY = 180f
+        }.padding(20.dp), verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(if (showBack) "答案" else "先回忆", color = aiColors.accent,
+                style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
+            Text(if (showBack) block.answer else block.prompt,
+                style = if (showBack) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                color = Ink)
             Spacer(Modifier.height(14.dp))
-            Text(
-                if (back) "点击回到问题" else block.hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = Muted,
-            )
+            Text(if (showBack) block.hint else "想好后翻开核对", style = MaterialTheme.typography.bodySmall, color = Muted)
+            Spacer(Modifier.height(18.dp))
+            Button(
+                onClick = { onAction(TeachingAction.Flip) },
+                enabled = enabled,
+                modifier = Modifier.testTag("flip-card-turn"),
+            ) {
+                Mark(Glyph.RESTART, MaterialTheme.colorScheme.onPrimary, Modifier.size(17.dp))
+                Text(if (showBack) "翻回" else "翻面", Modifier.padding(start = 7.dp))
+            }
         }
     }
 }
@@ -74,54 +95,52 @@ internal fun TeachingSortingContent(
     val order = state.sortOrder(block)
     val complete = state.sortComplete(block)
     val locked = !enabled || complete || state.revealed
+    val haptics = LocalHapticFeedback.current
     Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        order.forEachIndexed { index, itemId ->
-            val item = block.items.first { it.id == itemId }
-            var accumulatedDrag by remember(item.id) { mutableFloatStateOf(0f) }
-            Surface(
-                modifier = Modifier.fillMaxWidth().testTag("sort-item-${item.id}")
-                    .pointerInput(item.id, index, locked) {
-                        if (locked) return@pointerInput
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { accumulatedDrag = 0f },
-                            onDragEnd = { accumulatedDrag = 0f },
-                            onDragCancel = { accumulatedDrag = 0f },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                accumulatedDrag += dragAmount.y
-                                val threshold = 64.dp.toPx()
-                                val destination = when {
-                                    accumulatedDrag > threshold && index < order.lastIndex -> index + 1
-                                    accumulatedDrag < -threshold && index > 0 -> index - 1
-                                    else -> null
-                                }
-                                destination?.let {
-                                    onAction(TeachingAction.Move(item.id, it))
-                                    accumulatedDrag = 0f
-                                }
-                            },
-                        )
+    ReorderableColumn(
+        modifier = Modifier.fillMaxWidth().testTag("sorting-list"),
+        list = order,
+        onSettle = { fromIndex, toIndex ->
+            if (!locked) onAction(TeachingAction.Move(order[fromIndex], toIndex))
+        },
+        onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) { index, itemId, isDragging ->
+        val item = block.items.first { it.id == itemId }
+        key(item.id) {
+            ReorderableItem {
+                val elevation by animateDpAsState(if (isDragging) 10.dp else 0.dp, label = "排序拖动高度")
+                Surface(
+                    modifier = Modifier.fillMaxWidth().testTag("sort-item-${item.id}")
+                        .semantics { contentDescription = "第${index + 1}项，${item.text}；按住拖动点可排序" },
+                    shape = ControlShape,
+                    color = Ground,
+                    border = BorderStroke(if (isDragging) 2.dp else 1.dp,
+                        if (isDragging) aiColors.accent else Line),
+                    shadowElevation = elevation,
+                ) {
+                    Row(Modifier.padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(48.dp).testTag("sort-handle-${item.id}").longPressDraggableHandle(
+                                enabled = !locked,
+                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+                                onDragStopped = { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+                            ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Mark(Glyph.MOVE, if (locked) Muted else aiColors.accent, Modifier.size(22.dp))
+                        }
+                        Text("${index + 1}", Modifier.width(24.dp), color = aiColors.accent,
+                            style = MaterialTheme.typography.titleSmall)
+                        Text(item.text, Modifier.weight(1f).padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyMedium, color = Ink)
+                        GlyphButton(Glyph.UP, "上移${item.text}", {
+                            onAction(TeachingAction.Move(item.id, index - 1))
+                        }, enabled = !locked && index > 0, background = Panel)
+                        GlyphButton(Glyph.DOWN, "下移${item.text}", {
+                            onAction(TeachingAction.Move(item.id, index + 1))
+                        }, enabled = !locked && index < order.lastIndex, background = Panel)
                     }
-                    .semantics { contentDescription = "第${index + 1}项，${item.text}；长按可拖动" },
-                shape = ControlShape,
-                color = Ground,
-                border = BorderStroke(1.dp, Line),
-            ) {
-                Row(Modifier.padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                        Mark(Glyph.MOVE, Muted, Modifier.size(22.dp))
-                    }
-                    Text("${index + 1}", Modifier.width(24.dp), color = aiColors.accent,
-                        style = MaterialTheme.typography.titleSmall)
-                    Text(item.text, Modifier.weight(1f).padding(vertical = 10.dp),
-                        style = MaterialTheme.typography.bodyMedium, color = Ink)
-                    GlyphButton(Glyph.UP, "上移${item.text}", {
-                        onAction(TeachingAction.Move(item.id, index - 1))
-                    }, enabled = !locked && index > 0, background = Panel)
-                    GlyphButton(Glyph.DOWN, "下移${item.text}", {
-                        onAction(TeachingAction.Move(item.id, index + 1))
-                    }, enabled = !locked && index < order.lastIndex, background = Panel)
                 }
             }
         }

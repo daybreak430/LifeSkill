@@ -12,8 +12,8 @@ android {
         applicationId = "com.lifeskill.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 91
-        versionName = "0.15.4"
+        versionCode = 92
+        versionName = "0.15.5"
         testInstrumentationRunner = "com.lifeskill.app.LifeSkillTestRunner"
     }
 
@@ -42,6 +42,7 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.4.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("io.github.kyant0:backdrop:1.0.6") {
         // Shapes 的 Android 产物共用 AndroidX Compose，版本由本项目 BOM 管理。

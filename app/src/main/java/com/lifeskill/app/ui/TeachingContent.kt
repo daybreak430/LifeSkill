@@ -1,6 +1,7 @@
 package com.lifeskill.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -21,6 +22,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.lifeskill.app.model.*
@@ -39,17 +41,37 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
     val expanded = turn.teachingBlocks.find { it.id == expandedId }
     if (expanded != null) Dialog(
         onDismissRequest = { expandedId = null },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        Surface(Modifier.fillMaxSize().testTag("teaching-expanded"), color = Ground) {
-            Column(Modifier.safeDrawingPadding()) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
-                    GlyphButton(Glyph.CLOSE, "关闭互动图示", { expandedId = null })
-                }
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    TeachingCard(expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
-                        { action -> onAction(expanded.id, action) })
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = .42f)).safeDrawingPadding().padding(12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                Modifier.fillMaxSize().testTag("teaching-expanded"),
+                shape = RoundedCornerShape(28.dp),
+                color = Ground,
+                tonalElevation = 6.dp,
+                shadowElevation = 18.dp,
+            ) {
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 22.dp, end = 8.dp, top = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
+                        if (expanded !is TeachingText) {
+                            GlyphButton(Glyph.RESTART, "重置${expanded.title}",
+                                { onAction(expanded.id, TeachingAction.Reset) }, enabled = enabled)
+                        }
+                        GlyphButton(Glyph.CLOSE, "关闭互动图示", { expandedId = null })
+                    }
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                        TeachingBlockBody(
+                            expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
+                            { action -> onAction(expanded.id, action) },
+                        )
+                    }
                 }
             }
         }
@@ -72,20 +94,27 @@ private fun TeachingCard(
                         enabled = enabled, background = Panel)
                 }
             }
-            when (block) {
-                is TeachingText -> LessonMarkdown(block.text)
-                is TeachingTimeline -> TimelineContent(block, state, enabled, onAction)
-                is TeachingFlow -> InteractiveFlowContent(block, state, enabled, onAction)
-                is TeachingComparison -> ComparisonContent(block, state, enabled, onAction)
-                is TeachingChart -> TeachingChartContent(block, state, enabled, onAction)
-                is TeachingQuiz -> PracticeContent(block, state, enabled, onAction)
-                is TeachingFlipCard -> TeachingFlipCardContent(block, state, enabled, onAction)
-                is TeachingSorting -> TeachingSortingContent(block, state, enabled, onAction)
-                is TeachingClassification -> TeachingClassificationContent(block, state, enabled, onAction)
-                is TeachingHotspot -> TeachingHotspotContent(block, state, enabled, onAction)
-                is TeachingStepTrace -> TeachingStepTraceContent(block, state, enabled, onAction)
-            }
+            TeachingBlockBody(block, state, enabled, onAction)
         }
+    }
+}
+
+@Composable
+private fun TeachingBlockBody(
+    block: TeachingBlock, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
+) {
+    when (block) {
+        is TeachingText -> LessonMarkdown(block.text)
+        is TeachingTimeline -> TimelineContent(block, state, enabled, onAction)
+        is TeachingFlow -> InteractiveFlowContent(block, state, enabled, onAction)
+        is TeachingComparison -> ComparisonContent(block, state, enabled, onAction)
+        is TeachingChart -> TeachingChartContent(block, state, enabled, onAction)
+        is TeachingQuiz -> PracticeContent(block, state, enabled, onAction)
+        is TeachingFlipCard -> TeachingFlipCardContent(block, state, enabled, onAction)
+        is TeachingSorting -> TeachingSortingContent(block, state, enabled, onAction)
+        is TeachingClassification -> TeachingClassificationContent(block, state, enabled, onAction)
+        is TeachingHotspot -> TeachingHotspotContent(block, state, enabled, onAction)
+        is TeachingStepTrace -> TeachingStepTraceContent(block, state, enabled, onAction)
     }
 }
 
