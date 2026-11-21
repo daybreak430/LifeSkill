@@ -38,10 +38,12 @@ Compose 改动按影响范围验证触控、滚动、键盘和系统返回。Roo
 ## 构建发布包
 
 ```sh
-./gradlew :app:assembleRelease
+./scripts/build-release.sh
 ```
 
-当前仓库的 Release 构建输出 `app/build/outputs/apk/release/app-release-unsigned.apk`。用 Android SDK 的 `apksigner sign` 生成签名包，再用 `apksigner verify --verbose --print-certs` 验证签名并与上一发布包比对证书 SHA-256。覆盖升级需沿用上一发布版的签名证书，并递增 `versionCode`。验证旧包覆盖升级后，将签名包保存为 `release/LifeSkill-<版本>-release.apk`。签名密钥留在本机。
+脚本会读取 `app/build.gradle.kts` 的版本号，构建 Release、zipalign、用既有发布证书签名，输出 `release/LifeSkill-<版本>-release.apk`，并打印大小与 SHA-256。证书默认取本机 `~/.android/debug.keystore`（当前发布一直使用该证书以保证覆盖升级）；如需换证书，通过 `RELEASE_KEYSTORE`、`RELEASE_KEY_ALIAS`、`RELEASE_KEYSTORE_PASS` 覆盖，且必须先确认老用户升级路径。
+
+手工流程等价于：`./gradlew :app:assembleRelease` 后用 Android SDK 的 `apksigner sign` 签名，再用 `apksigner verify --verbose --print-certs` 校验并与上一发布包比对证书 SHA-256。发布前须递增 `versionCode`，验证旧包覆盖升级，再把签名包保存为 `release/LifeSkill-<版本>-release.apk`。签名密钥留在本机，不得提交。
 
 首次公开仓库前，确认项目授权范围，核对[第三方声明](THIRD_PARTY_NOTICES.md)，并检查当前提交和 Git 历史中的密钥、签名文件、真实用户数据及仅供内部使用的内容。发布时也检查 README 中的版本和安装入口。
 

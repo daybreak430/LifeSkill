@@ -147,9 +147,11 @@ UI 开发规范：
 
 ## 发布规范
 
-- 每次发布 Android 新版本，按[贡献指南](CONTRIBUTING.md#构建发布包)签名并验证覆盖升级，将 APK 保存到 `release/LifeSkill-<版本>-release.apk`。
-- 同次发布须在 GitHub Releases 创建或更新 `v<版本>`，让标签指向构建 APK 的源码提交，并上传同名签名 APK 作为发布附件。
+- 功能或修复完成后**默认直接打包并发布 GitHub Release，不再逐次征求确认**；只有用户明确说“先不发版”时才停在本地提交。
+- 每次发布 Android 新版本，按[贡献指南](CONTRIBUTING.md#构建发布包)签名并验证覆盖升级，将 APK 保存到 `release/LifeSkill-<版本>-release.apk`。打包与签名统一执行 `scripts/build-release.sh`，不要手写临时命令。
+- 同次发布须同步 `versionName` 与 `versionCode`、更新 `README.md` 的当前版本、在 GitHub Releases 创建或更新 `v<版本>`，让标签指向构建 APK 的源码提交，并上传同名签名 APK 作为发布附件。
 - 发布完成前核对 GitHub Release 已发布、附件可下载，且附件的 SHA-256 与本地 APK 一致。在交付说明中附上 Release 链接。
+- 沿用既有发布证书（当前为本机调试证书 `~/.android/debug.keystore`）。更换证书会导致老用户无法覆盖升级，必须由用户明确决定并说明后果。
 
 最终完成标准：
 
