@@ -24,7 +24,8 @@ internal object BuiltInTeaching {
     const val PREFERRED_PARENT_ID = "preset-4"
     const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
-    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER) +
+    // 停用组件的旧安装标记仍属于演示课，主动恢复时一并清理；标记不得分配给新组件。
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_013, 1_015) +
         lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
@@ -97,41 +98,6 @@ internal object BuiltInTeaching {
         ), listOf("observe", "goal", "validate", "decide"),
         "先形成问题，再定义结果和判断依据；验证证据之后才进入排期判断。",
         "先观察具体困难，再把问题定义成可衡量的目标，接着收集证据验证，最后结合证据决定是否开发。")
-    private val classification = TeachingClassification("classification", "观察还是解释",
-        "为每条陈述选择更准确的类别。",
-        listOf(ClassificationCategory("observation", "数据观察"), ClassificationCategory("explanation", "原因解释")),
-        listOf(
-            ClassificationItem("april", "四月借阅 52 次，高于其他月份。", "observation",
-                "52 次可以直接从数据中读出，不需要补充背景。"),
-            ClassificationItem("festival", "读书节可能提高了四月借阅量。", "explanation",
-                "借阅增加的原因需要额外证据，因此属于解释或假设。"),
-            ClassificationItem("march", "三月比二月少 8 次。", "observation",
-                "两个数相减即可得到差异，属于直接观察。"),
-            ClassificationItem("hours", "开放时间延长导致借阅增加。", "explanation",
-                "这是对变化的因果解释，需要检查开放时间与借阅量的实际关系。"),
-        ), "先问自己：这句话是否能直接从已有数据中读出？",
-        "可直接读取的数值和差异是观察；说明“为什么”的因果陈述是解释，需要额外证据。")
-    private val trace = TeachingStepTrace("trace", "百分比变化为什么不能直接相加",
-        "某商品价格先由 100 元降到 80 元，再回到 100 元。先预测每一步的变化率。",
-        listOf(
-            TeachingTraceStep("down", "第一次下降",
-                TeachingQuestion("从 100 元降到 80 元，以原价 100 元为基数，下降了百分之几？",
-                    listOf("20%", "25%"), 0,
-                    "20 ÷ 100 = 20%，第一次变化的基数是 100 元。", "用变化量除以这次变化前的数。"),
-                "第一次下降 20%，价格变为 80 元。"),
-            TeachingTraceStep("up", "第二次上涨",
-                TeachingQuestion("从 80 元涨回 100 元，以 80 元为基数，上涨了百分之几？",
-                    listOf("20%", "25%"), 1,
-                    "20 ÷ 80 = 25%，第二次变化的基数已经变成 80 元。", "注意这次计算从哪个数开始。"),
-                "第二次上涨 25%，价格重新回到 100 元。"),
-            TeachingTraceStep("combine", "能否直接相加",
-                TeachingQuestion("−20% 与 +25% 能直接相加当作最终变化吗？",
-                    listOf("能，合计 +5%", "不能，两次基数不同"), 1,
-                    "两次百分比使用了不同基数，最终净值回到 0，不能把百分数当作同一单位直接相加。",
-                    "比较两次百分比的基数是否相同。"),
-                "最终价格仍是 100 元，净变化为 0；百分比变化必须结合基数和先后顺序解释。"),
-        ), "价格最终没有变化。−20% 和 +25% 不能相加，因为第二次的 25% 以 80 元为基数。")
-
     private val borrowing = TeachingChart("borrowing", "图书角借阅量", "月份", "借阅量（次）", listOf(
         TeachingPoint("一月", 24.0), TeachingPoint("二月", 40.0), TeachingPoint("三月", 32.0), TeachingPoint("四月", 52.0)
     ))
@@ -173,14 +139,12 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_009, bar),
                 BuiltInTeachingItem(1_010, area),
             )),
-        BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡、排序、分类和分步推演。",
+        BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡和排序。",
             EntryIcon.TARGET, "统一遵循先提示、允许重试、主动查看完整答案。选择任意组件开始练习。",
             listOf(
                 BuiltInTeachingItem(1_005, quiz),
                 BuiltInTeachingItem(1_011, flip),
                 BuiltInTeachingItem(1_012, sorting),
-                BuiltInTeachingItem(1_013, classification),
-                BuiltInTeachingItem(1_015, trace),
             )),
         BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、对比和判断题。",
             EntryIcon.LEAF, "先探索植物细胞热点，再回到数据观察与解释，比较不同媒介如何承担讲解。",

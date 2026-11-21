@@ -233,6 +233,57 @@ class TeachingStorageTest {
         assertTrue(history.contains("interactions"))
     }
 
+    @Test fun retiredBlocksStayStoredButCannotBeGeneratedReplayedOrInteractedWith() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(context, LifeSkillDatabase::class.java).build()
+        val secret = SecretBox("lifeskill-tests")
+        try {
+            val app = fixture(database, ScriptedGateway())
+            app.library.initialize()
+            val lesson = BuiltInTeaching.lessonByKey("practice")!!
+            assertTrue(lesson.blocks.all { it.isAvailable })
+            assertEquals(3, lesson.blocks.size)
+            val scope = ChatScope(ChatMode.TUTOR, lesson.id)
+            val row = database.skills().turn(scope.id, lesson.turnId)!!
+            val retired = retiredTeachingBlocks()
+            val encoded = TeachingBlockProtocol.encode(retired + lesson.blocks)
+            val legacy = BuiltInTeaching.legacyDemos.first { it.key == "classification" }
+            database.skills().insertEntry(EntryRow(
+                legacy.id, BuiltInTeaching.COURSE_ID, EntryKind.SKILL.name,
+                secret.seal(legacy.name, "${legacy.id}:name"), secret.seal(legacy.goal, "${legacy.id}:goal"),
+                Mastery.UNLIT.name, 0, 0, database.skills().nextPosition(),
+                EntryIcon.BOOK.name, secret.seal("旧示例", "${legacy.id}:shortName"), null,
+            ))
+            val legacyScope = ChatScope(ChatMode.TUTOR, legacy.id)
+            database.skills().insertChat(ChatRow(legacyScope.id, legacy.id))
+            val legacyRow = row.copy(sequence = 0, id = legacy.turnId, chatId = legacyScope.id,
+                text = secret.seal("旧分类正文", "${legacy.turnId}:turn"),
+                teachingBlocks = secret.seal(TeachingBlockProtocol.encode(retired.take(1)).toString(), "${legacy.turnId}:blocks"))
+            database.skills().insertTurn(legacyRow)
+            val saved = row.copy(teachingBlocks = secret.seal(encoded.toString(), "${row.id}:blocks"))
+            database.skills().updateTurn(saved)
+            app.library.initialize()
+            val turn = app.conversations.watch(scope).first().single()
+            assertEquals(retired + lesson.blocks, turn.teachingBlocks)
+            assertEquals(saved.teachingBlocks, database.skills().turn(scope.id, row.id)!!.teachingBlocks)
+            assertNotNull(app.library.entry(legacy.id))
+            assertEquals(legacyRow.teachingBlocks, database.skills().turn(legacyScope.id, legacy.turnId)!!.teachingBlocks)
+            retired.forEach { block ->
+                try {
+                    app.conversations.interact(scope, row.id, block.id, TeachingAction.Reset)
+                    fail("停用组件不能继续交互")
+                } catch (_: RuleViolation) { }
+            }
+            val reply = AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", "文字讲解保留")
+                .put("blocks", encoded).toString())
+            assertEquals(lesson.blocks, reply.blocks)
+            assertEquals("文字讲解保留", reply.reply)
+            val history = AiProtocol.tutorHistory(turn)
+            assertFalse(history.contains("旧分类"))
+            assertFalse(history.contains("旧推演"))
+            assertTrue(history.contains("flip"))
+        } finally { database.close() }
+    }
+
     @Test fun upgradesVersionTwelveWithoutChangingExistingMessages() = runBlocking {
         val name = "teaching-upgrade-${UUID.randomUUID()}"
         val secret = SecretBox("lifeskill-tests")

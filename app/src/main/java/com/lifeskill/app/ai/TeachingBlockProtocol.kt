@@ -237,7 +237,7 @@ internal object TeachingBlockProtocol {
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
     val instructions = """
-        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、分类、图片热点、分步推演或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
+        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。组件只描述数据，禁止生成 HTML、JavaScript、可执行表达式或外部资源链接。
         先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序同时做成flow和sort，不要把同一概念做成compare和quiz后再重复说明，也不要在首次讲解时把“讲解＋图表＋对比＋测验”一次全部塞入。
         主题与组件选择参考：
         - 历史、事件、阶段、制度演变：timeline；需要比较原因、影响或易混概念时加compare。
@@ -245,13 +245,12 @@ internal object TeachingBlockProtocol {
         - 两个概念、方案、优缺点或易混项：compare。
         - 定量趋势、分类比较、累计走势、价格与数量关系：chart，并按line/bar/area或固定linear_demand模板选择。
         - 定义、条件、公式前提需要先回忆：flip。
-        - 证据、责任、类别、观察与解释容易混淆：classify。
-        - 需要连续计算、因果链、基数变化或“下一步会发生什么”：steps。
         - 只需快速检验一个关键误区：quiz。
         - hotspot用于“先定位、再观察局部、联系结构与功能”，只有空间位置本身能帮助回答当前问题、且内置图确实包含目标结构时才选。当前只支持plant_cell植物细胞示意图；仅介绍细胞功能、背诵术语、讨论细胞分裂过程时不必使用热点，分别考虑文字、flip或flow。其他空间主题不得套用该图。
         - plant_cell坐标须对准实际图示：细胞壁在外缘（如8,24），细胞核中心(50,46)，液泡(76,35)，叶绿体(28,73)，线粒体(79,74)。只选本轮需要观察的2–4个结构（协议上限6个），不要堆满标记或把多个热点挤在一起。label只写结构名，detail说明可观察的形态/位置与功能联系，不把长说明塞进图中；数字和触控尺寸由客户端决定。不要把示意图当成显微照片或按真实比例推断结构大小。
-        外行人文学科可优先timeline、compare、flip；科学和数据分析可优先chart、classify、steps；操作技能可优先flow、sort；语言学习可优先flip、compare、quiz。参考只用于判断，不能覆盖本节实际目标。
-        首轮讲解新概念时优先选一个主组件；把quiz、sort、classify等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
+        外行人文学科可优先timeline、compare、flip；科学和数据分析可优先chart、compare；操作技能可优先flow、sort；语言学习可优先flip、compare、quiz。参考只用于判断，不能覆盖本节实际目标。
+        首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
+        分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
         使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
         {"id":"t","type":"timeline","title":"事件顺序","events":[{"id":"e1","date":"第一天","title":"提出问题","detail":"背景与影响"},{"id":"e2","date":"第二天","title":"验证假设","detail":"观察结果"}]}
@@ -261,11 +260,9 @@ internal object TeachingBlockProtocol {
         {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
         {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hint":"先关注适用条件。"}
         {"id":"s","type":"sort","title":"排出顺序","prompt":"调整为合理步骤。","items":[{"id":"a","text":"第一步文本"},{"id":"b","text":"第二步文本"},{"id":"c","text":"第三步文本"}],"correctOrder":["a","b","c"],"hint":"先确定起点。","explanation":"完整顺序和原因"}
-        {"id":"k","type":"classify","title":"归入类别","prompt":"为每项选择类别。","categories":[{"id":"observe","title":"观察"},{"id":"explain","title":"解释"}],"items":[{"id":"i1","text":"可直接读到的变化","category":"observe","explanation":"为何属于该类别"},{"id":"i2","text":"一种原因假设","category":"explain","explanation":"为何属于该类别"},{"id":"i3","text":"另一个可直接观察的结果","category":"observe","explanation":"为何属于该类别"}],"hint":"先看内容是否可直接观察到。","explanation":"完整分类依据"}
         {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
-        {"id":"z","type":"steps","title":"分步推演","introduction":"先预测每一步结果。","steps":[{"id":"s1","title":"第一次变化","checkpoint":{"text":"这一步会怎样？","options":["增加","减少"],"answer":1,"hint":"只比较相邻两个数。","explanation":"该步的解释"},"result":"该步展开后的结果"},{"id":"s2","title":"第二次变化","checkpoint":{"text":"相对哪个基数？","options":["原数","中间结果"],"answer":1,"hint":"看变化从哪个数开始。","explanation":"该步的解释"},"result":"第二步展开后的结果"}],"summary":"完整结论"}
         compare 可选 palette 为 blue_amber、violet_teal、rose_sage，按对比主题选择。chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
-        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；分类2–3类、3–6项，每项必须指向一个类别并提供独立解释；分步推演2–5步，每步都有一个先预测后展开的checkpoint。热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
+        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
         反馈统一采用“先提示、允许重试、由学生主动查看完整答案”：错误反馈先给不解题的hint，不要直接在reply重复正确答案；explanation和correctOrder等答案字段只供原生组件在学生查看答案后使用。
         价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
         quiz 是随堂反馈，点击和答对均不能点亮课时。正式课后练习继续按原有kind、question、choices、exerciseId协议，不得用blocks绕过题序。正式评估或待答题期间不要附加blocks。历史中的互动记录仅是学习证据，不能单独作为通过课后练习的依据。

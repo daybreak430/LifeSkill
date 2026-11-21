@@ -7,6 +7,10 @@ sealed interface TeachingBlock {
     val title: String
 }
 
+// 暂停的组件仍保留旧快照编解码，避免升级改写用户记录；展示、模型输入输出和交互统一使用此门槛。
+internal val TeachingBlock.isAvailable: Boolean
+    get() = this !is TeachingClassification && this !is TeachingStepTrace
+
 data class TeachingText(override val id: String, override val title: String, val text: String) : TeachingBlock
 data class TimelineEvent(val id: String, val date: String, val title: String, val detail: String)
 data class TeachingTimeline(

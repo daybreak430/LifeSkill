@@ -15,6 +15,7 @@ import com.lifeskill.app.model.TurnKind
 import com.lifeskill.app.model.TutorRules
 import com.lifeskill.app.model.TeachingBlock
 import com.lifeskill.app.model.interactionSummary
+import com.lifeskill.app.model.isAvailable
 import com.lifeskill.app.model.markdown
 import org.json.JSONArray
 import org.json.JSONObject
@@ -328,7 +329,7 @@ internal object AiProtocol {
         }
         val imageQuery = (json.opt("imageQuery") as? String)?.takeIf { kind in TutorRules.teachingReplyKinds }
         TutorReply(reply, kind, json.optionalText("exerciseId", 128), choices, imageQuery,
-            if (kind in TutorRules.teachingReplyKinds) TeachingBlockProtocol.decode(json.optJSONArray("blocks")) else emptyList())
+            if (kind in TutorRules.teachingReplyKinds) TeachingBlockProtocol.decode(json.optJSONArray("blocks")).filter { it.isAvailable } else emptyList())
     }
 
     private fun containsAsciiFlow(markdown: String): Boolean = fencedBlocks.findAll(markdown).any { block ->
@@ -343,14 +344,15 @@ internal object AiProtocol {
         put(if (turn.kind == TurnKind.EXERCISE) "question" else "reply", turn.text)
         if (turn.choices.isNotEmpty()) put("choices", JSONArray(turn.choices))
         put("exerciseId", turn.exerciseId)
-        if (turn.teachingBlocks.isNotEmpty()) {
-            val blocks = TeachingBlockProtocol.encode(turn.teachingBlocks)
+        val availableBlocks = turn.teachingBlocks.filter { it.isAvailable }
+        if (availableBlocks.isNotEmpty()) {
+            val blocks = TeachingBlockProtocol.encode(availableBlocks)
             // 大组件不能挤掉整条历史回复；超过预算时给模型有界摘要，完整快照仍加密保存在本机。
             if (blocks.toString().length <= 4_000) put("blocks", blocks)
-            else put("blockSummaries", JSONArray(turn.teachingBlocks.map { block ->
+            else put("blockSummaries", JSONArray(availableBlocks.map { block ->
                 JSONObject().put("id", block.id).put("content", block.markdown().take(700))
             }))
-            put("interactions", JSONArray(turn.teachingBlocks.mapNotNull { block ->
+            put("interactions", JSONArray(availableBlocks.mapNotNull { block ->
                 turn.teachingStates[block.id]?.let { block.interactionSummary(it) }?.takeIf(String::isNotBlank)
             }))
         }

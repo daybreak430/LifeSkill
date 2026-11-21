@@ -33,15 +33,17 @@ import com.lifeskill.app.model.*
 @Composable
 internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, TeachingAction) -> Unit) {
     var expandedId by rememberSaveable(turn.id) { mutableStateOf<String?>(null) }
+    val availableBlocks = turn.teachingBlocks.filter { it.isAvailable }
+    if (availableBlocks.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
-        turn.teachingBlocks.forEach { block ->
+        availableBlocks.forEach { block ->
             key(block.id) {
                 TeachingCard(block, turn.teachingStates[block.id] ?: TeachingState(), enabled,
                     { action -> onAction(block.id, action) }, onExpand = { expandedId = block.id })
             }
         }
     }
-    val expanded = turn.teachingBlocks.find { it.id == expandedId }
+    val expanded = availableBlocks.find { it.id == expandedId }
     if (expanded != null) Dialog(
         onDismissRequest = { expandedId = null },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -119,9 +121,9 @@ private fun TeachingBlockBody(
         is TeachingQuiz -> PracticeContent(block, state, enabled, onAction)
         is TeachingFlipCard -> TeachingFlipCardContent(block, state, enabled, onAction)
         is TeachingSorting -> TeachingSortingContent(block, state, enabled, onAction)
-        is TeachingClassification -> TeachingClassificationContent(block, state, enabled, onAction)
+        is TeachingClassification -> Unit
         is TeachingHotspot -> TeachingHotspotContent(block, state, enabled, onAction)
-        is TeachingStepTrace -> TeachingStepTraceContent(block, state, enabled, onAction)
+        is TeachingStepTrace -> Unit
     }
 }
 

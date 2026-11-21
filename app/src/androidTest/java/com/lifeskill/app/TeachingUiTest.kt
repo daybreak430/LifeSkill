@@ -1,6 +1,9 @@
 package com.lifeskill.app
 
 import android.view.KeyEvent
+import androidx.activity.compose.setContent
+import com.lifeskill.app.ui.LifeSkillTheme
+import com.lifeskill.app.ui.TeachingContent
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.geometry.Offset
@@ -146,7 +149,7 @@ class TeachingUiTest {
         ui.onNodeWithText("三月 · 28").assertExists()
     }
 
-    @Test fun flipSortingAndClassificationUseRetryBeforeShowingAnswers() {
+    @Test fun flipAndSortingUseRetryBeforeShowingAnswers() {
         val flip = openLesson("practice")
         scrollTo(hasTestTag("flip-card"))
         ui.onNodeWithTag("flip-card-turn").performClick()
@@ -171,35 +174,6 @@ class TeachingUiTest {
         assertTrue(state(sorting, "sorting").attempts >= 1)
         back()
 
-        val classification = BuiltInTeaching.lessons.first { it.key == "practice" }
-        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(classification.name))
-        ui.onNodeWithContentDescription(classification.name).performClick()
-        ui.onNodeWithText("开始学习").performClick()
-        val block = classification.blocks.filterIsInstance<TeachingClassification>().single()
-        block.items.forEach { item ->
-            scrollTo(hasTestTag("classification-${item.id}-observation"))
-            ui.onNodeWithTag("classification-${item.id}-observation").performTouchInput { click() }
-        }
-        scrollTo(hasText("提交分类"))
-        ui.onNodeWithText("提交分类").performClick()
-        scrollTo(hasTestTag("feedback-classification"))
-        ui.onNodeWithTag("feedback-classification").assertIsDisplayed()
-        scrollTo(hasTestTag("feedback-classification-reveal"))
-        ui.onNodeWithTag("feedback-classification-reveal").performClick()
-        ui.waitUntil(8_000) { state(classification, "classification").revealed }
-        scrollTo(hasText(block.items.first().explanation))
-        ui.onNodeWithText(block.items.first().explanation).assertExists()
-        val firstItem = block.items.first()
-        val alternate = block.categories.first { it.id != firstItem.categoryId }
-        val alternateChip = "classification-${firstItem.id}-${alternate.id}"
-        scrollTo(hasTestTag(alternateChip))
-        ui.onNodeWithTag(alternateChip).performSemanticsAction(SemanticsActions.OnClick)
-        ui.waitUntil(8_000) {
-            val current = state(classification, "classification")
-            current.placements[firstItem.id] == alternate.id && !current.revealed && !current.submitted
-        }
-        scrollTo(hasText("提交分类"))
-        ui.onNodeWithText("提交分类").assertIsEnabled()
     }
 
     @Test fun sortingHandleSupportsLongPressDragReordering() {
@@ -219,100 +193,7 @@ class TeachingUiTest {
         }
     }
 
-    @Test fun classificationAllowsChangesAfterCompletionWithoutChipWidthJump() {
-        val lesson = BuiltInTeaching.lessonByKey("practice")!!
-        val block = lesson.blocks.filterIsInstance<TeachingClassification>().single()
-        runBlocking {
-            app.conversations.interact(
-                ChatScope(ChatMode.TUTOR, lesson.id), lesson.turnId, block.id, TeachingAction.Reset,
-            )
-        }
-        openLesson("practice")
-        val firstItem = block.items.first()
-        val correctCategory = block.categories.first { it.id == firstItem.categoryId }
-        val alternateCategory = block.categories.first { it.id != firstItem.categoryId }
-        val firstChip = "classification-${firstItem.id}-${correctCategory.id}"
-        scrollTo(hasTestTag(firstChip))
-        val boundsBefore = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
-        val labelBefore = ui.onNode(
-            hasText(correctCategory.title) and hasAnyAncestor(hasTestTag(firstChip)),
-            useUnmergedTree = true,
-        ).getUnclippedBoundsInRoot()
-        assertEquals(
-            (boundsBefore.top.value + boundsBefore.bottom.value) / 2f,
-            (labelBefore.top.value + labelBefore.bottom.value) / 2f,
-            0.25f,
-        )
-        ui.onNodeWithTag(firstChip).performSemanticsAction(SemanticsActions.OnClick)
-        ui.waitUntil(8_000) {
-            state(lesson, block.id).placements[firstItem.id] == correctCategory.id
-        }
-        val boundsAfter = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
-        assertEquals(boundsBefore.right.value - boundsBefore.left.value,
-            boundsAfter.right.value - boundsAfter.left.value, 0.25f)
-
-        block.items.drop(1).forEach { item ->
-            val tag = "classification-${item.id}-${item.categoryId}"
-            scrollTo(hasTestTag(tag))
-            ui.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
-        }
-        ui.waitUntil(8_000) {
-            block.items.all { state(lesson, block.id).placements[it.id] == it.categoryId }
-        }
-        scrollTo(hasText("提交分类"))
-        ui.onNodeWithText("提交分类").performClick()
-        ui.waitUntil(8_000) { state(lesson, block.id).classificationComplete(block) }
-
-        val alternateChip = "classification-${firstItem.id}-${alternateCategory.id}"
-        scrollTo(hasTestTag(alternateChip))
-        ui.onNodeWithTag(alternateChip).performSemanticsAction(SemanticsActions.OnClick)
-        ui.waitUntil(8_000) {
-            state(lesson, block.id).placements[firstItem.id] == alternateCategory.id &&
-                !state(lesson, block.id).submitted
-        }
-        scrollTo(hasText("提交分类"))
-        ui.onNodeWithText("提交分类").assertIsEnabled()
-    }
-
-    @Test fun stepTraceAdvancesAcrossMultipleCheckpoints() {
-        val lesson = BuiltInTeaching.lessonByKey("practice")!!
-        runBlocking {
-            app.conversations.interact(
-                ChatScope(ChatMode.TUTOR, lesson.id), lesson.turnId, "trace", TeachingAction.Reset,
-            )
-        }
-        openLesson("practice")
-        scrollTo(hasTestTag("trace-choice-down-0"))
-        ui.onNodeWithTag("trace-choice-down-0").performClick()
-        scrollTo(hasText("提交预测"))
-        ui.onNodeWithText("提交预测").performClick()
-        scrollTo(hasText("进入下一步"))
-        ui.onNodeWithText("进入下一步").performClick()
-        ui.waitUntil(8_000) { state(lesson, "trace").step == 1 }
-
-        scrollTo(hasTestTag("trace-choice-up-1"))
-        ui.onNodeWithTag("trace-choice-up-1").performClick()
-        scrollTo(hasText("提交预测"))
-        ui.onNodeWithText("提交预测").performClick()
-        scrollTo(hasTestTag("trace-choice-up-0"))
-        ui.onNodeWithTag("trace-choice-up-0").performClick()
-        ui.waitUntil(8_000) {
-            state(lesson, "trace").selection == "0" && !state(lesson, "trace").submitted
-        }
-        ui.onNodeWithTag("trace-choice-up-1").performClick()
-        ui.waitUntil(8_000) {
-            state(lesson, "trace").selection == "1" && !state(lesson, "trace").submitted
-        }
-        ui.onNodeWithText("提交预测").performClick()
-        ui.waitUntil(8_000) { state(lesson, "trace").submitted }
-        scrollTo(hasText("进入下一步"))
-        ui.onNodeWithText("进入下一步").performClick()
-        ui.waitUntil(8_000) { state(lesson, "trace").step == 2 }
-        scrollTo(hasTestTag("trace-step-combine"))
-        ui.onNodeWithTag("trace-step-combine").assertIsDisplayed()
-    }
-
-    @Test fun hotspotZoomAndStepTraceExplicitRevealRemainInteractive() {
+    @Test fun hotspotExplicitRevealRemainsInteractive() {
         val hotspot = openLesson("visual")
         scrollTo(hasTestTag("hotspot-nucleus"))
         ui.onNodeWithTag("hotspot-nucleus").performTouchInput { click() }
@@ -325,27 +206,6 @@ class TeachingUiTest {
         ui.onNodeWithText("叶绿体 · 叶绿体是植物进行光合作用的场所。").assertExists()
         back()
 
-        val trace = BuiltInTeaching.lessons.first { it.key == "practice" }
-        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(trace.name))
-        ui.onNodeWithContentDescription(trace.name).performClick()
-        ui.onNodeWithText("开始学习").performClick()
-        scrollTo(hasTestTag("trace-choice-down-0"))
-        ui.onNodeWithTag("trace-choice-down-0").performTouchInput { click() }
-        scrollTo(hasText("提交预测"))
-        ui.onNodeWithText("提交预测").performClick()
-        scrollTo(hasText("进入下一步"))
-        ui.onNodeWithText("进入下一步").performClick()
-        ui.waitUntil(8_000) { state(trace, "trace").step == 1 }
-        scrollTo(hasTestTag("trace-choice-up-0"))
-        ui.onNodeWithTag("trace-choice-up-0").performTouchInput { click() }
-        scrollTo(hasText("提交预测"))
-        ui.onNodeWithText("提交预测").performClick()
-        scrollTo(hasText("查看完整推演"))
-        ui.onNodeWithText("查看完整推演").performClick()
-        ui.waitUntil(8_000) { state(trace, "trace").revealed }
-        val traceBlock = trace.blocks.filterIsInstance<TeachingStepTrace>().single()
-        scrollTo(hasText(traceBlock.summary))
-        ui.onNodeWithText(traceBlock.summary).assertExists()
     }
 
     @Test fun hotspotMarkersStaySmallWithFullTouchTargets() {
@@ -401,6 +261,22 @@ class TeachingUiTest {
         ui.waitForIdle()
         val after = ui.onNodeWithTag("flip-card").getUnclippedBoundsInRoot()
         assertEquals(before.value, (after.bottom - after.top).value, .5f)
+    }
+
+    @Test fun retiredCardsAreHiddenInLegacyMessagesWhileOtherCardsRemain() {
+        val blocks = retiredTeachingBlocks() + TeachingFlipCard("keep", "保留翻卡", "回忆问题", "答案", "提示")
+        ui.runOnUiThread {
+            ui.activity.setContent {
+                LifeSkillTheme(dark = false) {
+                    TeachingContent(Turn("legacy", Speaker.ASSISTANT, TurnKind.MESSAGE, "保留正文",
+                        teachingBlocks = blocks), true) { _, _ -> }
+                }
+            }
+        }
+        ui.onNodeWithTag("teaching-block-classification").assertDoesNotExist()
+        ui.onNodeWithTag("teaching-block-trace").assertDoesNotExist()
+        ui.onNodeWithTag("teaching-block-keep").assertIsDisplayed()
+        ui.onNodeWithTag("flip-card-turn").assertIsEnabled()
     }
 
     @Test fun deletedShowcaseCanBeRestoredWithoutReinstallingTheApp() {

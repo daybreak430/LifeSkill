@@ -8,6 +8,7 @@ import com.lifeskill.app.ai.RecoverableReply
 import com.lifeskill.app.ai.SettingsStore
 import com.lifeskill.app.ai.TutorReply
 import com.lifeskill.app.ai.TeachingBlockProtocol
+import com.lifeskill.app.model.isAvailable
 import com.lifeskill.app.model.TeachingAction
 import com.lifeskill.app.model.TeachingInteractions
 import com.lifeskill.app.model.TeachingState
@@ -73,6 +74,7 @@ internal class ConversationRepository(
             }
             val turn = row.toTurn()
             val block = turn.teachingBlocks.find { it.id == blockId } ?: throw RuleViolation("这个教学组件已不存在。")
+            if (!block.isAvailable) throw RuleViolation("这个教学组件已停用。")
             val updated = TeachingInteractions.apply(block, turn.teachingStates[blockId] ?: TeachingState(), action)
             val states = turn.teachingStates + (blockId to updated)
             dao.updateTurn(row.copy(teachingStates = secret.seal(TeachingBlockProtocol.encodeStates(states), "$turnId:interactions")))

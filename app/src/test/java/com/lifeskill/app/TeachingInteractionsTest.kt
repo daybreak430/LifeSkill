@@ -5,14 +5,53 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TeachingInteractionsTest {
+    private val legacyClassification = TeachingClassification("classification", "观察还是解释",
+        "为每条陈述选择更准确的类别。",
+        listOf(ClassificationCategory("observation", "数据观察"), ClassificationCategory("explanation", "原因解释")),
+        listOf(
+            ClassificationItem("april", "四月借阅 52 次，高于其他月份。", "observation",
+                "52 次可以直接从数据中读出，不需要补充背景。"),
+            ClassificationItem("festival", "读书节可能提高了四月借阅量。", "explanation",
+                "借阅增加的原因需要额外证据，因此属于解释或假设。"),
+            ClassificationItem("march", "三月比二月少 8 次。", "observation",
+                "两个数相减即可得到差异，属于直接观察。"),
+            ClassificationItem("hours", "开放时间延长导致借阅增加。", "explanation",
+                "这是对变化的因果解释，需要检查开放时间与借阅量的实际关系。"),
+        ), "先问自己：这句话是否能直接从已有数据中读出？",
+        "可直接读取的数值和差异是观察；说明“为什么”的因果陈述是解释，需要额外证据。")
+    private val legacyTrace = TeachingStepTrace("trace", "百分比变化为什么不能直接相加",
+        "某商品价格先由 100 元降到 80 元，再回到 100 元。先预测每一步的变化率。",
+        listOf(
+            TeachingTraceStep("down", "第一次下降",
+                TeachingQuestion("从 100 元降到 80 元，以原价 100 元为基数，下降了百分之几？",
+                    listOf("20%", "25%"), 0,
+                    "20 ÷ 100 = 20%，第一次变化的基数是 100 元。", "用变化量除以这次变化前的数。"),
+                "第一次下降 20%，价格变为 80 元。"),
+            TeachingTraceStep("up", "第二次上涨",
+                TeachingQuestion("从 80 元涨回 100 元，以 80 元为基数，上涨了百分之几？",
+                    listOf("20%", "25%"), 1,
+                    "20 ÷ 80 = 25%，第二次变化的基数已经变成 80 元。", "注意这次计算从哪个数开始。"),
+                "第二次上涨 25%，价格重新回到 100 元。"),
+            TeachingTraceStep("combine", "能否直接相加",
+                TeachingQuestion("−20% 与 +25% 能直接相加当作最终变化吗？",
+                    listOf("能，合计 +5%", "不能，两次基数不同"), 1,
+                    "两次百分比使用了不同基数，最终净值回到 0，不能把百分数当作同一单位直接相加。",
+                    "比较两次百分比的基数是否相同。"),
+                "最终价格仍是 100 元，净变化为 0；百分比变化必须结合基数和先后顺序解释。"),
+        ), "价格最终没有变化。−20% 和 +25% 不能相加，因为第二次的 25% 以 80 元为基数。")
+
     private val chart get() = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>()
         .first { it.mode == TeachingChartMode.LINEAR_DEMAND }
 
     @Test fun everyRegisteredTeachingTypeHasAnOfflineShowcaseLesson() {
-        // JVM17 的密封类型列表自动包含未来新增类型，防止只实现组件却忘记补入同一系列课。
+        // 密封类型自动覆盖未来新增组件；停用类型仅保留旧记录兼容，不要求出现在当前演示目录。
         assertEquals(TeachingChartStyle.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>().map { it.style }.toSet())
         assertEquals(ComparisonPalette.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingComparison>().map { it.palette }.toSet())
-        val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet()
+        val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet() -
+            setOf(TeachingClassification::class.java, TeachingStepTrace::class.java)
+        assertFalse(legacyClassification.isAvailable)
+        assertFalse(legacyTrace.isAvailable)
+        assertTrue(BuiltInTeaching.lessons.flatMap { it.blocks }.all { it.isAvailable })
         val showcased = BuiltInTeaching.lessons.flatMap { it.blocks }.map { it.javaClass }.toSet()
         assertEquals(required, showcased)
         assertEquals(TeachingChartMode.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }
@@ -84,8 +123,7 @@ class TeachingInteractionsTest {
         val sorted = TeachingInteractions.apply(sorting, TeachingState(order = sorting.correctOrder), TeachingAction.Submit)
         assertTrue(sorted.sortComplete(sorting))
 
-        val classification = BuiltInTeaching.lessons.flatMap { it.blocks }
-            .filterIsInstance<TeachingClassification>().single()
+        val classification = legacyClassification
         var assigned = TeachingState()
         classification.items.forEach { item ->
             assigned = TeachingInteractions.apply(classification, assigned,
@@ -122,7 +160,7 @@ class TeachingInteractionsTest {
         assertEquals("nucleus", selected.selection)
         assertTrue(TeachingInteractions.apply(hotspot, selected, TeachingAction.Reveal).revealed)
 
-        val trace = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingStepTrace>().single()
+        val trace = legacyTrace
         val first = trace.steps.first()
         val firstChoice = TeachingInteractions.apply(trace, TeachingState(),
             TeachingAction.Select(first.checkpoint.answer.toString()))

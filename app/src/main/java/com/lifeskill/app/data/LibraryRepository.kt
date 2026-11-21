@@ -6,6 +6,7 @@ import com.lifeskill.app.ai.SkillDraft
 import com.lifeskill.app.ai.TreeDraft
 import com.lifeskill.app.ai.TeachingBlockProtocol
 import com.lifeskill.app.model.BuiltInTeaching
+import com.lifeskill.app.model.isAvailable
 import com.lifeskill.app.model.BuiltInTeachingItem
 import com.lifeskill.app.model.BuiltInTeachingLesson
 import com.lifeskill.app.model.ChatMode
@@ -137,6 +138,11 @@ internal class LibraryRepository(private val database: LifeSkillDatabase, privat
             val turns = dao.turnsForChat(scope.id)
             if (turns.any { it.id != demo.turnId }) continue
             val example = turns.find { it.id == demo.turnId } ?: continue
+            // 已停用组件不参与旧独立课时合并，否则合并后缺少对应新组件会丢失原快照。
+            val legacyBlocks = example.teachingBlocks?.let {
+                TeachingBlockProtocol.decode(JSONArray(secret.open(it, "${example.id}:blocks")))
+            }.orEmpty()
+            if (legacyBlocks.any { !it.isAvailable }) continue
             add(SafeLegacyDemo(demo, example.teachingStates?.let {
                 TeachingBlockProtocol.decodeStates(secret.open(it, "${demo.turnId}:interactions"))
             }.orEmpty()))

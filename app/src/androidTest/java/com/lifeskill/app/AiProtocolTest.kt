@@ -158,7 +158,7 @@ class AiProtocolTest {
         assertTrue(prompt.contains("历史、事件、阶段、制度演变：timeline"))
         assertTrue(prompt.contains("每次教学回复最多用2个组件"))
         assertTrue(prompt.contains("不要把同一顺序同时做成flow和sort"))
-        assertTrue(prompt.contains("只有教学内容确实关于植物细胞结构时才使用hotspot"))
-        assertTrue(prompt.contains("科学和数据分析可优先chart、classify、steps"))
+        assertTrue(prompt.contains("当前只支持plant_cell植物细胞示意图"))
+        assertTrue(prompt.contains("科学和数据分析可优先chart、compare"))
     }
 }

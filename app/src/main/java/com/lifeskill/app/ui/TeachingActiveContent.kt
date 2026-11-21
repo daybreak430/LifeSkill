@@ -6,8 +6,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -46,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.*
 import sh.calvin.reorderable.ReorderableColumn
 import sh.calvin.reorderable.ReorderableItem
-import kotlinx.coroutines.delay
 
 @Composable
 internal fun TeachingFlipCardContent(
@@ -183,99 +180,6 @@ internal fun TeachingSortingContent(
 }
 
 @Composable
-internal fun TeachingClassificationContent(
-    block: TeachingClassification, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
-) {
-    val complete = state.classificationComplete(block)
-    val locked = !enabled
-    Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
-    block.items.forEachIndexed { itemIndex, item ->
-        val assigned = state.placements[item.id]
-        Surface(
-            Modifier.fillMaxWidth().testTag("classification-item-${item.id}"),
-            shape = ControlShape,
-            color = Ground,
-            border = BorderStroke(1.dp, Line),
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Text("${itemIndex + 1}", Modifier.width(24.dp), color = aiColors.accent,
-                        style = MaterialTheme.typography.titleSmall)
-                    Text(item.text, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.bodyMedium)
-                }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    block.categories.forEachIndexed { categoryIndex, category ->
-                        val active = assigned == category.id
-                        val categoryColor = classificationColor(categoryIndex)
-                        val chipColor by animateColorAsState(
-                            if (active) lerp(Panel, categoryColor, .18f) else Panel,
-                            tween(180), label = "分类选中颜色",
-                        )
-                        Box {
-                            Surface(
-                                onClick = { onAction(TeachingAction.Classify(item.id, category.id)) },
-                                enabled = !locked,
-                                modifier = Modifier.heightIn(min = 44.dp)
-                                    .testTag("classification-${item.id}-${category.id}")
-                                    .semantics { selected = active },
-                                shape = CircleShape,
-                                color = chipColor,
-                                border = BorderStroke(1.dp, if (active) categoryColor else Line),
-                            ) {
-                                Box(
-                                    Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(category.title, color = if (active) categoryColor else Ink,
-                                        style = MaterialTheme.typography.labelLarge)
-                                }
-                            }
-                            if (active) {
-                                Surface(
-                                    Modifier.align(Alignment.TopStart).offset((-4).dp, (-4).dp).size(18.dp),
-                                    shape = CircleShape,
-                                    color = categoryColor,
-                                    shadowElevation = 1.dp,
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Mark(Glyph.CHECK, Color.White, Modifier.size(12.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if (complete || state.revealed) {
-                    Text(item.explanation, color = Muted, style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                }
-            }
-        }
-    }
-    AssessmentFeedback(
-        tag = "feedback-classification",
-        submitted = state.submitted,
-        correct = complete,
-        revealed = state.revealed,
-        hint = block.hint,
-        explanation = block.explanation,
-        onReveal = { onAction(TeachingAction.Reveal) },
-        enabled = enabled,
-    )
-    val assignedCount = block.items.count { state.placements[it.id] != null }
-    Button(
-        onClick = { onAction(TeachingAction.Submit) },
-        enabled = enabled && assignedCount == block.items.size && !state.submitted && !complete && !state.revealed,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(if (assignedCount == block.items.size) "提交分类" else "还剩 ${block.items.size - assignedCount} 项")
-    }
-}
-
-@Composable
 internal fun TeachingHotspotContent(
     block: TeachingHotspot, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
 ) {
@@ -388,94 +292,6 @@ private fun PlantCellHotspotImage(
 }
 
 @Composable
-internal fun TeachingStepTraceContent(
-    block: TeachingStepTrace, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
-) {
-    val currentStepRequester = remember { BringIntoViewRequester() }
-    var observedStep by remember { mutableIntStateOf(state.step) }
-    LaunchedEffect(state.step, state.revealed) {
-        if (!state.revealed && state.step > observedStep) {
-            delay(240)
-            currentStepRequester.bringIntoView()
-        }
-        observedStep = state.step
-    }
-    Text(block.introduction, color = Ink, style = MaterialTheme.typography.bodyMedium)
-    val visibleLast = if (state.revealed) block.steps.lastIndex else state.step.coerceIn(0, block.steps.lastIndex)
-    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        for (index in 0..visibleLast) {
-            val step = block.steps[index]
-            val current = !state.revealed && index == state.step
-            Surface(
-                Modifier.fillMaxWidth().testTag("trace-step-${step.id}")
-                    .then(if (current) Modifier.bringIntoViewRequester(currentStepRequester) else Modifier),
-                shape = ControlShape,
-                color = if (current) aiColors.chip else Ground,
-                border = BorderStroke(1.dp, if (current) aiColors.accent.copy(alpha = .4f) else Line),
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${index + 1}. ${step.title}", color = aiColors.accent,
-                        style = MaterialTheme.typography.titleSmall)
-                    if (current) {
-                        Text(step.checkpoint.question, color = Ink, style = MaterialTheme.typography.bodyMedium)
-                        step.checkpoint.options.forEachIndexed { optionIndex, option ->
-                            TeachingOption(choiceAnswer(optionIndex, option),
-                                state.selection?.toIntOrNull() == optionIndex,
-                                enabled && !state.revealed,
-                                Modifier.fillMaxWidth().testTag("trace-choice-${step.id}-$optionIndex"),
-                                { onAction(TeachingAction.Select(optionIndex.toString())) })
-                        }
-                    } else {
-                        Text(step.result, color = Ink, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    if (current && state.submitted) {
-                        val correct = state.currentStepCorrect(block)
-                        Text(
-                            if (correct) step.checkpoint.explanation else step.checkpoint.hint,
-                            color = if (correct) aiColors.accent else Ink,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        )
-                        if (correct) {
-                            Text(step.result, color = Ink, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (state.revealed) {
-        Surface(Modifier.fillMaxWidth(), shape = ControlShape, color = aiColors.chip) {
-            Text(block.summary, Modifier.padding(12.dp), color = Ink,
-                style = MaterialTheme.typography.bodyMedium)
-        }
-        return
-    }
-    val current = block.steps[state.step.coerceIn(0, block.steps.lastIndex)]
-    val correct = state.currentStepCorrect(block)
-    if (state.submitted && !correct) {
-        OutlinedButton(onClick = { onAction(TeachingAction.Reveal) }, enabled = enabled,
-            modifier = Modifier.fillMaxWidth()) { Text("查看完整推演") }
-    }
-    when {
-        correct && state.step < block.steps.lastIndex -> Button(
-            onClick = { onAction(TeachingAction.Advance) },
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("进入下一步") }
-        correct -> Surface(Modifier.fillMaxWidth(), shape = ControlShape, color = aiColors.chip) {
-            Text(block.summary, Modifier.padding(12.dp), color = Ink,
-                style = MaterialTheme.typography.bodyMedium)
-        }
-        else -> Button(
-            onClick = { onAction(TeachingAction.Submit) },
-            enabled = enabled && state.selection != null && !state.submitted,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (state.submitted) "更改预测后可重试" else "提交预测") }
-    }
-}
-
-@Composable
 private fun AssessmentFeedback(
     tag: String, submitted: Boolean, correct: Boolean, revealed: Boolean, hint: String, explanation: String,
     onReveal: () -> Unit, enabled: Boolean,
@@ -497,9 +313,3 @@ private fun AssessmentFeedback(
         }
     }
 }
-
-private fun classificationColor(index: Int): Color = listOf(
-    Color(0xFF2D7B83),
-    Color(0xFFAD6A2F),
-    Color(0xFF7A62AE),
-)[index % 3]
