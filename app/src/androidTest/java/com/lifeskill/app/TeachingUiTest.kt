@@ -208,6 +208,52 @@ class TeachingUiTest {
         }
     }
 
+    @Test fun classificationAllowsChangesAfterCompletionWithoutChipWidthJump() {
+        val lesson = BuiltInTeaching.lessonByKey("practice")!!
+        val block = lesson.blocks.filterIsInstance<TeachingClassification>().single()
+        runBlocking {
+            app.conversations.interact(
+                ChatScope(ChatMode.TUTOR, lesson.id), lesson.turnId, block.id, TeachingAction.Reset,
+            )
+        }
+        openLesson("practice")
+        val firstItem = block.items.first()
+        val correctCategory = block.categories.first { it.id == firstItem.categoryId }
+        val alternateCategory = block.categories.first { it.id != firstItem.categoryId }
+        val firstChip = "classification-${firstItem.id}-${correctCategory.id}"
+        scrollTo(hasTestTag(firstChip))
+        val boundsBefore = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
+        ui.onNodeWithTag(firstChip).performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) {
+            state(lesson, block.id).placements[firstItem.id] == correctCategory.id
+        }
+        val boundsAfter = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
+        assertEquals(boundsBefore.right.value - boundsBefore.left.value,
+            boundsAfter.right.value - boundsAfter.left.value, 0.1f)
+
+        block.items.drop(1).forEach { item ->
+            val tag = "classification-${item.id}-${item.categoryId}"
+            scrollTo(hasTestTag(tag))
+            ui.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
+        }
+        ui.waitUntil(8_000) {
+            block.items.all { state(lesson, block.id).placements[it.id] == it.categoryId }
+        }
+        scrollTo(hasText("提交分类"))
+        ui.onNodeWithText("提交分类").performClick()
+        ui.waitUntil(8_000) { state(lesson, block.id).classificationComplete(block) }
+
+        val alternateChip = "classification-${firstItem.id}-${alternateCategory.id}"
+        scrollTo(hasTestTag(alternateChip))
+        ui.onNodeWithTag(alternateChip).performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) {
+            state(lesson, block.id).placements[firstItem.id] == alternateCategory.id &&
+                !state(lesson, block.id).submitted
+        }
+        scrollTo(hasText("提交分类"))
+        ui.onNodeWithText("提交分类").assertIsEnabled()
+    }
+
     @Test fun stepTraceAdvancesAcrossMultipleCheckpoints() {
         val lesson = BuiltInTeaching.lessonByKey("practice")!!
         runBlocking {

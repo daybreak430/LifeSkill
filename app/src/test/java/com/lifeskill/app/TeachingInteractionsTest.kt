@@ -95,6 +95,20 @@ class TeachingInteractionsTest {
         assertFalse(compared.classificationComplete(classification))
         assertEquals(1, compared.attempts)
         assertTrue(TeachingInteractions.apply(classification, compared, TeachingAction.Reveal).revealed)
+
+        var correctPlacements = TeachingState()
+        classification.items.forEach { item ->
+            correctPlacements = TeachingInteractions.apply(classification, correctPlacements,
+                TeachingAction.Classify(item.id, item.categoryId))
+        }
+        val completed = TeachingInteractions.apply(classification, correctPlacements, TeachingAction.Submit)
+        assertTrue(completed.classificationComplete(classification))
+        val firstItem = classification.items.first()
+        val changed = TeachingInteractions.apply(classification, completed,
+            TeachingAction.Classify(firstItem.id,
+                classification.categories.first { it.id != firstItem.categoryId }.id))
+        assertFalse(changed.submitted)
+        assertFalse(changed.classificationComplete(classification))
     }
 
     @Test fun hotspotAndStepTraceExposeAnswersOnlyThroughExplicitActions() {

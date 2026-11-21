@@ -153,9 +153,10 @@ internal object TeachingInteractions {
             }, submitted = false)
         }
         is TeachingAction.Classify -> {
-            if (block !is TeachingClassification || previous.revealed || previous.classificationComplete(block) ||
+            if (block !is TeachingClassification || previous.revealed ||
                 block.items.none { it.id == action.key } || block.categories.none { it.id == action.category }
             ) invalid()
+            if (previous.placements[action.key] == action.category) return previous
             previous.copy(
                 placements = previous.placements.filterValues { category ->
                     block.categories.any { it.id == category }

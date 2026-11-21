@@ -172,7 +172,7 @@ internal fun TeachingClassificationContent(
     block: TeachingClassification, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
 ) {
     val complete = state.classificationComplete(block)
-    val locked = !enabled || complete || state.revealed
+    val locked = !enabled || state.revealed
     Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
     block.items.forEachIndexed { itemIndex, item ->
         val assigned = state.placements[item.id]
@@ -195,24 +195,33 @@ internal fun TeachingClassificationContent(
                     block.categories.forEachIndexed { categoryIndex, category ->
                         val active = assigned == category.id
                         val categoryColor = classificationColor(categoryIndex)
-                        Surface(
-                            onClick = { onAction(TeachingAction.Classify(item.id, category.id)) },
-                            enabled = !locked,
-                            modifier = Modifier.heightIn(min = 44.dp)
-                                .testTag("classification-${item.id}-${category.id}")
-                                .semantics { selected = active },
-                            shape = CircleShape,
-                            color = if (active) lerp(Panel, categoryColor, .18f) else Panel,
-                            border = BorderStroke(1.dp, if (active) categoryColor else Line),
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        Box {
+                            Surface(
+                                onClick = { onAction(TeachingAction.Classify(item.id, category.id)) },
+                                enabled = !locked,
+                                modifier = Modifier.heightIn(min = 44.dp)
+                                    .testTag("classification-${item.id}-${category.id}")
+                                    .semantics { selected = active },
+                                shape = CircleShape,
+                                color = if (active) lerp(Panel, categoryColor, .18f) else Panel,
+                                border = BorderStroke(1.dp, if (active) categoryColor else Line),
                             ) {
-                                if (active) Mark(Glyph.CHECK, categoryColor, Modifier.size(15.dp))
-                                Text(category.title, color = if (active) categoryColor else Ink,
-                                    style = MaterialTheme.typography.labelLarge)
+                                Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                    Text(category.title, color = if (active) categoryColor else Ink,
+                                        style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                            if (active) {
+                                Surface(
+                                    Modifier.align(Alignment.TopStart).offset((-4).dp, (-4).dp).size(18.dp),
+                                    shape = CircleShape,
+                                    color = categoryColor,
+                                    shadowElevation = 1.dp,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Mark(Glyph.CHECK, Color.White, Modifier.size(12.dp))
+                                    }
+                                }
                             }
                         }
                     }
