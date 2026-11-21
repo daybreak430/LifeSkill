@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-21，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `bb29bb66a3d63e2212f1d53cda11d3c562417827` |
-| 最新版本 | `0.15.13` |
-| `versionCode` | `100` |
-| 标签 | `v0.15.13` |
-| Release | [LifeSkill 0.15.13](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.13) |
-| APK 文件名 | `LifeSkill-0.15.13-release.apk` |
+| 最新产品与发布提交 | `22fec957e9f10ceeab349821e873961c89264700` |
+| 最新版本 | `0.15.14` |
+| `versionCode` | `101` |
+| 标签 | `v0.15.14` |
+| Release | [LifeSkill 0.15.14](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.14) |
+| APK 文件名 | `LifeSkill-0.15.14-release.apk` |
 | APK 大小 | `18,250,215` bytes |
-| APK SHA-256 | `c999fa85a505e94bb4d26714f0d5f900ecd1f34cfca1c072c6315315f25781d1` |
+| APK SHA-256 | `23275733a26ead43a85fdff0530be9ecac94e268d2569976aac5c78f00750c45` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.13..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.14..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`v0.15.13` 之后已有未发布改动（下一个版本号建议 `0.15.14`）：提示阶梯、数据图表通用预测、小游戏运行时重写（铺满画布、拖动、自绘样式）与「禁止换皮选择题」的生成约束。这些改动已完成构建、单元测试、`lintDebug` 和 47 项教学相关仪器测试，但尚未签名发布，也未在真机与低版本 WebView 上验收。
+`0.15.14` 已发布：标签指向 `22fec95`，Release 附件 SHA-256 与本地 APK 一致。本次覆盖升级在同一模拟器上验证，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -81,6 +81,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.11` | 停用分类和分步推演；移除演示安装与渲染、过滤 AI 输入输出、拒绝迟到互动；旧快照保留。 |
 | `v0.15.12` | 新增原生杠杆实验台：力与力臂调节、拖动重物、实时平衡结果、共享状态放大、AI配置与实际参数摘要；标记1021追加到visual会话。 |
 | `v0.15.13` | 新增短代码小游戏与放大运行器；只保留一个对比演示；重新学习改为居中遮罩loading；强化旧课重学组件选择并做真实模型验证。 |
+| `v0.15.14` | 答题与翻卡支持1–3级提示阶梯；任意数据图表可先预测后揭晓；小游戏画布铺满、支持拖拽与自绘样式，修复遮挡与空缺；生成约束禁止换皮选择题。 |
 
 对应提交如下：
 
@@ -96,6 +97,18 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.11` | `e480eb8` |
 | `v0.15.12` | `71c800e` |
 | `v0.15.13` | `bb29bb6` |
+| `v0.15.14` | `22fec95` |
+
+## 0.15.14 的验证证据
+
+`./scripts/build-release.sh` 完成构建、zipalign、签名与校验。Android 16 / Pixel 9 Pro AVD 上：
+
+- 构建与 `lintDebug`、单元测试通过；教学相关仪器测试 47 项通过：`TeachingUiTest` 14、`TeachingStorageTest` 11、`AiProtocolTest` 7、`TeachingGameUiTest` 5（含拖拽手势用例）、`TeachingGameStorageTest` 4、`HintLadderTest` 6。
+- 人工验证：小游戏说明文字不再被画布遮挡、画布铺满、按钮在底部、点击加分正常；单选三级提示逐级展开且末级按钮消失；翻卡提示在卡片外侧逐级显示。
+- 覆盖升级：同一模拟器从 0.15.13 升级到 0.15.14，`firstInstallTime` 保持不变；签名证书 SHA-256 与上一发布版一致（`AD:01:E1:…:0A`）。
+- GitHub Release 附件与本地 APK 逐字节一致，SHA-256 为 `23275733…0c45`。
+
+本次未做真机、Android 8–9 WebView 验收，也未用真实模型重新抽样「是否会生成拖拽型而非点击型」的游戏。既有内置「凑出一整个」仍是按钮型演示，未改写。
 
 ## 0.15.13 的验证证据
 
@@ -139,7 +152,7 @@ adb shell am instrument -w -e class com.lifeskill.app.TeachingUiTest,com.lifeski
 - 图片热点目前只支持内置 `plant_cell` 植物细胞模板，其他空间主题不能传入模型图片 URL。
 - 演示课和组件遵循用户删除优先。覆盖安装不会自动恢复，必须由用户在「新领域」主动恢复。
 - 当前没有 GitHub Actions 等自动发布流水线，构建、签名、覆盖升级、标签和 Release 附件一致性仍需人工验证。
-- 正式 APK 仍需沿用既有发布证书；签名密钥、密码、模型 Key 和用户数据不得写入仓库或交接文档。
+- 正式 APK 沿用本机调试证书（`~/.android/debug.keystore`，证书 SHA-256 `AD:01:E1:…:0A`）。这是历史发布一直使用的证书，换成新的正式证书会让老用户无法覆盖升级，必须由用户明确决定；该文件丢失后也无法再产出可覆盖安装的包。签名密钥、密码、模型 Key 和用户数据不得写入仓库或交接文档。
 - 用户要求的组件生成验证应使用 macOS 钥匙串中的 DeepSeek 或 MiniMax 凭据。不要擅自改用本地千问模型，也不要输出 Key 内容。
 
 ## 建议的接手顺序
