@@ -34,7 +34,12 @@ enum class TeachingChartMode { DATA, LINEAR_DEMAND }
 data class TeachingPoint(val label: String, val value: Double)
 data class TeachingQuestion(
     val question: String, val options: List<String>, val answer: Int, val explanation: String, val hint: String,
-)
+    // 提示阶梯：由浅入深，最多三级。旧快照只有单个 hint，读取时回退为一级，避免升级后丢提示。
+    val hints: List<String> = emptyList(),
+) {
+    val hintLevels: List<String>
+        get() = hints.ifEmpty { if (hint.isBlank()) emptyList() else listOf(hint) }
+}
 data class TeachingChart(
     override val id: String, override val title: String, val xLabel: String, val yLabel: String,
     val points: List<TeachingPoint> = emptyList(), val mode: TeachingChartMode = TeachingChartMode.DATA,
@@ -51,7 +56,11 @@ data class TeachingQuiz(
 
 data class TeachingFlipCard(
     override val id: String, override val title: String, val prompt: String, val answer: String, val hint: String,
-) : TeachingBlock
+    val hints: List<String> = emptyList(),
+) : TeachingBlock {
+    val hintLevels: List<String>
+        get() = hints.ifEmpty { if (hint.isBlank()) emptyList() else listOf(hint) }
+}
 
 data class TeachingSortItem(val id: String, val text: String)
 data class TeachingSorting(
@@ -92,6 +101,8 @@ data class TeachingState(
     val order: List<String> = emptyList(), val placements: Map<String, String> = emptyMap(), val step: Int = 0,
     val lever: LeverParameters? = null,
     val gameOpened: Boolean = false,
+    // 已展开的提示层级：0 表示只用第 1 条，1 表示已看到第 2 条，以此类推。
+    val hintLevel: Int = 0,
 )
 
 sealed interface TeachingAction {
@@ -105,6 +116,8 @@ sealed interface TeachingAction {
     data object Flip : TeachingAction
     data object Advance : TeachingAction
     data object Reveal : TeachingAction
+    /** 再展开一级提示，不直接给出答案。 */
+    data object Hint : TeachingAction
     data object Submit : TeachingAction
     data object Reset : TeachingAction
 }
@@ -192,6 +205,16 @@ internal object TeachingInteractions {
                 !previous.currentStepCorrect(block) || previous.step >= block.steps.lastIndex
             ) invalid()
             previous.copy(selection = null, submitted = false, step = previous.step + 1)
+        }
+        TeachingAction.Hint -> {
+            val levels = when (block) {
+                is TeachingQuiz -> block.question.hintLevels
+                is TeachingFlipCard -> block.hintLevels
+                else -> emptyList()
+            }
+            // 提示只能逐级展开；已看完整答案或没有下一级时拒绝，避免重复点击把层级推高。
+            if (previous.revealed || previous.hintLevel >= levels.lastIndex) invalid()
+            previous.copy(hintLevel = previous.hintLevel + 1)
         }
         TeachingAction.Reveal -> {
             val valid = when (block) {
@@ -306,16 +329,26 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
         val prediction = state.prediction?.let { block.prediction?.options?.getOrNull(it) }
         if (block.prediction != null && !state.revealed) "预测：${prediction ?: "尚未选择"}，尚未验证"
         else "预测：${prediction ?: "无"}；已观察价格 ${price.roundToInt()} 元，需求量 ${block.demandAt(price).roundToInt()} ${block.quantityUnit}"
-    } else state.selection?.toIntOrNull()?.let { block.points.getOrNull(it) }?.let { "查看 ${it.label}：${it.value}" }.orEmpty()
+    } else {
+        val predicted = state.prediction?.let { block.prediction?.options?.getOrNull(it) }
+        val viewed = state.selection?.toIntOrNull()?.let { block.points.getOrNull(it) }?.let { "查看 ${it.label}：${it.value}" }.orEmpty()
+        when {
+            block.prediction == null -> viewed
+            !state.revealed -> "预测：${predicted ?: "尚未选择"}，尚未验证"
+            else -> "预测：${predicted ?: "无"}；已揭晓数据" + if (viewed.isEmpty()) "" else "，$viewed"
+        }
+    }
     is TeachingQuiz -> state.selection?.toIntOrNull()?.let { index ->
+        val hint = if (state.hintLevel > 0) "；已展开 ${state.hintLevel + 1} 级提示" else ""
         "随堂作答：${block.question.options.getOrNull(index).orEmpty()}；" + when {
-            !state.submitted -> "未提交"
-            state.revealed -> "已查看完整答案，正确选项为 ${choiceAnswer(block.question.answer, block.question.options[block.question.answer])}"
-            index == block.question.answer -> "答对"
-            else -> "答错，尝试 ${state.attempts} 次（不计课时完成）"
+            !state.submitted -> "未提交" + hint
+            state.revealed -> "已查看完整答案，正确选项为 ${choiceAnswer(block.question.answer, block.question.options[block.question.answer])}" + hint
+            index == block.question.answer -> "答对" + hint
+            else -> "答错，尝试 ${state.attempts} 次（不计课时完成）" + hint
         }
     }.orEmpty()
-    is TeachingFlipCard -> if (state.selection == "back") "已翻看答案" else "仍在回忆"
+    is TeachingFlipCard -> (if (state.selection == "back") "已翻看答案" else "仍在回忆") +
+        if (state.hintLevel > 0) "；已展开 ${state.hintLevel + 1} 级提示" else ""
     is TeachingSorting -> when {
         state.revealed -> "已查看正确顺序"
         !state.submitted -> "已调整顺序，尚未提交"

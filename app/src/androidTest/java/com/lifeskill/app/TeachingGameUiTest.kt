@@ -93,6 +93,42 @@ class TeachingGameUiTest {
         back()
     }
 
+    @Test fun dragGestureMovesPieceAndCompletes() {
+        // 拖动型小游戏：验证 pointerdown/move/up 能穿过 WebView 到达 Worker，而不是只支持点击。
+        val code = "let x=20,held=false;const target=80;" +
+            "game.draw([['rect',5,45,90,8,'#cfe'],['circle',target,49,4,'#c9a227'],['circle',x,49,5,'#276B91']]);" +
+            "game.onPointer(p=>{if(p.phase==='down'&&Math.abs(p.x-x)<14)held=true;" +
+            "else if(p.phase==='up'&&held){held=false;if(Math.abs(p.x-target)<6)game.finish('到位');else game.say('还没到');}});"
+        show(sample.copy(code = code))
+        ui.onNodeWithTag("game-open-${sample.id}").performClick()
+        awaitState("ready")
+        val start = canvasOffset(0.20, 0.49)
+        val end = canvasOffset(0.80, 0.49)
+        ui.onNodeWithTag("game-webview").performTouchInput {
+            down(start)
+            moveTo(androidx.compose.ui.geometry.Offset((start.x + end.x) / 2, (start.y + end.y) / 2))
+            moveTo(end)
+            up()
+        }
+        awaitState("finished")
+        back()
+    }
+
+    private fun canvasOffset(fractionX: Double, fractionY: Double): Offset {
+        val rectangle = JSONArray(
+            evaluate(
+                "(()=>{const r=document.querySelector('canvas').getBoundingClientRect();" +
+                    "return [r.left,r.top,r.width,r.height,innerWidth];})()",
+            ),
+        )
+        val native = checkNotNull(view())
+        val ratio = ui.runOnUiThread { native.width } / rectangle.getDouble(4)
+        return Offset(
+            ((rectangle.getDouble(0) + rectangle.getDouble(2) * fractionX) * ratio).toFloat(),
+            ((rectangle.getDouble(1) + rectangle.getDouble(3) * fractionY) * ratio).toFloat(),
+        )
+    }
+
     private fun show(game: TeachingGame) {
         ui.runOnUiThread { ui.activity.setContent { LifeSkillTheme(false) {
             TeachingContent(Turn("game-ui", Speaker.ASSISTANT, TurnKind.MESSAGE, "说明", teachingBlocks = listOf(game)), true) { _, _ -> }

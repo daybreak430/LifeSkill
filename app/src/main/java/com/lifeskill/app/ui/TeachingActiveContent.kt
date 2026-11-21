@@ -56,6 +56,8 @@ internal fun TeachingFlipCardContent(
         animationSpec = tween(520, easing = FastOutSlowInEasing),
         label = "知识翻卡",
     )
+    val hintLevels = block.hintLevels
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Surface(
         modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp).testTag("flip-card")
             .graphicsLayer {
@@ -86,7 +88,7 @@ internal fun TeachingFlipCardContent(
                         style = if (answerFace) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
                         color = Ink)
                     Spacer(Modifier.height(14.dp))
-                    Text(if (answerFace) block.hint else "想好后翻开核对",
+                    Text(if (answerFace) "核对后翻回继续" else "想好后翻开核对",
                         style = MaterialTheme.typography.bodySmall, color = Muted)
                     Spacer(Modifier.height(18.dp))
                     Button(
@@ -100,6 +102,19 @@ internal fun TeachingFlipCardContent(
                 }
             }
         }
+    }
+    // 提示放在卡片外侧，翻面前逐级展开，避免把答案面的提示当成解题线索。
+    if (!back && hintLevels.isNotEmpty()) {
+        val shown = hintLevels.take((state.hintLevel + 1).coerceAtMost(hintLevels.size))
+        if (state.hintLevel > 0) Text(
+            shown.joinToString("\n"), color = Ink, style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (state.hintLevel < hintLevels.lastIndex) TextButton(
+            onClick = { onAction(TeachingAction.Hint) }, enabled = enabled,
+            modifier = Modifier.testTag("flip-hint"),
+        ) { Text(if (state.hintLevel == 0) "看提示" else "再给一点提示") }
+    }
     }
 }
 

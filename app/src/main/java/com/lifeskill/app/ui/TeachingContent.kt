@@ -233,8 +233,20 @@ private fun PracticeContent(block: TeachingQuiz, state: TeachingState, enabled: 
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(if (correct) "理解正确" else if (state.revealed) "完整答案" else "再想一步",
                     color = aiColors.accent, style = MaterialTheme.typography.titleSmall)
-                Text(if (correct || state.revealed) question.explanation else question.hint,
-                    color = Ink, style = MaterialTheme.typography.bodyMedium)
+                if (correct || state.revealed) {
+                    Text(question.explanation, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    // 逐级提示：先给方向，再给关键条件；学生可停在任何一级自行重试。
+                    val levels = question.hintLevels
+                    val shown = levels.take((state.hintLevel + 1).coerceAtMost(levels.size))
+                    shown.forEach { hint ->
+                        Text(hint, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (state.hintLevel < levels.lastIndex) TextButton(
+                        onClick = { onAction(TeachingAction.Hint) }, enabled = enabled,
+                        modifier = Modifier.fillMaxWidth().testTag("quiz-hint-${block.id}"),
+                    ) { Text(if (state.hintLevel == 0) "再给一点提示" else "最后一点提示") }
+                }
                 if (!correct && state.revealed) {
                     Text("正确选项：${choiceAnswer(question.answer, question.options[question.answer])}",
                         color = Ink, style = MaterialTheme.typography.bodyMedium)

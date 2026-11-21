@@ -72,7 +72,7 @@ internal object TeachingBlockProtocol {
                     }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
                     "flip" -> TeachingFlipCard(id, title, json.text("prompt", 600), json.text("answer", 1_200),
-                        json.text("hint", 400))
+                        json.optString("hint").trim().take(400), json.hintList())
                     "sort" -> {
                         val items = json.array("items", 3..6).objects().map { item ->
                             TeachingSortItem(item.key("id"), item.text("text", 300))
@@ -149,7 +149,8 @@ internal object TeachingBlockProtocol {
                 }
                 is TeachingQuiz -> put("type", "quiz").put("question", block.question.json())
                 is TeachingFlipCard -> put("type", "flip").put("prompt", block.prompt).put("answer", block.answer)
-                    .put("hint", block.hint)
+                    .put("hint", block.hintLevels.firstOrNull().orEmpty())
+                    .apply { if (block.hintLevels.size > 1) put("hints", JSONArray(block.hintLevels)) }
                 is TeachingSorting -> {
                     put("type", "sort").put("prompt", block.prompt).put("items", JSONArray().apply {
                         block.items.forEach { put(JSONObject().put("id", it.id).put("text", it.text)) }
@@ -199,7 +200,8 @@ internal object TeachingBlockProtocol {
             .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction)
             .put("revealed", state.revealed).put("order", JSONArray(state.order))
             .put("placements", JSONObject(state.placements)).put("step", state.step)
-            .put("lever", state.lever?.json()).put("gameOpened", state.gameOpened)) }
+            .put("lever", state.lever?.json()).put("gameOpened", state.gameOpened)
+            .put("hintLevel", state.hintLevel)) }
     }.toString()
 
     fun decodeStates(raw: String?): Map<String, TeachingState> = runCatching {
@@ -232,6 +234,7 @@ internal object TeachingBlockProtocol {
                 prediction = (state.opt("prediction") as? Number)?.toInt(),
                 revealed = state.optBoolean("revealed"), order = order, placements = placements,
                 step = state.optInt("step").coerceAtLeast(0),
+                hintLevel = state.optInt("hintLevel").coerceIn(0, 2),
             )
         }
     }.getOrDefault(emptyMap())
@@ -241,10 +244,24 @@ internal object TeachingBlockProtocol {
         val answer = (get("answer") as Number).toDouble()
         require(answer.isFinite() && answer == answer.toInt().toDouble() && answer.toInt() in options.indices)
         require(options.distinct().size == options.size)
-        return TeachingQuestion(text("text", 600), options, answer.toInt(), text("explanation", 800), text("hint", 400))
+        val hints = hintList()
+        val hint = optString("hint").trim().take(400)
+        // 反馈必须能给出一条可用的线索；旧快照只有 hint，新数据用 hints 表达逐级提示。
+        require(hints.isNotEmpty() || hint.isNotEmpty())
+        return TeachingQuestion(text("text", 600), options, answer.toInt(), text("explanation", 800), hint, hints)
+    }
+    private fun JSONObject.hintList(): List<String> {
+        val array = optJSONArray("hints") ?: return emptyList()
+        require(array.length() in 1..3)
+        return List(array.length()) { index ->
+            (array.get(index) as String).trim().also { require(it.length in 1..400 && '\u0000' !in it) }
+        }
     }
     private fun TeachingQuestion.json() = JSONObject().put("text", question).put("options", JSONArray(options))
-        .put("answer", answer).put("explanation", explanation).put("hint", hint)
+        .put("answer", answer).put("explanation", explanation)
+        // 同时写回单条 hint 与完整阶梯，旧版本读取时仍能拿到第一条线索。
+        .put("hint", hintLevels.firstOrNull().orEmpty())
+        .apply { if (hintLevels.size > 1) put("hints", JSONArray(hintLevels)) }
     private fun JSONObject.key(name: String): String = text(name, 40).also { require(identifier.matches(it)) }
     private fun JSONObject.text(name: String, limit: Int): String = (get(name) as String).trim().also {
         require(it.length in 1..limit && '\u0000' !in it)
@@ -270,7 +287,7 @@ internal object TeachingBlockProtocol {
         - 历史、事件、阶段、制度演变：timeline；需要比较原因、影响或易混概念时加compare。
         - 操作步骤、交易链路、判断分支、反馈循环：flow；需要让学生亲自恢复顺序时用sort。
         - 两个概念、方案、优缺点或易混项：compare。
-        - 定量趋势、分类比较、累计走势、价格与数量关系：chart，并按line/bar/area或固定linear_demand模板选择。
+        - 定量趋势、分类比较、累计走势、价格与数量关系：chart，并按line/bar/area或固定linear_demand模板选择。结论有明确对错预期时（涨还是跌、峰值在第几个月、两条线是否交叉、某点是否超过阈值），在chart上加prediction，先让学生预测，点“验证预测”后才显示图表；预测只做客观方向或取值判断，不出主观题，也不要每题都加。
         - 定义、条件、公式前提需要先回忆：flip。
         - 只需快速检验一个关键误区：quiz。
         - hotspot用于“先定位、再观察局部、联系结构与功能”，只有空间位置本身能帮助回答当前问题、且内置图确实包含目标结构时才选。当前只支持plant_cell植物细胞示意图；仅介绍细胞功能、背诵术语、讨论细胞分裂过程时不必使用热点，分别考虑文字、flip或flow。其他空间主题不得套用该图。
@@ -279,10 +296,10 @@ internal object TeachingBlockProtocol {
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
         - 探索杠杆受力、距离与平衡关系：experiment/lever。仅适用于理想轻杆、固定支点、两侧竖直向下受力；不计杆重、摩擦、振荡，倾角仅表示下沉方向。不能套用于其他物理系统。AI只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。
         experiment仅支持model:lever，initial四项必填：leftForce/rightForce为1–10 N整数；leftArm/rightArm为到支点的水平距离，1–4 m，步长0.5 m。坐标与动画由应用计算。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
-        小游戏 game：先判断当前学习阶段是否需要学习者通过“操作→观察后果→调整策略”练习本节知识。适合已讲清概念后的配对组合、资源取舍、空间操作、规则探索等；只有玩的时候会实际用到目标知识才生成。简单定义、普通追问、已有组件已能表达或尚未讲清必要知识时不生成；不得为热闹强行加游戏，不做换皮选择题，不恢复已停用分类/推演组件。通常0个，需要时本轮只给1个game主组件，reply短讲目标与入口，不重复代码。
-        game包含goal（可检验学习目标）、instructions（一句话玩法）、code（JavaScript代码）。代码目标800–2400字符，硬上限4000字符（含空格），一个场景、一种核心操作、约30–90秒；没有外部库、素材、HTML/CSS/DOM、网络、音频、持久化或定时器，不写无限循环，不造复杂引擎。超过预算时简化玩法，不截断代码。只能使用JS基础语法和game API，代码直接执行初始化。
-        游戏在放大后启动。当前只支持画布点击与按钮驱动的短回合玩法，不生成拖动、键盘或实时反应游戏。逻辑运行在Worker内，画布为0–100的正方形坐标，手机横竖屏一致；文字使用短中文。API：game.draw(commands)替换整幅画面，最多160条；commands支持['text',文字,x,y,字号2–10,颜色]、['rect',x,y,w,h,颜色]、['circle',x,y,r,颜色]、['line',x1,y1,x2,y2,颜色,线宽0.2–4]，颜色为#RGB或#RRGGBB。game.say(反馈文字)更新画布上方提示；game.buttons([{id,label}])最多6个操作按钮；game.onTap((x,y)=>{})接收画布点击，game.onAction(id=>{})接收按钮点击；game.finish(总结文字)标记本局完成并解释知识。所有回调必须快速返回，不使用requestAnimationFrame/setInterval/setTimeout。不要调用浏览器、宿主或Worker的其他接口。应用提供重开和关闭，游戏不需要自己画功能图标。
-        示例：{"id":"fraction_game","type":"game","title":"凑出一整个","goal":"通过组合分数理解和为1","instructions":"点击分数块凑成1，超过1就换一种组合。","code":"let sum=0;function show(){game.say('当前合计 '+sum+'/4，试着凑成4/4');game.draw([['text',sum+'/4',40,48,8,'#276B91']]);}game.buttons([{id:'1',label:'加1/4'},{id:'2',label:'加1/2'},{id:'reset',label:'清空'}]);game.onAction(id=>{if(id==='reset')sum=0;else sum+=Number(id);show();if(sum===4)game.finish('4/4就是1：相同分母的分数相加，把分子相加。');else if(sum>4)game.say('超过1了，清空后换一种组合。');});show();"}
+        小游戏 game：先判断当前学习阶段是否需要学习者通过“操作→观察后果→调整策略”练习本节知识。只有玩的时候会实际用到目标知识才生成；简单定义、普通追问、已有组件已能表达或尚未讲清必要知识时不生成。不做换皮选择题：不得用按钮选答案、不得把文字选项归类或判断对错，这类内容用 quiz、sort 或文字。优先要求实际动手：拖动归位、配对连线、拼装组合、把参数调到目标、规划路径、分配资源、把握时机。通常0个，需要时本轮只给1个game主组件，reply短讲目标与入口，不重复代码。
+        game包含goal（可检验学习目标）、instructions（一句话玩法）、code（JavaScript代码）。代码目标900–2400字符，硬上限4000字符（含空格），一个场景、一种核心操作、约30–90秒；没有外部库、素材、HTML/CSS/DOM、网络、音频、持久化或定时器，不写无限循环，不造复杂引擎。超过预算时简化玩法，不截断代码。只能使用JS基础语法和game API，代码直接执行初始化。
+        游戏在放大后启动，画布铺满可用区域，x、y 都是 0–100，横竖屏按比例伸展；文字用短中文，字号2–10按短边换算。允许并鼓励自绘界面：game.hud(false) 隐藏宿主提示条，game.background('#f4efe6') 设置底色，标题、进度、得分都用 game.draw 自己排版，不要每局都做成同一种卡片。API：game.draw(commands) 替换整幅画面，最多160条；commands 支持 ['text',文字,x,y,字号2–10,颜色,对齐]（对齐可省略，center/right）、['rect',x,y,w,h,颜色,圆角]（圆角0–20可省略）、['circle',x,y,r,颜色]、['line',x1,y1,x2,y2,颜色,线宽0.2–4]，颜色为 #RGB 或 #RRGGBB。game.say(反馈文字) 更新提示条；game.buttons([{id,label}]) 最多6个按钮，只用于“重开、下一步、确认”等辅助操作，不能用来选择答案；game.onPointer(({phase,x,y})=>{}) 接收 down/move/up 拖动，game.onTap((x,y)=>{}) 接收点击，game.onAction(id=>{}) 接收按钮，game.finish(总结文字) 标记完成并解释知识。所有回调必须快速返回，不使用 requestAnimationFrame/setInterval/setTimeout。不要调用浏览器、宿主或 Worker 的其他接口。应用提供重开和关闭，游戏不需要自己画功能图标。
+        示例（拖动型）：{"id":"balance","type":"game","title":"把砝码拖到平衡位","goal":"理解力臂与力矩的关系","instructions":"拖动砝码，让两端力矩相等。","code":"let x=25,y=60,held=false;const target=70;function draw(){game.draw([['rect',5,55,90,4,'#9bb'],['rect',0,50,5,14,'#667'],['circle',target,57,4,'#c9a227'],['circle',x,y,5,held?'#276B91':'#4a8fbf'],['text',''+Math.round(x)+' : '+Math.round(100-x),50,16,5,'#276B91','center']]);}game.onPointer(p=>{if(p.phase==='down'&&Math.hypot(p.x-x,p.y-y)<10)held=true;else if(p.phase==='move'&&held){x=Math.max(8,Math.min(92,p.x));draw();}else if(p.phase==='up'&&held){held=false;if(Math.abs(x-target)<4)game.finish('两端力矩相等时杠杆平衡：力臂越长，需要的力越小。');else game.say('还差一点，注意两边力臂的比例。');}});draw();"}
         分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
         使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
@@ -290,15 +307,16 @@ internal object TeachingBlockProtocol {
         {"id":"f","type":"flow","title":"操作流程","diagram":"flowchart TD\nA[核对] --> B{一致}\nB -->|是| C[归档]\nB -->|否| D[复核]\nD --> A","details":{"A":"核对依据","B":"判断条件","C":"完成后的产物","D":"如何复核"}}
         {"id":"c","type":"compare","title":"对比","columns":["概念一","概念二"],"dimensions":[{"id":"cause","title":"变化原因","values":["第一项的原因","第二项的原因"]}]}
         {"id":"p","type":"chart","title":"趋势","model":"data","xLabel":"年份","yLabel":"数量（件）","points":[{"label":"2024","value":20},{"label":"2025","value":30}]}
-        {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hint":"不直接揭示答案的线索","explanation":"原理与解释"}}
-        {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hint":"先关注适用条件。"}
+        {"id":"q","type":"quiz","title":"随堂练习","question":{"text":"完整问题","options":["选项一","选项二"],"answer":0,"hints":["先回想要比较的两个量","注意基数不同"],"explanation":"原理与解释"}}
+        {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hints":["先关注适用条件"]}
         {"id":"s","type":"sort","title":"排出顺序","prompt":"调整为合理步骤。","items":[{"id":"a","text":"第一步文本"},{"id":"b","text":"第二步文本"},{"id":"c","text":"第三步文本"}],"correctOrder":["a","b","c"],"hint":"先确定起点。","explanation":"完整顺序和原因"}
         {"id":"lab","type":"experiment","model":"lever","title":"杠杆实验台","prompt":"移动右侧重物，试着让杠杆平衡。","initial":{"leftForce":4,"rightForce":2,"leftArm":2,"rightArm":3}}
         {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
         compare 可选 palette 为 blue_amber、violet_teal、rose_sage，按对比主题选择。chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
         也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；对比2–3列、1–5个维度，每个values与columns等长；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
+        quiz 与 flip 可用 hints 给 1–3 级提示，由浅入深：第一级只指方向，中间级点出关键条件，最后一级接近方法但不得直接报出答案；只有一条线索时写单个 hint 即可。提示按需展开，不要一上来就给最后一级。
         反馈统一采用“先提示、允许重试、由学生主动查看完整答案”：错误反馈先给不解题的hint，不要直接在reply重复正确答案；explanation和correctOrder等答案字段只供原生组件在学生查看答案后使用。
-        价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块。其他图表不可声称能计算任意公式。
+        价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块，规则与普通图表相同。其他图表不可声称能计算任意公式。
         quiz 是随堂反馈，点击和答对均不能点亮课时。正式课后练习继续按原有kind、question、choices、exerciseId协议，不得用blocks绕过题序。正式评估或待答题期间不要附加blocks。历史中的互动记录仅是学习证据，不能单独作为通过课后练习的依据。
     """.trimIndent()
 }
