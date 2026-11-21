@@ -153,15 +153,17 @@ internal object TeachingInteractions {
             }, submitted = false)
         }
         is TeachingAction.Classify -> {
-            if (block !is TeachingClassification || previous.revealed ||
-                block.items.none { it.id == action.key } || block.categories.none { it.id == action.category }
+            if (block !is TeachingClassification || block.items.none { it.id == action.key } ||
+                block.categories.none { it.id == action.category }
             ) invalid()
             if (previous.placements[action.key] == action.category) return previous
+            // 改选会退出完整答案视图，并恢复本次分类提交能力。
             previous.copy(
                 placements = previous.placements.filterValues { category ->
                     block.categories.any { it.id == category }
                 } + (action.key to action.category),
                 submitted = false,
+                revealed = false,
             )
         }
         TeachingAction.Flip -> {

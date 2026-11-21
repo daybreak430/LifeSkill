@@ -94,7 +94,12 @@ class TeachingInteractionsTest {
         val compared = TeachingInteractions.apply(classification, assigned, TeachingAction.Submit)
         assertFalse(compared.classificationComplete(classification))
         assertEquals(1, compared.attempts)
-        assertTrue(TeachingInteractions.apply(classification, compared, TeachingAction.Reveal).revealed)
+        val classificationRevealed = TeachingInteractions.apply(classification, compared, TeachingAction.Reveal)
+        assertTrue(classificationRevealed.revealed)
+        val revealRetry = TeachingInteractions.apply(classification, classificationRevealed,
+            TeachingAction.Classify(classification.items.first().id, classification.categories.last().id))
+        assertFalse(revealRetry.revealed)
+        assertFalse(revealRetry.submitted)
 
         var correctPlacements = TeachingState()
         classification.items.forEach { item ->

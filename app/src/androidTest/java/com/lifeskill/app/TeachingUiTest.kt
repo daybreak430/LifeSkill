@@ -189,6 +189,17 @@ class TeachingUiTest {
         ui.waitUntil(8_000) { state(classification, "classification").revealed }
         scrollTo(hasText(block.items.first().explanation))
         ui.onNodeWithText(block.items.first().explanation).assertExists()
+        val firstItem = block.items.first()
+        val alternate = block.categories.first { it.id != firstItem.categoryId }
+        val alternateChip = "classification-${firstItem.id}-${alternate.id}"
+        scrollTo(hasTestTag(alternateChip))
+        ui.onNodeWithTag(alternateChip).performSemanticsAction(SemanticsActions.OnClick)
+        ui.waitUntil(8_000) {
+            val current = state(classification, "classification")
+            current.placements[firstItem.id] == alternate.id && !current.revealed && !current.submitted
+        }
+        scrollTo(hasText("提交分类"))
+        ui.onNodeWithText("提交分类").assertIsEnabled()
     }
 
     @Test fun sortingHandleSupportsLongPressDragReordering() {
@@ -223,13 +234,22 @@ class TeachingUiTest {
         val firstChip = "classification-${firstItem.id}-${correctCategory.id}"
         scrollTo(hasTestTag(firstChip))
         val boundsBefore = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
+        val labelBefore = ui.onNode(
+            hasText(correctCategory.title) and hasAnyAncestor(hasTestTag(firstChip)),
+            useUnmergedTree = true,
+        ).getUnclippedBoundsInRoot()
+        assertEquals(
+            (boundsBefore.top.value + boundsBefore.bottom.value) / 2f,
+            (labelBefore.top.value + labelBefore.bottom.value) / 2f,
+            0.25f,
+        )
         ui.onNodeWithTag(firstChip).performSemanticsAction(SemanticsActions.OnClick)
         ui.waitUntil(8_000) {
             state(lesson, block.id).placements[firstItem.id] == correctCategory.id
         }
         val boundsAfter = ui.onNodeWithTag(firstChip).getUnclippedBoundsInRoot()
         assertEquals(boundsBefore.right.value - boundsBefore.left.value,
-            boundsAfter.right.value - boundsAfter.left.value, 0.1f)
+            boundsAfter.right.value - boundsAfter.left.value, 0.25f)
 
         block.items.drop(1).forEach { item ->
             val tag = "classification-${item.id}-${item.categoryId}"

@@ -172,7 +172,7 @@ internal fun TeachingClassificationContent(
     block: TeachingClassification, state: TeachingState, enabled: Boolean, onAction: (TeachingAction) -> Unit,
 ) {
     val complete = state.classificationComplete(block)
-    val locked = !enabled || state.revealed
+    val locked = !enabled
     Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
     block.items.forEachIndexed { itemIndex, item ->
         val assigned = state.placements[item.id]
@@ -206,7 +206,10 @@ internal fun TeachingClassificationContent(
                                 color = if (active) lerp(Panel, categoryColor, .18f) else Panel,
                                 border = BorderStroke(1.dp, if (active) categoryColor else Line),
                             ) {
-                                Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                Box(
+                                    Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
                                     Text(category.title, color = if (active) categoryColor else Ink,
                                         style = MaterialTheme.typography.labelLarge)
                                 }
