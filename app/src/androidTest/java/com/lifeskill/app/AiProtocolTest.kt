@@ -2,7 +2,9 @@ package com.lifeskill.app
 
 import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.RecoverableReply
+import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
+import com.lifeskill.app.model.EntryKind
 import com.lifeskill.app.model.GenerationLevel
 import com.lifeskill.app.model.GenerationOptions
 import com.lifeskill.app.model.LibraryRules
@@ -142,6 +144,19 @@ class AiProtocolTest {
             assertTrue(prompt.contains(depth))
             assertTrue(prompt.contains(quantity))
             assertTrue(prompt.contains("恰好包含 1 门课程"))
+            assertTrue(prompt.contains("可观察、可检验的认知动作"))
         }
+    }
+
+    @Test fun tutorPromptChoosesComponentsFromTheSubjectAndLearningGoal() {
+        val prompt = AiProtocol.tutorPrompt(
+            Entry("prompt-test", null, EntryKind.SKILL, "观察数据变化", "能解释趋势并区分原因与观察"),
+            pending = null, askedQuestions = emptyList(), reissue = false,
+        )
+        assertTrue(prompt.contains("先用课程主题、本节目标和用户当前问题判断"))
+        assertTrue(prompt.contains("没有匹配的教学意图时只用文字"))
+        assertTrue(prompt.contains("历史、事件、阶段、制度演变：timeline"))
+        assertTrue(prompt.contains("只有教学内容确实关于植物细胞结构时使用hotspot"))
+        assertTrue(prompt.contains("科学和数据分析可优先chart、classify、steps"))
     }
 }

@@ -89,7 +89,9 @@ private fun TeachingCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
                 if (block !is TeachingText) {
-                    if (onExpand != null) GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
+                    if (block is TeachingChart && onExpand != null) {
+                        GlyphButton(Glyph.EXPAND, "放大${block.title}", onExpand, tint = aiColors.accent)
+                    }
                     GlyphButton(Glyph.RESTART, "重置${block.title}", { onAction(TeachingAction.Reset) },
                         enabled = enabled, background = Panel)
                 }

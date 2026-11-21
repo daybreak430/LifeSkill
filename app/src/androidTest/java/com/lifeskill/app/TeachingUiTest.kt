@@ -41,6 +41,12 @@ class TeachingUiTest {
         scrollTo(hasContentDescription("放大价格与需求量"))
         ui.onNodeWithContentDescription("放大价格与需求量").performTouchInput { click() }
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
+        val expandedBounds = ui.onNodeWithTag("teaching-expanded").getUnclippedBoundsInRoot()
+        val screenBounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
+        assertTrue(expandedBounds.left > screenBounds.left)
+        assertTrue(expandedBounds.top > screenBounds.top)
+        assertTrue(expandedBounds.right < screenBounds.right)
+        assertTrue(expandedBounds.bottom < screenBounds.bottom)
         awaitDialogFocus()
         back()
         ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
@@ -90,13 +96,7 @@ class TeachingUiTest {
         scrollTo(hasText("否 → 回访用户"))
         ui.onNodeWithText("否 → 回访用户").performTouchInput { click() }
         ui.waitUntil(8_000) { state(lesson, "flow").selection == "E" }
-        scrollTo(hasContentDescription("放大需求怎样进入开发"))
-        ui.onNodeWithContentDescription("放大需求怎样进入开发").performClick()
-        ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
-        awaitDialogFocus()
-        back()
-        ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
-        await("AI 老师")
+        ui.onNodeWithContentDescription("放大需求怎样进入开发").assertDoesNotExist()
     }
 
     @Test fun timelineComparisonAndComposerRemainUsableTogether() {
@@ -213,18 +213,7 @@ class TeachingUiTest {
         scrollTo(hasTestTag("hotspot-nucleus"))
         ui.onNodeWithTag("hotspot-nucleus").performTouchInput { click() }
         await("细胞核含有遗传物质，参与控制细胞活动。")
-        scrollTo(hasContentDescription("放大观察植物细胞"))
-        ui.onNodeWithContentDescription("放大观察植物细胞").performClick()
-        ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
-        val expandedBounds = ui.onNodeWithTag("teaching-expanded").getUnclippedBoundsInRoot()
-        val screenBounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
-        assertTrue(expandedBounds.left > screenBounds.left)
-        assertTrue(expandedBounds.top > screenBounds.top)
-        assertTrue(expandedBounds.right < screenBounds.right)
-        assertTrue(expandedBounds.bottom < screenBounds.bottom)
-        awaitDialogFocus()
-        back()
-        ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
+        ui.onNodeWithContentDescription("放大观察植物细胞").assertDoesNotExist()
         scrollTo(hasText("查看全部热点"))
         ui.onNodeWithText("查看全部热点").performClick()
         ui.waitUntil(8_000) { state(hotspot, "hotspot").revealed }
