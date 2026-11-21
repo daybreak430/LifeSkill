@@ -11,6 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -61,7 +63,9 @@ internal fun TeachingChartContent(block: TeachingChart, state: TeachingState, en
         val point = block.points.getOrNull(selected) ?: block.points.first()
         Text("${point.label} · ${number(point.value)}", style = MaterialTheme.typography.titleMedium, color = aiColors.accent)
     }
-    TeachingPlot(points, demand, selected,
+    if (block.style == TeachingChartStyle.WATERFALL) {
+        TeachingWaterfall(block, selected, enabled) { index -> onAction(TeachingAction.Select(index.toString())) }
+    } else TeachingPlot(points, demand, selected,
         if (demand) "需求量（${block.quantityUnit}）" else block.xLabel,
         if (demand) "价格（元）" else block.yLabel, enabled, if (demand) TeachingChartStyle.LINE else block.style) { index ->
         onAction(if (demand) TeachingAction.SetValue(index + 2.0) else TeachingAction.Select(index.toString()))
@@ -205,3 +209,93 @@ private fun TeachingPlot(
 
 internal fun number(value: Double): String = if (value == value.toLong().toDouble()) value.toLong().toString()
     else String.format(java.util.Locale.ROOT, "%.1f", value)
+
+private data class WaterfallBar(val from: Double, val to: Double, val point: TeachingPoint)
+
+/**
+ * 瀑布图：首尾是合计柱，中间按增减量累加。
+ * 累计基线由应用计算，模型只给增减量，避免它算错还画出来。
+ */
+@Composable
+private fun TeachingWaterfall(block: TeachingChart, selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
+    val bars = remember(block) {
+        var running = 0.0
+        block.points.map { point ->
+            val from = if (point.total) 0.0 else running
+            val to = if (point.total) point.value else running + point.value
+            running = to
+            WaterfallBar(from, to, point)
+        }
+    }
+    val lowest = minOf(0.0, bars.minOf { minOf(it.from, it.to) })
+    val highest = maxOf(0.0, bars.maxOf { maxOf(it.from, it.to) }).coerceAtLeast(lowest + 1.0)
+    val span = highest - lowest
+    val green = Color(0xFF1D9E75)
+    val red = Color(0xFFE24B4A)
+    val accentColor = aiColors.accent
+    val lineColor = Line
+    val mutedColor = Muted
+    val valueTexts = bars.map { bar ->
+        when {
+            bar.point.total -> number(bar.point.value)
+            bar.point.value >= 0 -> "+" + number(bar.point.value)
+            else -> "−" + number(-bar.point.value)
+        }
+    }
+    val labelTexts = block.points.map { it.label.take(4) }
+    val description = "瀑布图：" + block.points.joinToString("；") { "${it.label} ${number(it.value)}" }
+    val painter = remember { Paint().apply { isAntiAlias = true; textAlign = Paint.Align.CENTER } }
+    val labelPaint = remember { Paint().apply { isAntiAlias = true; textAlign = Paint.Align.CENTER } }
+    Canvas(
+        Modifier.fillMaxWidth().height(200.dp).testTag("waterfall-${block.id}")
+            .semantics { contentDescription = description }
+            .pointerInput(block.id, enabled, bars) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { offset ->
+                    val left = 8.dp.toPx()
+                    val slot = (size.width - left * 2) / bars.size
+                    val index = ((offset.x - left) / slot).toInt().coerceIn(0, bars.lastIndex)
+                    onSelect(index)
+                }
+            },
+    ) {
+        val left = 8.dp.toPx()
+        val bottom = 24.dp.toPx()
+        val top = 20.dp.toPx()
+        val plotHeight = size.height - top - bottom
+        val slot = (size.width - left * 2) / bars.size
+        val barWidth = slot * .56f
+        fun y(value: Double): Float = top + ((highest - value) / span).toFloat() * plotHeight
+
+        drawLine(lineColor, Offset(left, y(0.0)), Offset(size.width - left, y(0.0)), 1.dp.toPx())
+        painter.textSize = 11.sp.toPx()
+        labelPaint.textSize = 11.sp.toPx()
+        labelPaint.color = mutedColor.toArgb()
+
+        bars.forEachIndexed { index, bar ->
+            val centerX = left + slot * (index + .5f)
+            val barTop = y(maxOf(bar.from, bar.to))
+            val barBottom = y(minOf(bar.from, bar.to))
+            val color = when {
+                bar.point.total -> accentColor
+                bar.to >= bar.from -> green
+                else -> red
+            }
+            drawRect(color.copy(alpha = if (index == selected) .45f else .28f),
+                topLeft = Offset(centerX - barWidth / 2, barTop),
+                size = Size(barWidth, (barBottom - barTop).coerceAtLeast(1.dp.toPx())))
+            drawRect(color, topLeft = Offset(centerX - barWidth / 2, barTop),
+                size = Size(barWidth, (barBottom - barTop).coerceAtLeast(1.dp.toPx())), style = Stroke(1.dp.toPx()))
+
+            if (index < bars.lastIndex) {
+                val nextX = left + slot * (index + 1.5f)
+                drawLine(mutedColor.copy(alpha = .6f), Offset(centerX + barWidth / 2, y(bar.to)),
+                    Offset(nextX - barWidth / 2, y(bar.to)), 1.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
+            }
+            painter.color = color.toArgb()
+            drawContext.canvas.nativeCanvas.drawText(valueTexts[index], centerX, barTop - 6.dp.toPx(), painter)
+            drawContext.canvas.nativeCanvas.drawText(labelTexts[index], centerX, size.height - 6.dp.toPx(), labelPaint)
+        }
+    }
+}

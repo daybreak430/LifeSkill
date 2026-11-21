@@ -137,6 +137,7 @@ private fun TeachingBlockBody(
         is TeachingRange -> TeachingRangeContent(block)
         is TeachingFunnel -> TeachingFunnelContent(block)
         is TeachingFormula -> TeachingFormulaContent(block)
+        is TeachingQuadrant -> TeachingQuadrantContent(block, state, enabled, onAction)
         is TeachingStepTrace -> Unit
     }
 }

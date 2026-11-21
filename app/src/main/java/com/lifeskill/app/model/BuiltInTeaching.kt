@@ -76,6 +76,28 @@ internal object BuiltInTeaching {
         ), style = TeachingChartStyle.SCATTER,
     )
 
+    private val monthlyWaterfall = TeachingChart(
+        "monthly-waterfall", "月活变化", "项目", "万人",
+        listOf(
+            TeachingPoint("期初", 120.0, total = true),
+            TeachingPoint("新客", 40.0),
+            TeachingPoint("流失", -25.0),
+            TeachingPoint("复购", 15.0),
+            TeachingPoint("期末", 150.0, total = true),
+        ), style = TeachingChartStyle.WATERFALL,
+    )
+    private val priorityQuadrant = TeachingQuadrant(
+        "priority-quadrant", "需求优先级", "用户价值", "实现成本",
+        listOf("不做", "值得谈", "有空再说", "先做"),
+        listOf(
+            QuadrantPoint("login", "登录改版", 82.0, 30.0, "价值高、成本低"),
+            QuadrantPoint("sync", "多端同步", 64.0, 76.0, "价值高，但要改架构"),
+            QuadrantPoint("dark", "暗色模式", 28.0, 26.0, "锦上添花"),
+            QuadrantPoint("rewrite", "重构登录", 34.0, 78.0, "成本高、收益有限"),
+        ),
+        "拖动点位即可改判，点一下看依据。",
+    )
+
     // 四种新图形各给一个最小示例，演示“同一份数据换一种图形”而不是堆装饰。
     private val toolMatrix = TeachingMatrix(
         "tool-matrix", "三种方案怎么选",
@@ -196,6 +218,7 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_003, comparison),
                 BuiltInTeachingItem(1_023, writingFigure),
                 BuiltInTeachingItem(1_027, hiringFunnel),
+                BuiltInTeachingItem(1_030, priorityQuadrant),
             )),
         BuiltInTeachingLesson("data", 2_002, "数据图表", "图表", "在同一会话中预测、比较并观察折线、柱状和面积图。",
             EntryIcon.CHART, "同一会话展示需求预测、趋势、分类比较和总量面积。切换表达时核对数值、单位与坐标。",
@@ -208,6 +231,7 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_025, deliveryRange),
                 BuiltInTeachingItem(1_026, quadratic),
                 BuiltInTeachingItem(1_028, studyScatter),
+                BuiltInTeachingItem(1_029, monthlyWaterfall),
             )),
         BuiltInTeachingLesson("practice", 2_003, "互动练习", "练习", "在一条会话中体验答题、翻卡、排序和小游戏。",
             EntryIcon.TARGET, "统一遵循先提示、允许重试、主动查看完整答案。选择任意组件开始练习。",

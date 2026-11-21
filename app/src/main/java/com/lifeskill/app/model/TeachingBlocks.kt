@@ -89,10 +89,22 @@ data class TeachingFormula(
     override val id: String, override val title: String,
     val lines: List<String>, val caption: String? = null,
 ) : TeachingBlock
-enum class TeachingChartStyle { LINE, BAR, AREA, SCATTER }
+
+data class QuadrantPoint(
+    val id: String, val label: String, val x: Double, val y: Double, val detail: String? = null,
+)
+
+/** 四象限：坐标定位而非打分，x、y 都是 0–100；四个象限名按左上、右上、左下、右下排列。 */
+data class TeachingQuadrant(
+    override val id: String, override val title: String,
+    val xLabel: String, val yLabel: String, val quadrants: List<String>,
+    val points: List<QuadrantPoint>, val caption: String? = null,
+) : TeachingBlock
+enum class TeachingChartStyle { LINE, BAR, AREA, SCATTER, WATERFALL }
 enum class TeachingChartMode { DATA, LINEAR_DEMAND }
 // 散点图用 x 表示自变量；折线、柱状和面积图省略 x，横轴按顺序排列。
-data class TeachingPoint(val label: String, val value: Double, val x: Double? = null)
+// total=true 的柱表示首尾合计，其余为增减量；只有瀑布图使用这个标记。
+data class TeachingPoint(val label: String, val value: Double, val x: Double? = null, val total: Boolean = false)
 data class TeachingQuestion(
     val question: String, val options: List<String>, val answer: Int, val explanation: String, val hint: String,
     // 提示阶梯：由浅入深，最多三级。旧快照只有单个 hint，读取时回退为一级，避免升级后丢提示。
@@ -164,12 +176,15 @@ data class TeachingState(
     val gameOpened: Boolean = false,
     // 已展开的提示层级：0 表示只用第 1 条，1 表示已看到第 2 条，以此类推。
     val hintLevel: Int = 0,
+    // 四象限拖动后的坐标，键是点 id，值是 [x, y]；未拖动时为空，显示模型给的位置。
+    val positions: Map<String, List<Double>> = emptyMap(),
 )
 
 sealed interface TeachingAction {
     data class Select(val key: String) : TeachingAction
     data class SetValue(val value: Double) : TeachingAction
     data class SetLeverParameter(val parameter: LeverParameter, val value: Double) : TeachingAction
+    data class Place(val key: String, val x: Double, val y: Double) : TeachingAction
     data class Predict(val index: Int) : TeachingAction
     data class Move(val key: String, val toIndex: Int) : TeachingAction
     data class Classify(val key: String, val category: String) : TeachingAction
@@ -190,6 +205,12 @@ internal object TeachingInteractions {
             if (block !is TeachingGame) invalid()
             previous.copy(gameOpened = true)
         }
+        is TeachingAction.Place -> {
+            if (block !is TeachingQuadrant) invalid()
+            if (block.points.none { it.id == action.key }) invalid()
+            if (action.x !in 0.0..100.0 || action.y !in 0.0..100.0) invalid()
+            previous.copy(positions = previous.positions + (action.key to listOf(action.x, action.y)))
+        }
         is TeachingAction.Select -> {
             val quizCorrect = block is TeachingQuiz && previous.submitted &&
                 previous.selection?.toIntOrNull() == block.question.answer
@@ -209,6 +230,7 @@ internal object TeachingInteractions {
                 is TeachingHotspot -> block.hotspots.any { it.id == action.key }
                 is TeachingText, is TeachingFlipCard, is TeachingSorting, is TeachingClassification, is TeachingExperiment,
                 is TeachingGame, is TeachingFigure, is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula,
+                is TeachingQuadrant,
                 -> false
             }
             if (!valid) invalid()
@@ -288,7 +310,7 @@ internal object TeachingInteractions {
                 is TeachingHotspot -> true
                 is TeachingText, is TeachingTimeline, is TeachingFlow, is TeachingComparison, is TeachingFlipCard,
                 is TeachingExperiment, is TeachingGame, is TeachingFigure, is TeachingMatrix, is TeachingRange,
-                is TeachingFunnel, is TeachingFormula,
+                is TeachingFunnel, is TeachingFormula, is TeachingQuadrant,
                 -> false
             }
             if (!valid) invalid()
@@ -381,6 +403,14 @@ internal fun TeachingBlock.markdown(): String = buildString {
         }
         is TeachingFormula -> {
             block.lines.forEach { line -> appendLine("公式：$line") }
+            block.caption?.let { appendLine(it) }
+        }
+        is TeachingQuadrant -> {
+            appendLine("横轴：${block.xLabel}；纵轴：${block.yLabel}")
+            block.quadrants.chunked(2).forEachIndexed { row, labels ->
+                appendLine(labels.joinToString(" ｜ "))
+            }
+            block.points.forEach { point -> appendLine("- ${point.label}（${point.x}, ${point.y}）${point.detail?.let { "：$it" }.orEmpty()}") }
             block.caption?.let { appendLine(it) }
         }
         is TeachingChart -> if (block.mode == TeachingChartMode.LINEAR_DEMAND) {
@@ -476,6 +506,9 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
     is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
     is TeachingFigure -> ""
     is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula -> ""
+    is TeachingQuadrant -> state.positions.entries.joinToString("；") { (id, xy) ->
+        block.points.firstOrNull { it.id == id }?.let { "${it.label} 移到 ${xy.getOrNull(0)?.roundToInt()}, ${xy.getOrNull(1)?.roundToInt()}" }.orEmpty()
+    }
     is TeachingGame -> if (state.gameOpened) "已打开小游戏：${block.goal}；游戏反馈不计正式评估" else "尚未打开小游戏"
     is TeachingText -> ""
 }
