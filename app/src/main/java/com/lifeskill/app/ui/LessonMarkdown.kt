@@ -88,10 +88,53 @@ private val decisionShape = GenericShape { size, _ ->
 
 @Composable
 internal fun LessonMarkdown(source: String) {
-    val document = remember(source) { lessonParser.parse(source) }
+    // 教学回复经常只用单个换行分段，CommonMark 把它当段内软换行，渲染出来仍是整段。
+    // 先把围栏、表格和字符图之外的单换行升级为段落分隔，再解析，
+    // 让段落间距稳定出现，不依赖模型遵循提示词。
+    val normalized = remember(source) { normalizeLessonBreaks(source) }
+    val document = remember(normalized) { lessonParser.parse(normalized) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        document.children().forEach { LessonBlock(it, source) }
+        document.children().forEach { LessonBlock(it, normalized) }
     }
+}
+
+private val fencePattern = Regex("^(```+|~~~+)")
+private val asciiBorderPattern = Regex("""\+[=-]{2,}\+""")
+private val asciiBranchPattern = Regex("""^[ |]*[+|`\\]--""")
+
+// 表格行和字符图行必须保持单换行：表格靠连续行识别，
+// 未围栏的字符图靠整段 sourceSpans 识别，拆开就都不成立。
+private fun isTableOrDiagramLine(line: String): Boolean {
+    val trimmed = line.trimStart()
+    if (trimmed.startsWith("|")) return true
+    return trimmed.any { it in '\u2500'..'\u257f' } ||
+        asciiBorderPattern.containsMatchIn(trimmed) || asciiBranchPattern.containsMatchIn(trimmed)
+}
+
+internal fun normalizeLessonBreaks(source: String): String {
+    val lines = source.split('\n')
+    val out = StringBuilder(source.length + lines.size)
+    var inFence = false
+    var fenceMarker = "```"
+    lines.forEachIndexed { index, line ->
+        if (index > 0) {
+            val previous = lines[index - 1]
+            val keepSingle = inFence || line.isBlank() || previous.isBlank() ||
+                isTableOrDiagramLine(line) || isTableOrDiagramLine(previous)
+            out.append(if (keepSingle) '\n' else "\n\n")
+        }
+        out.append(line)
+        val trimmed = line.trimStart()
+        if (inFence) {
+            if (trimmed.startsWith(fenceMarker)) inFence = false
+        } else {
+            fencePattern.find(trimmed)?.let {
+                inFence = true
+                fenceMarker = it.groupValues[1]
+            }
+        }
+    }
+    return out.toString()
 }
 
 @Composable
