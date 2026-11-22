@@ -21,21 +21,21 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 
 | 项目 | 当前值 |
 | --- | --- |
-| 快照日期 | 2026-11-21，Asia/Shanghai |
+| 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `803f6b2`（完整哈希见 `git rev-parse v0.15.20`） |
-| 最新版本 | `0.15.20` |
-| `versionCode` | `107` |
-| 标签 | `v0.15.20` |
-| Release | [LifeSkill 0.15.20](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.20) |
-| APK 文件名 | `LifeSkill-0.15.20-release.apk` |
+| 最新产品与发布提交 | `dbfcd98`（完整哈希见 `git rev-parse v0.15.21`） |
+| 最新版本 | `0.15.21` |
+| `versionCode` | `108` |
+| 标签 | `v0.15.21` |
+| Release | [LifeSkill 0.15.21](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.21) |
+| APK 文件名 | `LifeSkill-0.15.21-release.apk` |
 | APK 大小 | `18,299,367` bytes |
-| APK SHA-256 | `1623bb966f61f19c2836eefc5a7e3410af937d6f52214d625f78ecba3e177190` |
+| APK SHA-256 | `5f11826cb3a25905f82f0e4b020e542fa874610401b29ea39367bfa1a043726e` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.20..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.21..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.20` 已发布：标签指向 `803f6b2`，Release 附件 SHA-256 与本地 APK 一致。已在同一模拟器上从 `0.15.19` 覆盖升级，`firstInstallTime` 保持不变。真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.21` 已发布：标签指向 `dbfcd98`，Release 附件 SHA-256 与本地 APK 一致。本次仅改教学提示词与版本号，未改 UI 行为，未做覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -86,7 +86,9 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.16` | 新增结构图 figure：1–3列节点、关系行与脚注，支持数字与要点，语义色最多两种。 |
 | `v0.15.17` | 新增评分矩阵、区间条、漏斗/金字塔与公式；chart 增加散点样式。 |
 | `v0.15.18` | 新增瀑布图与四象限；提示词校准 compare/matrix、timeline/range 判定。 |
-| `v0.15.19` | 修复结构图同行卡片高度不一致；去掉四象限重复提示。 |\n| `v0.15.20` | 教学卡片改内滚动修复末端触摸失效；图表标签分行布局；四象限停用。 |
+| `v0.15.19` | 修复结构图同行卡片高度不一致；去掉四象限重复提示。 |
+| `v0.15.20` | 教学卡片改内滚动修复末端触摸失效；图表标签分行布局；四象限停用。 |
+| `v0.15.21` | 教学提示词强制分段：每段 2–3 句、段间空行、要点用列表，讲解示例改多段。 |
 
 对应提交如下：
 
@@ -107,7 +109,16 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.16` | `0dfdbcd` |
 | `v0.15.17` | `804ec94` |
 | `v0.15.18` | `21705df` |
-| `v0.15.19` | `1dc0359` |\n| `v0.15.20` | `803f6b2` |
+| `v0.15.19` | `1dc0359` |
+| `v0.15.20` | `803f6b2` |
+| `v0.15.21` | `dbfcd98` |
+
+## 0.15.21 的验证证据
+
+- 根因定位：教学回复的墙文来自模型输出本身。渲染层 `LessonMarkdown` 一直支持段落与列表，但 `tutorPrompt` 只说「reply 支持 Markdown」，没有任何分段要求，且讲解示例是单行单段，模型就模仿成整段输出。
+- 修复（仅提示词，不改 UI）：`AiProtocol.kt` 的教学规则新增强制分段要求——每段最多 2–3 句（约 60 字），段与段之间空一行（`\n\n`），同一节连续要点用列表逐条列出，超过 3 句的解释拆成「小标题 + 多个短段」或「小标题 + 列表」；讲解例同步改为含 `\n\n` 与列表的多段 JSON 示例作为格式锚点。
+- 回归：单元测试全部通过，`lintDebug` 通过；`./scripts/build-release.sh` 构建、签名并校验，证书沿用既有调试证书 `AD:01:E1:…:0A`。
+- Release 附件重新下载后与本地 APK SHA-256 一致（`5f11826c…3726e`）。本次为提示词行为改动，未做模拟器人工分段效果抽样与覆盖升级验证；下次真实对话可观察模型是否稳定输出分段。
 
 ## 0.15.20 的验证证据
 
