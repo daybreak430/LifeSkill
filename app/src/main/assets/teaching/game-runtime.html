@@ -78,7 +78,7 @@ function redraw(){
  }
 }
 // 一次只处理一个点击或按钮操作，超时计时器留在宿主页，Worker即使死循环也不能阻止它终止本局。
-function dispatch(event){if(!worker||busy||finished)return;busy=true;seq++;event.token=seq;timer=setTimeout(()=>fail('小游戏响应超时，请点击上方重新开始。'),900);worker.postMessage(event);}
+function dispatch(event){if(!worker||busy||finished)return;busy=true;seq++;event.token=seq;timer=setTimeout(()=>fail('小游戏响应超时，请点击上方重新开始。'),1500);worker.postMessage(event);}
 // 拖拽单独走通道：不占用忙碌标记，按约30次/秒合并移动，避免逐像素刷屏。
 function sendPointer(phase,x,y){if(!worker||finished)return;worker.postMessage({type:'pointer',phase,x,y});}
 const bootstrap=`'use strict';
@@ -120,16 +120,16 @@ self.onmessage=e=>{
 `;
 try{
  const blob=new Blob([bootstrap,'\ntry{\n',payload.code,'\nself.postMessage({type:"ready",frame:!!handlers.frame});\n}catch(error){self.postMessage({type:"error"});}'],{type:'text/javascript'}),url=URL.createObjectURL(blob);
- worker=new Worker(url);URL.revokeObjectURL(url);sessionTimer=setTimeout(()=>fail('本局已结束，请点击上方重新开始。'),90000);busy=true;timer=setTimeout(()=>fail('小游戏未能启动，请点击上方重新开始。'),1800);
+ worker=new Worker(url);URL.revokeObjectURL(url);sessionTimer=setTimeout(()=>fail('本局已结束，请点击上方重新开始。'),120000);busy=true;timer=setTimeout(()=>fail('小游戏未能启动，请点击上方重新开始。'),2400);
  worker.onerror=e=>{e.preventDefault();fail('小游戏运行出错，可关闭后请AI换一个小游戏。');};
  // 限制消息频率和长度，避免生成代码逐帧刷消息或提交超大绘图列表。
  worker.onmessage=e=>{
   const now=performance.now();if(now-windowStart>1000){windowStart=now;messages=0;}if(++messages>200){fail('小游戏更新过于频繁，请重新开始。');return;}
   const d=e.data;if(!d||typeof d!=='object')return;
-  try{if(JSON.stringify(d).length>48000){fail('小游戏内容过多，请重新开始。');return;}}catch(error){fail('小游戏数据无效，请重新开始。');return;}
+  try{if(JSON.stringify(d).length>64000){fail('小游戏内容过多，请重新开始。');return;}}catch(error){fail('小游戏数据无效，请重新开始。');return;}
   if(d.type==='ready'||d.type==='idle'&&d.token===seq){clearTimeout(timer);busy=false;if(d.type==='ready')hasFrame=!!d.frame;if(!finished)document.body.dataset.state='ready';}
   else if(d.type==='frameDone'){tickPending=false;}
-  else if(d.type==='draw'&&Array.isArray(d.commands)){commands=d.commands.slice(0,320);redraw();}
+  else if(d.type==='draw'&&Array.isArray(d.commands)){commands=d.commands.slice(0,512);redraw();}
   else if(d.type==='background'){const value=color(d.color);stage.style.background=value;}
   else if(d.type==='hud'){document.body.dataset.hud=d.show?'on':'off';}
   else if(d.type==='say'||d.type==='finish'){message.textContent=String(d.text).slice(0,400);if(d.type==='finish'){finished=true;document.body.dataset.state='finished';clearTimeout(timer);clearTimeout(sessionTimer);cancelAnimationFrame(rafId);busy=false;dragging=false;actions.querySelectorAll('button').forEach(b=>b.disabled=true);worker.terminate();worker=null;}}
