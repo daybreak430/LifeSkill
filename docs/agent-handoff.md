@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `075a31d`（完整哈希见 `git rev-parse v0.15.22`） |
-| 最新版本 | `0.15.22` |
-| `versionCode` | `109` |
-| 标签 | `v0.15.22` |
-| Release | [LifeSkill 0.15.22](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.22) |
-| APK 文件名 | `LifeSkill-0.15.22-release.apk` |
+| 最新产品与发布提交 | `08c21f0`（完整哈希见 `git rev-parse v0.15.23`） |
+| 最新版本 | `0.15.23` |
+| `versionCode` | `110` |
+| 标签 | `v0.15.23` |
+| Release | [LifeSkill 0.15.23](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.23) |
+| APK 文件名 | `LifeSkill-0.15.23-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `63960ea1e505d9f3eca61501c2bd1002d2bfcc6ca9ac1c8bc0f4291b1086e15b` |
+| APK SHA-256 | `687c109857a90801187edf20dd1f73cb92682381c9ceb8e6187826accb0043f7` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.22..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.23..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.22` 已发布：标签指向 `075a31d`，Release 附件 SHA-256 与本地 APK 一致。本次改了教学 Markdown 渲染的分段行为，未做模拟器人工验证与覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.23` 已发布：标签指向 `08c21f0`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只放宽小游戏预算与提示词约束，未做模拟器人工游玩验证与覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -115,6 +115,16 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.20` | `803f6b2` |
 | `v0.15.21` | `dbfcd98` |
 | `v0.15.22` | `075a31d` |
+| `v0.15.23` | `08c21f0` |
+
+## 0.15.23 的验证证据
+
+- 动机：上一版代码预算偏紧（目标 1600–4500、上限 8000），模型倾向用一行流和压缩赋值塞进预算，导致重复计分、状态卡死和目标不可达等逻辑 bug。
+- 调整：`MAX_GAME_CODE_LENGTH` 8000→16000；提示词目标区间 2400–8000、上限 16000，并新增分层写法要求（状态对象＋命名函数、禁止一行流）、坐标收敛、`onPointer`/`onTap` 不重复结算，以及误触/重复点击/拖到边界/中途重开四项自查。
+- 运行器同步放宽：命令 320→512、消息体 48→64KB、启动/输入超时 1800/900→2400/1500ms、单局 90→120 秒；组件数组解码总长 48→72KB，避免长脚本被整组丢弃。
+- `./gradlew testDebugUnitTest` 全部通过；运行器内联脚本通过 `node --check` 语法校验，并确认新限额常量已写入 APK 内 `assets/teaching/game-runtime.html`。
+- `./scripts/build-release.sh` 构建、签名并校验，证书沿用既有调试证书 `AD:01:E1:…:0A`；GitHub Release 端计算的附件 digest 与本地 SHA-256 一致（`687c1098…43f7`）。
+- 未做模拟器实际游玩与覆盖升级安装验证；限额放宽后仍需抽样检查模型生成的游戏是否真的可达可完成。
 
 ## 0.15.22 的验证证据
 
