@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `dbfcd98`（完整哈希见 `git rev-parse v0.15.21`） |
-| 最新版本 | `0.15.21` |
-| `versionCode` | `108` |
-| 标签 | `v0.15.21` |
-| Release | [LifeSkill 0.15.21](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.21) |
-| APK 文件名 | `LifeSkill-0.15.21-release.apk` |
-| APK 大小 | `18,299,367` bytes |
-| APK SHA-256 | `5f11826cb3a25905f82f0e4b020e542fa874610401b29ea39367bfa1a043726e` |
+| 最新产品与发布提交 | `075a31d`（完整哈希见 `git rev-parse v0.15.22`） |
+| 最新版本 | `0.15.22` |
+| `versionCode` | `109` |
+| 标签 | `v0.15.22` |
+| Release | [LifeSkill 0.15.22](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.22) |
+| APK 文件名 | `LifeSkill-0.15.22-release.apk` |
+| APK 大小 | `18,315,751` bytes |
+| APK SHA-256 | `63960ea1e505d9f3eca61501c2bd1002d2bfcc6ca9ac1c8bc0f4291b1086e15b` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.21..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.22..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.21` 已发布：标签指向 `dbfcd98`，Release 附件 SHA-256 与本地 APK 一致。本次仅改教学提示词与版本号，未改 UI 行为，未做覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.22` 已发布：标签指向 `075a31d`，Release 附件 SHA-256 与本地 APK 一致。本次改了教学 Markdown 渲染的分段行为，未做模拟器人工验证与覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -89,6 +89,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.19` | 修复结构图同行卡片高度不一致；去掉四象限重复提示。 |
 | `v0.15.20` | 教学卡片改内滚动修复末端触摸失效；图表标签分行布局；四象限停用。 |
 | `v0.15.21` | 教学提示词强制分段：每段 2–3 句、段间空行、要点用列表，讲解示例改多段。 |
+| `v0.15.22` | 渲染层把围栏/表格/字符图之外的单换行升级为段落分隔，分段不再依赖模型输出。 |
 
 对应提交如下：
 
@@ -112,6 +113,15 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.19` | `1dc0359` |
 | `v0.15.20` | `803f6b2` |
 | `v0.15.21` | `dbfcd98` |
+| `v0.15.22` | `075a31d` |
+
+## 0.15.22 的验证证据
+
+- 0.15.21 的提示词约束被模型无视：真实课时（质数与 π(x)）里模型仍用单个换行分段，CommonMark 把它当段内软换行，渲染依旧是一坨字。结论是分段不能依赖模型遵循提示词。
+- 修复：`LessonMarkdown` 解析前先经 `normalizeLessonBreaks`——代码围栏、表格行（`|` 开头）和字符图行（含制表符区间 `\u2500–\u257f` 或 ASCII 边框/分支特征）之间的单换行保持不变，其余单换行升级为空行段落分隔；围栏内内容完全不动。`sourceSpans` 的图表识别改用规范化后的字符串，未围栏字符图仍能整段识别。
+- 新增 `LessonMarkdownTest` 5 项：单换行升级、已有空行不重复、围栏内不动、表格行保持连续、字符图行保持连续。
+- 单元测试全部通过，`lintDebug` 通过；`./scripts/build-release.sh` 构建、签名并校验，证书沿用既有调试证书 `AD:01:E1:…:0A`；Release 附件重新下载后 SHA-256 与本地一致。
+- 未做模拟器人工渲染验证与覆盖升级安装验证；该改动对历史消息同样生效，用户侧覆盖安装后可直接观察旧课时是否分段。
 
 ## 0.15.21 的验证证据
 
