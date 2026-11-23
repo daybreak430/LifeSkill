@@ -23,24 +23,24 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `8b93693`（完整哈希见 `git rev-parse v0.15.32`） |
-| 最新版本 | `0.15.32` |
-| `versionCode` | `119` |
+| 最新产品与发布提交 | `cd8d4e3`（完整哈希见 `git rev-parse v0.15.33`） |
+| 最新版本 | `0.15.33` |
+| `versionCode` | `120` |
 | 标签 | `v0.15.33` | 澄清 `experiment` 是参数实验台、杠杆只是当前模型；提示词改讲组件语义并修掉 flow 残留表述。 |
 | `v0.15.32` | 停用区间条组件：读数易被当成进度/评分，预估改为文字写区间；旧快照仍解码但不展示。 |
 | `v0.15.31` | 公式组件自适应：优先缩放到最小 0.76 倍，超宽在等号处折行，仅无等号超长表达式保留横滑。 |
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.32](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.32) |
-| APK 文件名 | `LifeSkill-0.15.32-release.apk` |
+| Release | [LifeSkill 0.15.33](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.33) |
+| APK 文件名 | `LifeSkill-0.15.33-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `1fa030afadbb543b8189f1f27212483f21af0dd71858d4dcdc616b409d2c5925` |
+| APK SHA-256 | `4891df259b7664e0761f08ee5ed6aa812ea3cefdf8f22fb99a90086639d341be` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.32..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.33..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.32` 已发布：标签指向 `8b93693`，Release 附件大小与 SHA-256 和本地 APK 一致。本次停用区间条组件并改为文字预估，未做覆盖升级安装验证。
+`0.15.33` 已发布：标签指向 `cd8d4e3`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只澄清实验台的组件语义与文档命名、修正一处提示词残留，未做覆盖升级安装验证。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -155,6 +155,14 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.31` | `1fd64a7` |
 | `v0.15.33` | 澄清 `experiment` 是参数实验台、杠杆只是当前模型；提示词改讲组件语义并修掉 flow 残留表述。 |
 | `v0.15.32` | `8b93693` |
+| `v0.15.33` | `cd8d4e3` |
+
+## 0.15.33 的验证证据
+
+- 反馈：把“杠杆”当成组件类型是错的。`experiment` 才是组件（参数实验台），交互语义是“图形化调参 → 观察状态变化”，杠杆只是当前唯一实现的 model。
+- 改动：提示词先讲组件语义再讲模型约束，明确“experiment 是参数实验台，不是‘杠杆组件’，新增模型沿用同一协议”；文档、内置课时说明、MVP/README/架构统一改称“参数实验台（杠杆模型）”；顺手修掉结构图段落里遗留的“层级流程用 flow”。
+- 测试：`AiProtocolTest` 增加“experiment（参数实验台）”“不是‘杠杆组件’”两条断言，单元测试与 `lintDebug` 通过；发布包内已确认新表述存在。
+- 未做覆盖升级安装验证；组件仍只有 lever 一个模型，本次没有新增模型。
 
 ## 0.15.32 的验证证据
 
