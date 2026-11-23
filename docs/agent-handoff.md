@@ -23,9 +23,9 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `cd8d4e3`（完整哈希见 `git rev-parse v0.15.33`） |
-| 最新版本 | `0.15.33` |
-| `versionCode` | `120` |
+| 最新产品与发布提交 | `2af607c`（完整哈希见 `git rev-parse v0.15.34`） |
+| 最新版本 | `0.15.34` |
+| `versionCode` | `121` |
 | 标签 | `v0.15.34` | 结业考试只出选择（6 单选 + 4 多选，不再填空）；参数实验台新增复利模型，状态改为通用的模型+参数表。 |
 | `v0.15.33` | 澄清 `experiment` 是参数实验台、杠杆只是当前模型；提示词改讲组件语义并修掉 flow 残留表述。 |
 | `v0.15.32` | 停用区间条组件：读数易被当成进度/评分，预估改为文字写区间；旧快照仍解码但不展示。 |
@@ -33,15 +33,15 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.33](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.33) |
-| APK 文件名 | `LifeSkill-0.15.33-release.apk` |
-| APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `4891df259b7664e0761f08ee5ed6aa812ea3cefdf8f22fb99a90086639d341be` |
+| Release | [LifeSkill 0.15.34](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.34) |
+| APK 文件名 | `LifeSkill-0.15.34-release.apk` |
+| APK 大小 | `18,332,135` bytes |
+| APK SHA-256 | `9a074a3ed61f6a53c33af617ee09f8d84e3b9b7dfff3f978e90795bb4ecb679b` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.33..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.34..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.33` 已发布：标签指向 `cd8d4e3`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只澄清实验台的组件语义与文档命名、修正一处提示词残留，未做覆盖升级安装验证。
+`0.15.34` 已发布：标签指向 `2af607c`，Release 附件大小与 SHA-256 和本地 APK 一致。本次改考试题型并新增复利实验模型；未做覆盖升级安装验证，也未用真实模型抽样确认它会主动选复利实验。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -164,6 +164,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.32` | `8b93693` |
 | `v0.15.34` | 结业考试只出选择（6 单选 + 4 多选，不再填空）；参数实验台新增复利模型，状态改为通用的模型+参数表。 |
 | `v0.15.33` | `cd8d4e3` |
+| `v0.15.34` | `2af607c` |
+
+## 0.15.34 的验证证据
+
+- 结业考试：新卷改为 6 单选 + 4 多选，`decodeQuestions` 对新卷要求填空数为 0；历史 10 题卷（4/3/3）与 0.12.0 的 8 题卷（各 2 题）仍按原分布解码，`decodeAttempt` 走 `allowLegacy`。判分提示保留旧填空的合理表达判定。
+- 参数实验台：`TeachingExperiment` 增加 `model`，初始值与状态改为 `ExperimentValues(model, values)`；新增 `ExperimentCatalog`（lever / compound 参数表）、`ExperimentMath`（校验、吸附、观测、摘要）。杠杆的 `LeverPhysics` 保留用于场景与力矩计算；复利按月定投、按年本金复利，展示期末总额、累计投入、收益、收益占比。
+- 兼容：状态编码新增 `experiment:{model,values}`，解码优先读新字段，缺失时把旧的 `lever` 对象映射成 lever 模型参数表；协议 `initial` 仍是扁平参数对象，`model` 缺省按 lever 处理。
+- UI：滑块由参数表生成，杠杆保留离散刻度与旧测试标记（`lever-left_force` 等），复利用连续轨道并按步长吸附；复利结果用大号总额 + 三项指标 + 投入/收益比例带。内置示例标记 1031 追加到 visual 会话。
+- 测试：`CompoundExperimentTest` 覆盖默认值、参数联动、逐字段合并与非法值拒绝；`CompoundExperimentRenderTest` 渲染并截图核对标题、指标与四个滑块；`TeachingStorageTest` 增加复利协议/状态往返与旧 lever 状态迁移；`TeachingUiTest`（杠杆拖动、放大、重置）与 `TreeAssessmentTest`（新题型分布、判分、历史试卷）合计 17 项通过，单元测试与 `lintDebug` 通过。
+- 未跑完整的 `MvpFlowTest`（该套件在本机会因状态互相干扰大面积失败）；考试 UI 流程已按新题型改过脚本，但未整套执行。
+- 未做覆盖升级安装验证；复利的取整与“万”单位显示按当前样例校准，真机上更长年限组合未逐一核对。
 
 ## 0.15.33 的验证证据
 
