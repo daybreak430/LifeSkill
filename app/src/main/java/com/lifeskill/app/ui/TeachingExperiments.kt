@@ -5,14 +5,17 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -29,49 +32,175 @@ internal fun TeachingExperimentContent(
     block: TeachingExperiment, state: TeachingState, enabled: Boolean,
     onAction: (TeachingAction) -> Unit, expanded: Boolean,
 ) {
-    var parameters by remember(block.id) { mutableStateOf(state.lever ?: block.initial) }
+    val stored = state.experiment?.takeIf { it.model == block.model } ?: block.initial
+    var values by remember(block.id) { mutableStateOf(stored) }
     var editing by remember { mutableStateOf(false) }
     // 仓库回执更新另一视图；正在拖动时保留本地预览，松手只提交被调整的字段。
-    LaunchedEffect(state.lever, block.initial) {
-        if (!editing) parameters = state.lever ?: block.initial
+    LaunchedEffect(state.experiment, block.initial) {
+        if (!editing) values = stored
     }
-    fun change(parameter: LeverParameter, value: Double) {
-        parameters = LeverPhysics.update(parameters, parameter, LeverPhysics.snap(parameter, value))
+    fun change(parameterId: String, raw: Double) {
+        values = runCatching { ExperimentMath.update(values, parameterId, raw) }.getOrDefault(values)
     }
-    fun finish(parameter: LeverParameter) {
+    fun finish(parameterId: String) {
         editing = false
-        onAction(TeachingAction.SetLeverParameter(parameter, LeverPhysics.value(parameters, parameter)))
+        onAction(TeachingAction.SetExperimentValue(parameterId, values.value(parameterId)))
     }
-    val observation = LeverPhysics.observe(parameters)
-    val angle by animateFloatAsState(observation.illustrationAngle, tween(220), label = "杠杆倾斜")
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val wide = expanded && maxWidth >= 600.dp
-            // 横屏放大时把控件放到场景侧面，避免实验场景占满视口而看不到结果与调节入口。
-            val scene: @Composable () -> Unit = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LeverScene(parameters, angle, enabled, if (wide) 200 else if (expanded) 280 else 210,
-                        onStart = { editing = true }, onChange = ::change, onFinish = ::finish)
-                    Text("理想轻杆 · 力臂为水平距离 · 倾斜示意", color = Muted, style = MaterialTheme.typography.labelSmall)
+        when (block.model) {
+            ExperimentModel.LEVER -> LeverExperiment(
+                values = values, enabled = enabled, expanded = expanded,
+                onStartEdit = { editing = true }, onChange = ::change, onFinish = ::finish,
+            )
+            ExperimentModel.COMPOUND -> CompoundExperiment(
+                values = values, enabled = enabled, expanded = expanded,
+                onStartEdit = { editing = true }, onChange = ::change, onFinish = ::finish,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LeverExperiment(
+    values: ExperimentValues, enabled: Boolean, expanded: Boolean,
+    onStartEdit: () -> Unit, onChange: (String, Double) -> Unit, onFinish: (String) -> Unit,
+) {
+    val parameters = values.leverParameters()
+    val observation = LeverPhysics.observe(parameters)
+    val angle by animateFloatAsState(observation.illustrationAngle, tween(220), label = "杠杆倾斜")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val wide = expanded && maxWidth >= 600.dp
+        val scene: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LeverScene(
+                    parameters, angle, enabled, if (wide) 200 else if (expanded) 280 else 210,
+                    onStart = onStartEdit,
+                    onChange = { parameter, value -> onChange(parameter.specId(), value) },
+                    onFinish = { parameter -> onFinish(parameter.specId()) },
+                )
+                Text("理想轻杆 · 力臂为水平距离 · 倾斜示意", color = Muted, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        val controls: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LeverReadout(parameters, wide)
+                ExperimentSliders(
+                    values, ExperimentCatalog.parameters(ExperimentModel.LEVER), enabled,
+                    tagPrefix = "lever", ticks = true,
+                    onChange = { id, value -> onStartEdit(); onChange(id, value) }, onFinish = onFinish,
+                )
+            }
+        }
+        if (wide) Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Box(Modifier.weight(1f)) { scene() }
+            Box(Modifier.weight(1f)) { controls() }
+        } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            scene()
+            controls()
+        }
+    }
+}
+
+@Composable
+private fun CompoundExperiment(
+    values: ExperimentValues, enabled: Boolean, expanded: Boolean,
+    onStartEdit: () -> Unit, onChange: (String, Double) -> Unit, onFinish: (String) -> Unit,
+) {
+    val observation = ExperimentMath.observe(values)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(if (expanded) 16.dp else 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CompoundReadout(observation, compact = !expanded)
+        ExperimentSliders(
+            values, ExperimentCatalog.parameters(ExperimentModel.COMPOUND), enabled,
+            tagPrefix = "experiment", ticks = false,
+            onChange = { id, value -> onStartEdit(); onChange(id, value) }, onFinish = onFinish,
+        )
+    }
+}
+
+@Composable
+private fun CompoundReadout(observation: ExperimentObservation, compact: Boolean) {
+    Surface(color = aiColors.chip, shape = ControlShape, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("期末总额", color = Muted, style = MaterialTheme.typography.labelSmall)
+            Text(
+                observation.headline, color = Ink,
+                style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.testTag("experiment-headline"),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                observation.metrics.forEach { metric ->
+                    Column(Modifier.weight(1f)) {
+                        Text(metric.label, color = Muted, style = MaterialTheme.typography.labelSmall)
+                        Text(metric.value, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
-            val controls: @Composable () -> Unit = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LeverReadout(parameters, wide)
-                    LeverControls(parameters, enabled, wide,
-                        onChange = { parameter, value -> editing = true; change(parameter, value) }, onFinish = ::finish)
+            observation.investedShare?.let { share ->
+                Box(
+                    Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                        .background(Gold.copy(alpha = .22f)),
+                ) {
+                    Box(Modifier.fillMaxWidth(share).fillMaxHeight().background(Gold))
                 }
-            }
-            if (wide) Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Box(Modifier.weight(1f)) { scene() }
-                Box(Modifier.weight(1f)) { controls() }
-            } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                scene()
-                controls()
+                Text("实色为累计投入，浅色为收益", color = Muted, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
+}
+
+/**
+ * 参数滑块按模型登记的参数表生成：两列布局、标签与单位来自参数定义，
+ * 松手只提交被调整的字段，避免整组草稿覆盖其他滑块的改动。
+ */
+@Composable
+private fun ExperimentSliders(
+    values: ExperimentValues, parameters: List<ExperimentParameter>, enabled: Boolean,
+    tagPrefix: String, ticks: Boolean, onChange: (String, Double) -> Unit, onFinish: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        parameters.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                row.forEach { parameter ->
+                    val value = values.value(parameter.id)
+                    Column(Modifier.weight(1f)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(parameter.label, color = Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(parameter.text(value), color = Ink, style = MaterialTheme.typography.labelLarge)
+                        }
+                        Slider(
+                            value = value.toFloat(),
+                            onValueChange = { onChange(parameter.id, it.toDouble()) },
+                            onValueChangeFinished = { onFinish(parameter.id) },
+                            valueRange = parameter.minimum.toFloat()..parameter.maximum.toFloat(),
+                            // 杠杆的离散档位有意义，保留刻度；复利参数连续调节，避免轨道变成点阵。
+                            steps = if (ticks) {
+                                ((parameter.maximum - parameter.minimum) / parameter.step).toInt() - 1
+                            } else 0,
+                            enabled = enabled,
+                            modifier = Modifier.testTag("$tagPrefix-${parameter.tagId}")
+                                .semantics { contentDescription = "调整${parameter.label}，单位${parameter.unit}" },
+                        )
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+// 杠杆沿用旧的测试标记与外部契约（left_force 等），新模型直接使用参数 id。
+private val ExperimentParameter.tagId: String
+    get() = if (id.any { it.isUpperCase() }) id.replace(Regex("([A-Z])"), "_$1").lowercase() else id
+
+private fun LeverParameter.specId(): String = when (this) {
+    LeverParameter.LEFT_FORCE -> "leftForce"
+    LeverParameter.RIGHT_FORCE -> "rightForce"
+    LeverParameter.LEFT_ARM -> "leftArm"
+    LeverParameter.RIGHT_ARM -> "rightArm"
 }
 
 @Composable
@@ -96,51 +225,6 @@ private fun LeverReadout(parameters: LeverParameters, compact: Boolean) {
                     color = leftColor, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), minLines = if (compact) 1 else 2)
                 Text("右 ${number(parameters.rightForce)} × ${number(parameters.rightArm)} = ${number(observation.rightMoment)} N·m",
                     color = rightColor, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), minLines = if (compact) 1 else 2)
-            }
-        }
-    }
-}
-
-@Composable
-private fun LeverControls(
-    parameters: LeverParameters, enabled: Boolean, inlineLabels: Boolean,
-    onChange: (LeverParameter, Double) -> Unit, onFinish: (LeverParameter) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        listOf(
-            LeverParameter.LEFT_FORCE to LeverParameter.RIGHT_FORCE,
-            LeverParameter.LEFT_ARM to LeverParameter.RIGHT_ARM,
-        ).forEach { (left, right) ->
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                listOf(left, right).forEach { parameter ->
-                    val label = when (parameter) {
-                        LeverParameter.LEFT_FORCE -> "左侧力"
-                        LeverParameter.RIGHT_FORCE -> "右侧力"
-                        LeverParameter.LEFT_ARM -> "左侧力臂"
-                        LeverParameter.RIGHT_ARM -> "右侧力臂"
-                    }
-                    val unit = if (parameter == LeverParameter.LEFT_FORCE || parameter == LeverParameter.RIGHT_FORCE) "N" else "m"
-                    val value = LeverPhysics.value(parameters, parameter)
-                    Column(Modifier.weight(1f)) {
-                        if (inlineLabels) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
-                            Text("${number(value)} $unit", color = Ink, style = MaterialTheme.typography.labelLarge)
-                        } else {
-                            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
-                            Text("${number(value)} $unit", color = Ink, style = MaterialTheme.typography.labelLarge)
-                        }
-                        Slider(
-                            value = value.toFloat(),
-                            onValueChange = { onChange(parameter, it.toDouble()) },
-                            onValueChangeFinished = { onFinish(parameter) },
-                            valueRange = parameter.minimum.toFloat()..parameter.maximum.toFloat(),
-                            steps = ((parameter.maximum - parameter.minimum) / parameter.increment).toInt() - 1,
-                            enabled = enabled,
-                            modifier = Modifier.testTag("lever-${parameter.name.lowercase()}")
-                                .semantics { contentDescription = "调整$label，单位$unit" },
-                        )
-                    }
-                }
             }
         }
     }

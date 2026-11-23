@@ -6,25 +6,26 @@ import org.junit.Test
 
 class LeverExperimentTest {
     private val block = TeachingExperiment("lever", "杠杆", "调节右侧力臂")
+    private val lever = block.initial.leverParameters()
 
     @Test fun directionAndBalanceFollowForceTimesHorizontalArm() {
-        assertEquals(LeverBalance.LEFT_DOWN, LeverPhysics.observe(block.initial).balance)
-        val balanced = block.initial.copy(rightArm = 4.0)
+        assertEquals(LeverBalance.LEFT_DOWN, LeverPhysics.observe(lever).balance)
+        val balanced = lever.copy(rightArm = 4.0)
         val result = LeverPhysics.observe(balanced)
         assertEquals(8.0, result.leftMoment, 0.0)
         assertEquals(8.0, result.rightMoment, 0.0)
         assertEquals(LeverBalance.BALANCED, result.balance)
         assertEquals(0f, result.illustrationAngle, 0f)
         assertEquals(LeverBalance.RIGHT_DOWN, LeverPhysics.observe(balanced.copy(rightForce = 3.0)).balance)
-        assertTrue(LeverPhysics.observe(block.initial).illustrationAngle < 0f)
+        assertTrue(LeverPhysics.observe(lever).illustrationAngle < 0f)
         assertTrue(LeverPhysics.observe(balanced.copy(rightForce = 3.0)).illustrationAngle > 0f)
     }
 
     @Test fun fieldActionsMergeWithoutOverwritingOtherParametersAndResetToInitial() {
-        val first = TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetLeverParameter(LeverParameter.LEFT_FORCE, 6.0))
-        val second = TeachingInteractions.apply(block, first, TeachingAction.SetLeverParameter(LeverParameter.RIGHT_ARM, 4.0))
-        assertEquals(6.0, second.lever!!.leftForce, 0.0)
-        assertEquals(4.0, second.lever.rightArm, 0.0)
+        val first = TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetExperimentValue("leftForce", 6.0))
+        val second = TeachingInteractions.apply(block, first, TeachingAction.SetExperimentValue("rightArm", 4.0))
+        assertEquals(6.0, second.experiment!!.value("leftForce"), 0.0)
+        assertEquals(4.0, second.experiment.value("rightArm"), 0.0)
         assertEquals(TeachingState(), TeachingInteractions.apply(block, second, TeachingAction.Reset))
         assertFalse(second.submitted)
         assertEquals(0, second.attempts)
@@ -33,12 +34,12 @@ class LeverExperimentTest {
     @Test fun invalidNumbersRangesAndStepsNeverEnterSavedState() {
         listOf(Double.NaN, Double.POSITIVE_INFINITY, 0.0, 11.0, 2.5).forEach { value ->
             assertThrows(RuleViolation::class.java) {
-                TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetLeverParameter(LeverParameter.LEFT_FORCE, value))
+                TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetExperimentValue("leftForce", value))
             }
         }
         listOf(.5, 4.5, 1.1, Double.NEGATIVE_INFINITY).forEach { value ->
             assertThrows(RuleViolation::class.java) {
-                TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetLeverParameter(LeverParameter.RIGHT_ARM, value))
+                TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetExperimentValue("rightArm", value))
             }
         }
         assertFalse(LeverPhysics.isValid(LeverParameters(leftForce = Double.NaN)))
@@ -54,7 +55,7 @@ class LeverExperimentTest {
     @Test fun actionsAreBoundToExperimentTypeAndCannotSubmitAnAssessment() {
         val text = TeachingText("text", "文字", "说明")
         assertThrows(RuleViolation::class.java) {
-            TeachingInteractions.apply(text, TeachingState(), TeachingAction.SetLeverParameter(LeverParameter.LEFT_FORCE, 4.0))
+            TeachingInteractions.apply(text, TeachingState(), TeachingAction.SetExperimentValue("leftForce", 4.0))
         }
         assertThrows(RuleViolation::class.java) { TeachingInteractions.apply(block, TeachingState(), TeachingAction.Submit) }
         assertThrows(RuleViolation::class.java) { TeachingInteractions.apply(block, TeachingState(), TeachingAction.Reveal) }
@@ -62,7 +63,13 @@ class LeverExperimentTest {
 
     @Test fun markdownAndHistoryDescribeTheActualExperimentAndItsLimits() {
         assertTrue(block.markdown().contains("倾角仅作方向示意"))
-        assertTrue(block.interactionSummary(TeachingState(lever = block.initial.copy(rightArm = 4.0))).contains("已平衡"))
+        val balanced = TeachingState(
+            experiment = ExperimentValues(
+                ExperimentModel.LEVER,
+                mapOf("leftForce" to 4.0, "rightForce" to 2.0, "leftArm" to 2.0, "rightArm" to 4.0),
+            ),
+        )
+        assertTrue(block.interactionSummary(balanced).contains("已平衡"))
         assertTrue(block.interactionSummary(TeachingState()).contains("左侧下沉"))
     }
 }

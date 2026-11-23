@@ -13,11 +13,12 @@ internal enum class ExamQuestionType(val label: String, val points: Int) {
     // 仅用于读取 0.12.0 已保存的历史试卷，新试卷不会再包含此题型。
     SHORT("简答", 20);
 
+    // 新试卷的题型分布：只出单选与多选，不再出填空。历史试卷按各自分布单独校验。
     val examCount: Int
         get() = when (this) {
-            SINGLE -> 4
-            MULTIPLE -> 3
-            FILL -> 3
+            SINGLE -> 6
+            MULTIPLE -> 4
+            FILL -> 0
             SHORT -> 0
         }
 }

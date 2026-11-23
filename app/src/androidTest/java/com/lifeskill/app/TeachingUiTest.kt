@@ -294,17 +294,17 @@ class TeachingUiTest {
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
         val arm = expandedNode("lever-right_arm")
         arm.performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
-        ui.waitUntil(8_000) { state(lesson, "lever").lever?.rightArm == 4.0 }
+        ui.waitUntil(8_000) { state(lesson, "lever").experiment?.value("rightArm") == 4.0 }
         expandedNode("lever-status").assertTextEquals("已平衡")
         expandedNode("lever-left_force").performScrollTo().performTouchInput {
             swipe(Offset(width * .25f, height / 2f), Offset(width * .70f, height / 2f), 400)
         }
-        ui.waitUntil(8_000) { (state(lesson, "lever").lever?.leftForce ?: 0.0) > 4.0 }
+        ui.waitUntil(8_000) { (state(lesson, "lever").experiment?.value("leftForce") ?: 0.0) > 4.0 }
         expandedNode("lever-weight-right").performScrollTo().performTouchInput {
             swipe(center, center + Offset(-70f, 0f), 450)
         }
-        ui.waitUntil(8_000) { (state(lesson, "lever").lever?.rightArm ?: 4.0) < 4.0 }
-        val saved = state(lesson, "lever").lever
+        ui.waitUntil(8_000) { (state(lesson, "lever").experiment?.value("rightArm") ?: 4.0) < 4.0 }
+        val saved = state(lesson, "lever").experiment
         try {
             // ActivityScenario取Activity可能等待生命周期收敛，必须在测试线程完成，不能占住UI线程等待旋转。
             val portraitActivity = ui.activity
@@ -317,7 +317,7 @@ class TeachingUiTest {
             val scene = expandedNode("lever-scene").getUnclippedBoundsInRoot()
             val control = expandedNode("lever-left_force").getUnclippedBoundsInRoot()
             assertTrue(control.left > scene.left)
-            assertEquals(saved, state(lesson, "lever").lever)
+            assertEquals(saved, state(lesson, "lever").experiment)
         } finally {
             val landscapeActivity = ui.activity
             ui.runOnUiThread { landscapeActivity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
@@ -329,14 +329,14 @@ class TeachingUiTest {
         awaitDialogFocus()
         back()
         ui.onNodeWithTag("teaching-expanded").assertDoesNotExist()
-        assertEquals(saved, state(lesson, "lever").lever)
+        assertEquals(saved, state(lesson, "lever").experiment)
         ui.activityRule.scenario.recreate()
         await("AI 老师")
-        assertEquals(saved, state(lesson, "lever").lever)
+        assertEquals(saved, state(lesson, "lever").experiment)
         scrollTo(hasContentDescription("放大杠杆实验台"))
         ui.onNodeWithContentDescription("放大杠杆实验台").performClick()
         ui.onNode(hasContentDescription("重置杠杆实验台") and hasAnyAncestor(hasTestTag("teaching-expanded"))).performClick()
-        ui.waitUntil(8_000) { state(lesson, "lever").lever == null }
+        ui.waitUntil(8_000) { state(lesson, "lever").experiment == null }
         expandedNode("lever-status").assertTextEquals("左侧下沉")
         back()
         scrollTo(hasTestTag("lever-scene"))

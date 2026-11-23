@@ -1199,19 +1199,11 @@ class MvpFlowTest {
             await("验收单选1")
 
             val paper = ui.onNodeWithTag("exam-questions")
-            for (index in 0..6) {
+            // 新试卷不再有填空题：6 道单选 + 4 道多选，最后一题留空。
+            for (index in 0..8) {
                 paper.performScrollToIndex(index)
                 ui.onNodeWithTag("exam-choice-$index-0").performTouchInput { click() }
-                if (index >= 4) ui.onNodeWithTag("exam-choice-$index-1").performTouchInput { click() }
-            }
-            for (index in 7..8) {
-                paper.performScrollToIndex(index)
-                val answer = ui.onNodeWithTag("exam-answer-$index")
-                answer.performTouchInput { click() }
-                ui.waitUntil(8_000) { imeVisible() }
-                answer.performTextReplacement("核对金额")
-                pressBack()
-                ui.waitUntil(8_000) { !imeVisible() }
+                if (index >= 6) ui.onNodeWithTag("exam-choice-$index-1").performTouchInput { click() }
             }
             await("已答 9 / 10")
             ui.onNodeWithText("交卷").performTouchInput { click() }
@@ -1223,7 +1215,7 @@ class MvpFlowTest {
             ui.onNodeWithText("再考一次").assertIsEnabled()
             collectExamCertificate(tree.name, "3,600 Token · 预估 ¥0.0085")
             ui.onNodeWithText("查看错题集").performTouchInput { click() }
-            await("验收填空3")
+            await("验收多选4")
             ui.onAllNodesWithText("未作答")[0].assertIsDisplayed()
             pressBack()
             await("90 分")

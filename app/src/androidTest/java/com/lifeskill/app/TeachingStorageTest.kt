@@ -160,6 +160,27 @@ class TeachingStorageTest {
         } finally { database.close() }
     }
 
+    @Test fun compoundExperimentRoundTripsAndLegacyLeverStateStillLoads() = runBlocking {
+        val block = TeachingExperiment(
+            "growth", "复利实验台", "调整每月投入与年限。", ExperimentModel.COMPOUND,
+        )
+        val decoded = TeachingBlockProtocol.decode(JSONArray(TeachingBlockProtocol.encode(listOf(block)).toString())).single()
+        assertEquals(block, decoded)
+
+        val updated = TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetExperimentValue("rate", 10.0))
+        val restored = TeachingBlockProtocol.decodeStates(
+            TeachingBlockProtocol.encodeStates(mapOf(block.id to updated)),
+        ).getValue(block.id)
+        assertEquals(updated.experiment, restored.experiment)
+
+        // 0.15.33 之前只存 lever 字段，读取时应映射为同一模型的参数表。
+        val legacy = TeachingBlockProtocol.decodeStates(
+            """{"lab":{"lever":{"leftForce":6,"rightForce":2,"leftArm":2,"rightArm":3}}}""",
+        ).getValue("lab")
+        assertEquals(ExperimentModel.LEVER, legacy.experiment!!.model)
+        assertEquals(6.0, legacy.experiment.value("leftForce"), 0.0)
+    }
+
     @Test fun statesAreEncryptedSurviveReopenAndNeverLightTheLesson() = runBlocking {
         val name = "teaching-state-${UUID.randomUUID()}"
         val sample = BuiltInTeaching.lessons.first { it.key == "practice" }
@@ -289,7 +310,7 @@ class TeachingStorageTest {
             val app = fixture(database, ScriptedGateway())
             app.library.initialize()
             val lesson = BuiltInTeaching.lessonByKey("visual")!!
-            val block = lesson.blocks.filterIsInstance<TeachingExperiment>().single()
+            val block = lesson.blocks.filterIsInstance<TeachingExperiment>().single { it.model == ExperimentModel.LEVER }
             val scope = ChatScope(ChatMode.TUTOR, lesson.id)
             val encoded = TeachingBlockProtocol.encode(listOf(block))
             assertEquals(listOf(block), TeachingBlockProtocol.decode(encoded))
@@ -305,15 +326,15 @@ class TeachingStorageTest {
             invalidArm.getJSONObject("initial").put("rightArm", 10)
             assertTrue(TeachingBlockProtocol.decode(JSONArray().put(invalidArm)).isEmpty())
             val before = database.skills().turn(scope.id, lesson.turnId)!!
-            app.conversations.interact(scope, lesson.turnId, block.id, TeachingAction.SetLeverParameter(LeverParameter.RIGHT_ARM, 4.0))
+            app.conversations.interact(scope, lesson.turnId, block.id, TeachingAction.SetExperimentValue("rightArm", 4.0))
             val saved = database.skills().turn(scope.id, lesson.turnId)!!
             assertEquals(before.teachingBlocks, saved.teachingBlocks)
             assertFalse(saved.teachingStates.orEmpty().contains("rightArm"))
             val restored = fixture(database, ScriptedGateway()).conversations.watch(scope).first().single()
             val state = restored.teachingStates.getValue(block.id)
-            assertEquals(4.0, state.lever!!.rightArm, 0.0)
+            assertEquals(4.0, state.experiment!!.value("rightArm"), 0.0)
             assertEquals(state, TeachingBlockProtocol.decodeStates(TeachingBlockProtocol.encodeStates(mapOf(block.id to state))).getValue(block.id))
-            assertNull(TeachingBlockProtocol.decodeStates("{\"old\":{}}").getValue("old").lever)
+            assertNull(TeachingBlockProtocol.decodeStates("{\"old\":{}}").getValue("old").experiment)
             val history = AiProtocol.tutorHistory(restored)
             assertTrue(history.contains("experiment"))
             assertTrue(history.contains("已平衡"))

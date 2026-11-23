@@ -207,7 +207,11 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_018, bridge),
                 BuiltInTeachingItem(1_020, mixedQuiz),
                 BuiltInTeachingItem(1_021, TeachingExperiment("lever", "杠杆实验台",
-                    "移动两侧重物或调整力，试着让杠杆平衡。")),
+                    "移动两侧重物或调整力，试着让杠杆平衡。", ExperimentModel.LEVER)),
+                // 第二个模型：调本金、定投、年化与年限，观察复利终值的变化。
+                BuiltInTeachingItem(1_031, TeachingExperiment("compound", "复利实验台",
+                    "调整本金、每月投入、年化收益和年限，观察期末总额与收益占比怎么变。",
+                    ExperimentModel.COMPOUND)),
             )),
     )
 

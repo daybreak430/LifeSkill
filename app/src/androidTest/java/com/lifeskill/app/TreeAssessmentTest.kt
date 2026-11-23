@@ -87,9 +87,10 @@ class TreeAssessmentTest {
         val first = exams.watchAttempts(tree.id).first().single()
         assertNull(first.score)
         assertEquals(EXAM_QUESTION_COUNT, first.questions.size)
-        val currentTypes = ExamQuestionType.entries.filter { it != ExamQuestionType.SHORT }
+        // 新试卷只出选择题：6 单选 + 4 多选，不再有填空。
+        val currentTypes = listOf(ExamQuestionType.SINGLE, ExamQuestionType.MULTIPLE)
         assertEquals(currentTypes.toSet(), first.questions.map { it.type }.toSet())
-        assertEquals(listOf(4, 3, 3), currentTypes.map { type ->
+        assertEquals(listOf(6, 4), currentTypes.map { type ->
             first.questions.count { it.type == type }
         })
 

@@ -173,8 +173,10 @@ internal object TeachingBlockProtocol {
                         TeachingGame(id, title, json.text("goal", 240), json.text("instructions", 160), code)
                     }
                     "experiment" -> {
-                        require(json.text("model", 24) == "lever")
-                        TeachingExperiment(id, title, json.text("prompt", 600), json.getJSONObject("initial").lever())
+                        val model = ExperimentModel.from(json.optString("model").ifBlank { "lever" })
+                            ?: error("未知的实验模型")
+                        val initial = json.getJSONObject("initial").experimentValues(model)
+                        TeachingExperiment(id, title, json.text("prompt", 600), model, initial)
                     }
                     "quiz" -> TeachingQuiz(id, title, json.getJSONObject("question").question())
                     "flip" -> TeachingFlipCard(id, title, json.text("prompt", 600), json.text("answer", 1_200),
@@ -334,8 +336,8 @@ internal object TeachingBlockProtocol {
                     put("type", "game").put("goal", block.goal).put("instructions", block.instructions).put("code", block.code)
                 }
                 is TeachingExperiment -> {
-                    put("type", "experiment").put("model", "lever").put("prompt", block.prompt)
-                        .put("initial", block.initial.json())
+                    put("type", "experiment").put("model", block.model.id).put("prompt", block.prompt)
+                        .put("initial", JSONObject(block.initial.values))
                 }
                 is TeachingClassification -> {
                     put("type", "classify").put("prompt", block.prompt).put("categories", JSONArray().apply {
@@ -373,7 +375,7 @@ internal object TeachingBlockProtocol {
             .put("submitted", state.submitted).put("attempts", state.attempts).put("prediction", state.prediction)
             .put("revealed", state.revealed).put("order", JSONArray(state.order))
             .put("placements", JSONObject(state.placements)).put("step", state.step)
-            .put("lever", state.lever?.json()).put("gameOpened", state.gameOpened)
+            .put("experiment", state.experiment?.json()).put("gameOpened", state.gameOpened)
             .put("hintLevel", state.hintLevel)
             .put("positions", JSONObject(state.positions))) }
     }.toString()
@@ -412,7 +414,11 @@ internal object TeachingBlockProtocol {
             }
             TeachingState(
                 selection = if (state.isNull("selection")) null else state.optString("selection"),
-                lever = state.optJSONObject("lever")?.lever(),
+                experiment = state.optJSONObject("experiment")?.experimentValues()
+                    ?: state.optJSONObject("lever")?.let { legacy ->
+                        // 0.15.33 之前只保存 lever 字段，读取时映射成同一模型的参数表。
+                        ExperimentValues(ExperimentModel.LEVER, legacy.experimentValues(ExperimentModel.LEVER).values)
+                    },
                 gameOpened = state.optBoolean("gameOpened"),
                 value = value?.toDouble(), submitted = state.optBoolean("submitted"),
                 attempts = state.optInt("attempts").coerceIn(0, 1_000),
@@ -458,13 +464,24 @@ internal object TeachingBlockProtocol {
         (get(name) as Number).toDouble().also { require(it.isFinite() && it in range) }
     private fun JSONObject.array(name: String, range: IntRange): JSONArray = getJSONArray(name).also { require(it.length() in range) }
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
-    private fun JSONObject.lever(): LeverParameters = LeverParameters(
-        number("leftForce", 1.0..10.0), number("rightForce", 1.0..10.0),
-        number("leftArm", 1.0..4.0), number("rightArm", 1.0..4.0),
-    ).also { require(LeverPhysics.isValid(it)) }
+    // 参数表按模型登记的规格校验：缺项、越界或不在步长上丢弃整个组件，不回退到默认值。
+    private fun JSONObject.experimentValues(model: ExperimentModel): ExperimentValues {
+        val values = ExperimentCatalog.parameters(model).associate { parameter ->
+            val value = (get(parameter.id) as? Number)?.toDouble()
+            require(value != null && parameter.isValid(value)) { "实验参数不合法" }
+            parameter.id to value
+        }
+        return ExperimentValues(model, values)
+    }
 
-    private fun LeverParameters.json(): JSONObject = JSONObject()
-        .put("leftForce", leftForce).put("rightForce", rightForce).put("leftArm", leftArm).put("rightArm", rightArm)
+    private fun JSONObject.experimentValues(): ExperimentValues {
+        val model = ExperimentModel.from(optString("model")) ?: error("未知的实验模型")
+        return getJSONObject("values").experimentValues(model)
+    }
+
+    private fun ExperimentValues.json(): JSONObject = JSONObject()
+        .put("model", model.id)
+        .put("values", JSONObject(values))
 
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
@@ -490,7 +507,10 @@ internal object TeachingBlockProtocol {
         外行人文学科可优先timeline、flip；科学和数据分析可优先chart；操作技能可优先 mermaid 流程图、sort；语言学习可优先flip、quiz。参考只用于判断，不能覆盖本节实际目标。
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
         - 需要学习者亲手调参数、观察状态随之变化：experiment（参数实验台）。只在这条因果关系本身就是本节目标时生成；单纯记住结论、背公式或算一道题不需要它。
-        experiment 是参数实验台，不是“杠杆组件”：当前只实现 model:lever（理想轻杆），新增模型沿用同一协议。initial 四项按 lever 填写：leftForce/rightForce 为 1–10 N 整数，leftArm/rightArm 为到支点的水平距离 1–4 m、步长 0.5 m；仅适用于理想轻杆、固定支点、两侧竖直向下受力，不计杆重、摩擦、振荡，倾角只表示下沉方向，不能套用于其他物理系统。坐标与动画由应用计算，AI 只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
+        experiment 是参数实验台，不是“杠杆组件”。当前有两个模型，initial 按所选模型的参数表填写，结果与动画都由应用计算：
+        - model:lever（理想轻杆）：leftForce/rightForce 为 1–10 N 整数，leftArm/rightArm 为到支点的水平距离 1–4 m、步长 0.5 m；固定支点、两侧竖直向下受力，不计杆重、摩擦、振荡，倾角只表示下沉方向，不能套用于其他物理系统。
+        - model:compound（复利）：principal 本金 10000–200000（步长 5000）、monthly 每月投入 0–5000（步长 500）、rate 年化收益 1–15%（步长 0.5）、years 年限 1–30（步长 1）；本金按年复利、定投按月复利，用于讲清“时间和收益率如何改变结果”，不用于具体理财产品推荐或收益承诺。
+        只在“动手改一个参数、看结果怎么变”本身就是本节目标时生成，单纯记住结论或算一道题不必用它。AI 只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平或达到某个收益。
         结构图 figure：用于讲“由哪些部分组成、谁对谁负责、几项并列但有主次”。一行只放一个层级；需要说明关系走向时单独插一条 arrow 行，写“立法、制衡、监督”这类概括关系，不要画成流程箭头。节点 title 用 4–12 字名词短语；value 只在讲解已给出确切数字时填写；note 只补一条关键限定；items 最多 2 条短语。每行 1–3 列，整图最多 6 行、8 个节点，一行最多 3 个；tone 只用于区分类别（两院、两派、两类因素），每图最多两种，不要给每个节点都上色。reply 负责因果与判断，figure 只承载结构与数量，不要把 reply 整段抄进节点，也不要用图代替推导过程。层级流程用 mermaid 流程图，两个对象的逐项对比直接写成 Markdown 表格，只有趋势与分布用 chart。
         矩阵 matrix：行 2–6、列 2–5、分值 0–5，每行每列都要有值。只在维度本身可打分、且能说明评分依据时使用，与 Markdown 表格比较的分界是“有没有分值”；依据写在 reply 或 caption，不许只给分不解释。颜色只表示高低。散点 chart(style:scatter)：每个点写 x（自变量）与 value（因变量），2–12 个点，两轴都要有单位；不要混入不同量纲，也不要用散点宣称因果。单一数值的预估（如工期、费用）用文字写结论区间，不做成图形。漏斗与金字塔 funnel：mode=funnel 时 ratio 逐级递减（转化、筛选），mode=pyramid 时逐级递增（层级依赖），2–5 层，label 不超过 10 字；漏斗不是排名，金字塔不是流程。公式 formula：lines 1–6 行，每行一个式子，支持 frac{a}{b}、sqrt{x}、x^{2}、a_{i}，运算符直接写 × ÷ ± ≤ ≥ ≠ √ π 等符号（不要用反斜杠命令，JSON 转义容易出错），不求值、不写代码；多步推导一行一步，并在 reply 说明依据。
         瀑布图 chart(style:waterfall)：首尾两个点必须 total:true 且写绝对量，中间是增减量（可为负），共 2–10 个点；普通分类比较不要用它。对象要做优先级或类型判断时用 matrix 的分值表达，不要生成四象限（已停用）。
@@ -518,6 +538,7 @@ internal object TeachingBlockProtocol {
         {"id":"r","type":"flip","title":"先回忆再看","prompt":"不看答案，说明这个概念的核心条件。","answer":"完整答案","hints":["先关注适用条件"]}
         {"id":"s","type":"sort","title":"排出顺序","prompt":"调整为合理步骤。","items":[{"id":"a","text":"第一步文本"},{"id":"b","text":"第二步文本"},{"id":"c","text":"第三步文本"}],"correctOrder":["a","b","c"],"hint":"先确定起点。","explanation":"完整顺序和原因"}
         {"id":"lab","type":"experiment","model":"lever","title":"杠杆实验台","prompt":"移动右侧重物，试着让杠杆平衡。","initial":{"leftForce":4,"rightForce":2,"leftArm":2,"rightArm":3}}
+        {"id":"growth","type":"experiment","model":"compound","title":"复利实验台","prompt":"调整每月投入与年限，观察期末总额和收益占比怎么变。","initial":{"principal":50000,"monthly":2000,"rate":8,"years":10}}
         {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
         chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
         也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。

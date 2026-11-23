@@ -173,7 +173,8 @@ data class TeachingState(
     val selection: String? = null, val value: Double? = null, val submitted: Boolean = false,
     val attempts: Int = 0, val prediction: Int? = null, val revealed: Boolean = false,
     val order: List<String> = emptyList(), val placements: Map<String, String> = emptyMap(), val step: Int = 0,
-    val lever: LeverParameters? = null,
+    // 参数实验台的当前参数；旧记录只在协议层映射，不在这里保留旧字段。
+    val experiment: ExperimentValues? = null,
     val gameOpened: Boolean = false,
     // 已展开的提示层级：0 表示只用第 1 条，1 表示已看到第 2 条，以此类推。
     val hintLevel: Int = 0,
@@ -184,7 +185,7 @@ data class TeachingState(
 sealed interface TeachingAction {
     data class Select(val key: String) : TeachingAction
     data class SetValue(val value: Double) : TeachingAction
-    data class SetLeverParameter(val parameter: LeverParameter, val value: Double) : TeachingAction
+    data class SetExperimentValue(val parameter: String, val value: Double) : TeachingAction
     data class Place(val key: String, val x: Double, val y: Double) : TeachingAction
     data class Predict(val index: Int) : TeachingAction
     data class Move(val key: String, val toIndex: Int) : TeachingAction
@@ -247,10 +248,14 @@ internal object TeachingInteractions {
             ) invalid()
             previous.copy(value = action.value.roundToInt().toDouble())
         }
-        is TeachingAction.SetLeverParameter -> {
+        is TeachingAction.SetExperimentValue -> {
             if (block !is TeachingExperiment) invalid()
+            // 提交值必须落在模型登记的取值与步长上；预览阶段的吸附不代替这里的校验。
+            val parameter = ExperimentCatalog.parameter(block.model, action.parameter) ?: invalid()
+            if (!parameter.isValid(action.value)) invalid()
             // 单个参数在仓库事务内合并，避免快速调整不同滑块时旧快照覆盖刚保存的其他参数。
-            previous.copy(lever = LeverPhysics.update(previous.lever ?: block.initial, action.parameter, action.value))
+            val current = previous.experiment?.takeIf { it.model == block.model } ?: block.initial
+            previous.copy(experiment = ExperimentMath.update(current, action.parameter, action.value))
         }
         is TeachingAction.Predict -> {
             if (block !is TeachingChart || block.prediction == null || action.index !in block.prediction.options.indices ||
@@ -424,8 +429,12 @@ internal fun TeachingBlock.markdown(): String = buildString {
         }
         is TeachingExperiment -> {
             appendLine(block.prompt)
-            appendLine("理想轻杆，两侧竖直受力；比较 F × 到支点的水平距离，平衡时两侧相等。倾角仅作方向示意。")
-            appendLine("初始状态：${block.initial.summary()}")
+            appendLine(
+                if (block.model == ExperimentModel.COMPOUND)
+                    "复利模型：本金按年复利，定投按月复利；参数与结果由应用计算，不生成公式代码。"
+                else "理想轻杆，两侧竖直受力；比较 F × 到支点的水平距离，平衡时两侧相等。倾角仅作方向示意。",
+            )
+            appendLine("初始状态：${ExperimentMath.summary(block.initial)}")
         }
         is TeachingQuiz -> {
             appendLine(block.question.question)
@@ -504,7 +513,10 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
             }
         }.orEmpty()
     }
-    is TeachingExperiment -> "杠杆实验：${(state.lever ?: block.initial).summary()}"
+    is TeachingExperiment -> {
+        val label = if (block.model == ExperimentModel.COMPOUND) "复利实验" else "杠杆实验"
+        "$label：${ExperimentMath.summary(state.experiment ?: block.initial)}"
+    }
     is TeachingFigure -> ""
     is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula -> ""
     is TeachingQuadrant -> state.positions.entries.joinToString("；") { (id, xy) ->
