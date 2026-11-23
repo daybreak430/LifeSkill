@@ -23,21 +23,21 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `edd1ce7`（完整哈希见 `git rev-parse v0.15.29`） |
-| 最新版本 | `0.15.29` |
-| `versionCode` | `116` |
+| 最新产品与发布提交 | `e15faa4`（完整哈希见 `git rev-parse v0.15.30`） |
+| 最新版本 | `0.15.30` |
+| `versionCode` | `117` |
 | 标签 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.29](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.29) |
-| APK 文件名 | `LifeSkill-0.15.29-release.apk` |
+| Release | [LifeSkill 0.15.30](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.30) |
+| APK 文件名 | `LifeSkill-0.15.30-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `3015a39d287e63e67f234be583f9552649c2a8cce284c4513ff359c8aa172db4` |
+| APK SHA-256 | `d55649b1e726f55a188215efb5cbb3c6ab0dc166955181cced61af3211f51542` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.29..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.30..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.29` 已发布：标签指向 `edd1ce7`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词的组件使用规则与示例，未做覆盖升级安装验证，也未用真实模型抽样确认组件是否恢复出现。
+`0.15.30` 已发布：标签指向 `e15faa4`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改 Markdown 表格的渲染排版，未做覆盖升级安装验证，也未在真机核对表格在窄屏上的换行。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -134,6 +134,16 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.28` | `66b8bc3` |
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | `edd1ce7` |
+| `v0.15.30` | `e15faa4` |
+
+## 0.15.30 的验证证据
+
+- 背景：对比卡停用后，逐项比较由 Markdown 表格承担，但旧样式是灰底、118dp 固定列、横向滚动，字号 12.5sp，三列在手机上常被挤出屏幕。
+- 改动（仅 `ui/LessonMarkdown.kt` 的 `LessonTable`）：卡片容器（白底、1dp 描边、14dp 圆角）；第一列 78dp、12.5sp 次级色作为维度列；其余列等权、13.5sp/21sp 且启用等宽数字；表头 13.5sp semibold，表头下实线、行间发丝线；2–3 列自适应卡宽不再横滑，4 列以上才保留 118dp 定宽横滑。没有新增协议或组件类型。
+- 实现细节：`TableHead`/`TableBody` 分行读取，`Sequence` 的 `size` 与 `getOrNull` 不可用，改为 `count()` 与 `toList()`；横滑模式下分隔线宽度显式设为 `118dp × 列数`，保证与单元格对齐。
+- 测试：`LessonMarkdownRenderTest` 新增表格卡片用例，断言表头与末行内容并截图核对列宽与换行；`LessonMarkdownRenderTest` 与 `TeachingUiTest` 合计 18 项通过，单元测试与 `lintDebug` 通过。
+- `MvpFlowTest` 整套在本机同时或连续运行时会因应用状态互相干扰大面积失败（设置、首页、地图等与本次改动无关的用例也会挂）；清空应用数据后单跑 `chatAlignsCharacterDiagramsAndKeepsPositionWhenALongReplyArrives` 通过，说明字符图与表格渲染未回退。整套结果不作为本次验收依据。
+- 未做覆盖升级安装验证，也未在真机确认窄屏（<360dp）下的列宽与换行。
 
 ## 0.15.29 的验证证据
 
