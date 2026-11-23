@@ -30,7 +30,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 | 结业考试和课后复习 | [TreeAssessment.kt](../app/src/main/java/com/lifeskill/app/model/TreeAssessment.kt)、[TreeAssessmentProtocol.kt](../app/src/main/java/com/lifeskill/app/ai/TreeAssessmentProtocol.kt)、[TreeAssessmentRepository.kt](../app/src/main/java/com/lifeskill/app/data/TreeAssessmentRepository.kt)、[ExamScreen.kt](../app/src/main/java/com/lifeskill/app/ui/ExamScreen.kt) |
 | 个人资料、学习统计和证书展柜 | [PersonalScreens.kt](../app/src/main/java/com/lifeskill/app/ui/PersonalScreens.kt)、[PersonalViewModel.kt](../app/src/main/java/com/lifeskill/app/ui/PersonalViewModel.kt)、[ProfileRepository.kt](../app/src/main/java/com/lifeskill/app/data/ProfileRepository.kt)、[CertificateRepository.kt](../app/src/main/java/com/lifeskill/app/data/CertificateRepository.kt) |
 
-杠杆实验台的纯计算与参数校验见[TeachingExperiments.kt](../app/src/main/java/com/lifeskill/app/model/TeachingExperiments.kt)，原生预览、拖动与滑块见[实验台UI](../app/src/main/java/com/lifeskill/app/ui/TeachingExperiments.kt)。
+参数实验台（杠杆模型）的纯计算与参数校验见[TeachingExperiments.kt](../app/src/main/java/com/lifeskill/app/model/TeachingExperiments.kt)，原生预览、拖动与滑块见[实验台UI](../app/src/main/java/com/lifeskill/app/ui/TeachingExperiments.kt)。
 
 小游戏的模型与预算在 `model/TeachingGames.kt`，原生启动/销毁和WebView能力限制在 `ui/TeachingGames.kt`，共用画布与Worker运行器在 `assets/teaching/game-runtime.html`。代码不进入原生业务层，不注册JS宿主接口；后台与退出终止运行。
 

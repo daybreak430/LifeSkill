@@ -169,6 +169,9 @@ class AiProtocolTest {
         assertTrue(prompt.contains("有先后顺序、步骤、阶段或排名时用有序列表"))
         // 组件不能只在“用户点名”时才出现，否则默认讲解会退化成纯文字。
         assertTrue(prompt.contains("每轮先判断有没有匹配的组件"))
+        // 实验台是组件类型，杠杆只是当前模型，提示词不能把两者混为一谈。
+        assertTrue(prompt.contains("experiment（参数实验台）"))
+        assertTrue(prompt.contains("不是“杠杆组件”"))
         assertTrue(prompt.contains("\"blocks\":[{\"id\":\"t\",\"type\":\"timeline\""))
         assertFalse(prompt.contains("首选compare"))
     }
