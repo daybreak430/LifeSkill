@@ -43,14 +43,24 @@ class TeachingInteractionsTest {
     private val chart get() = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>()
         .first { it.mode == TeachingChartMode.LINEAR_DEMAND }
 
+    private val legacyComparison = TeachingComparison(
+        "legacy-compare", "旧对比卡", listOf("甲", "乙"),
+        listOf(ComparisonDimension("basis", "依据", listOf("第一条", "第二条"))),
+    )
+
     @Test fun everyRegisteredTeachingTypeHasAnOfflineShowcaseLesson() {
         // 密封类型自动覆盖未来新增组件；停用类型仅保留旧记录兼容，不要求出现在当前演示目录。
         assertEquals(TeachingChartStyle.entries.toSet(), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>().map { it.style }.toSet())
-        assertEquals(setOf(ComparisonPalette.BLUE_AMBER), BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingComparison>().map { it.palette }.toSet())
+        // 对比卡自 0.15.25 起停用：用 Markdown 表格表达逐项比较，演示目录不再安装。
+        assertTrue(BuiltInTeaching.lessons.flatMap { it.blocks }.none { it is TeachingComparison })
         val required = checkNotNull(TeachingBlock::class.java.permittedSubclasses).toSet() -
-            setOf(TeachingClassification::class.java, TeachingStepTrace::class.java, TeachingQuadrant::class.java)
+            setOf(
+                TeachingClassification::class.java, TeachingStepTrace::class.java,
+                TeachingQuadrant::class.java, TeachingComparison::class.java,
+            )
         assertFalse(legacyClassification.isAvailable)
         assertFalse(legacyTrace.isAvailable)
+        assertFalse(legacyComparison.isAvailable)
         assertTrue(BuiltInTeaching.lessons.flatMap { it.blocks }.all { it.isAvailable })
         val showcased = BuiltInTeaching.lessons.flatMap { it.blocks }.map { it.javaClass }.toSet()
         assertEquals(required, showcased)

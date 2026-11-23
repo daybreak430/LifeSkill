@@ -13,6 +13,7 @@ import com.lifeskill.app.model.TurnKind
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -159,6 +160,8 @@ class AiProtocolTest {
         assertTrue(prompt.contains("每次教学回复最多用2个组件"))
         assertTrue(prompt.contains("不要把同一顺序同时做成flow和sort"))
         assertTrue(prompt.contains("当前只支持plant_cell植物细胞示意图"))
-        assertTrue(prompt.contains("科学和数据分析可优先chart、compare"))
+        assertTrue(prompt.contains("科学和数据分析可优先chart"))
+        assertTrue(prompt.contains("Markdown 表格"))
+        assertFalse(prompt.contains("首选compare"))
     }
 }

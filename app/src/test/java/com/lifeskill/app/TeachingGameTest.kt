@@ -24,7 +24,8 @@ class TeachingGameTest {
         assertFalse(game.markdown().contains(game.code))
     }
     @Test fun showcaseKeepsOneComparisonAndAddsGameToExistingPracticeCategory() {
-        assertEquals(1, BuiltInTeaching.lessonByKey("structure")!!.blocks.filterIsInstance<TeachingComparison>().size)
+        // 对比卡已停用，演示会话不再安装，逐项比较改用 Markdown 表格。
+        assertEquals(0, BuiltInTeaching.lessonByKey("structure")!!.blocks.filterIsInstance<TeachingComparison>().size)
         val game = BuiltInTeaching.lessonByKey("practice")!!.items.single { it.installMarker == 1022 }.block as TeachingGame
         assertTrue(validGameCode(game.code))
         assertEquals(4, BuiltInTeaching.lessons.size)

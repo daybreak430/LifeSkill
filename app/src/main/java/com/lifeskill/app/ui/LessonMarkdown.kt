@@ -9,25 +9,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.GenericShape
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -39,6 +45,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -52,6 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.LessonFlow
+import java.net.URI
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
 import org.commonmark.ext.gfm.tables.TableHead
@@ -77,7 +85,6 @@ import org.commonmark.node.Text as PlainText
 import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
-import java.net.URI
 
 private val lessonParser = Parser.builder().extensions(listOf(TablesExtension.create()))
     .includeSourceSpans(IncludeSourceSpans.BLOCKS).build()
@@ -89,28 +96,33 @@ private val decisionShape = GenericShape { size, _ ->
     close()
 }
 
+// 引用块内部改用小一档字号，段落与列表也据此判断上下文。
+private val LocalInQuote = compositionLocalOf { false }
+
 @Composable
 internal fun LessonMarkdown(source: String) {
     // 教学回复经常只用单个换行分段，CommonMark 把它当段内软换行，渲染出来仍是整段。
-    // 先把围栏、表格和字符图之外的单换行升级为段落分隔，再解析，
+    // 先把围栏、表格、列表和引用之外的单换行升级为段落分隔，再解析，
     // 让段落间距稳定出现，不依赖模型遵循提示词。
     val normalized = remember(source) { normalizeLessonBreaks(source) }
     val document = remember(normalized) { lessonParser.parse(normalized) }
-    Column(verticalArrangement = Arrangement.spacedBy(ParagraphGap)) {
-        document.children().forEach { LessonBlock(it, normalized) }
+    Column {
+        var previous: Node? = null
+        document.children().toList().forEach { block ->
+            // 标题间距不对称：远离上一块，贴住自己后面的正文。
+            val gap = when {
+                previous == null -> 0.dp
+                block is Heading -> LessonType.headingTop
+                previous is Heading -> LessonType.headingBottom
+                else -> LessonType.paragraphGap
+            }
+            Box(Modifier.padding(top = gap)) { LessonBlock(block, normalized) }
+            previous = block
+        }
     }
 }
 
-// 正文排版集中在几个常量里：行高与段距决定段落边界是否可辨，
-// 行内数字启用等宽（tnum），金额和百分比才能按列对齐。
-private val ParagraphGap = 14.dp
-private val ListItemGap = 8.dp
-private val BulletSize = 5.dp
-
-@Composable
-private fun lessonBody() = MaterialTheme.typography.bodyLarge.copy(lineHeight = 27.sp, fontFeatureSettings = "tnum")
-
-// 等式行比正文略小、加粗并单独成块，避免和普通段落抢同一层阅读权重。
+// 等式行用淡底色单独成块，避免和普通段落抢同一层阅读权重；运算符已由 normalizeEquationOperators 统一。
 private val FormulaShape = RoundedCornerShape(9.dp)
 
 private val fencePattern = Regex("^(```+|~~~+)")
@@ -160,13 +172,30 @@ internal fun subheadCandidate(text: String): String? {
     return trimmed
 }
 
-// 表格行和字符图行必须保持单换行：表格靠连续行识别，
-// 未围栏的字符图靠整段 sourceSpans 识别，拆开就都不成立。
+// 表格行、字符图行、列表项与引用行都必须保持单换行：
+// 表格和字符图靠连续行识别；列表项被拆开会让编号重新从 1 开始，节奏也会散掉。
 private fun isTableOrDiagramLine(line: String): Boolean {
     val trimmed = line.trimStart()
     if (trimmed.startsWith("|")) return true
     return trimmed.any { it in '\u2500'..'\u257f' } ||
         asciiBorderPattern.containsMatchIn(trimmed) || asciiBranchPattern.containsMatchIn(trimmed)
+}
+
+private val listItemPattern = Regex("""^\s{0,3}([-*+]|\d{1,2}[.)])\s+""")
+
+private fun isListItemLine(line: String): Boolean = listItemPattern.containsMatchIn(line)
+
+private fun isQuoteLine(line: String): Boolean = line.trimStart().startsWith(">")
+
+private fun isIndentedContinuation(line: String): Boolean = line.startsWith("  ") || line.startsWith("\t")
+
+// 模型常把嵌套项缩进 2 个空格，但有序列表的内容缩进是 3 个空格，
+// 2 个空格不会被当成子列表，编号会被拆开。这里统一补到 3 个空格。
+private val shallowNestedList = Regex("""^ {1,2}([-*+]|\d{1,2}[.)])(\s+)""")
+
+private fun normalizeNestedIndent(line: String, previous: String): String {
+    if (!isListItemLine(previous)) return line
+    return line.replaceFirst(shallowNestedList, "   $1$2")
 }
 
 internal fun normalizeLessonBreaks(source: String): String {
@@ -175,13 +204,17 @@ internal fun normalizeLessonBreaks(source: String): String {
     var inFence = false
     var fenceMarker = "```"
     lines.forEachIndexed { index, line ->
+        val previous = if (index > 0) lines[index - 1] else ""
+        // 围栏内保持原样，避免改动手绘图或代码里的缩进。
+        val adjusted = if (index > 0 && !inFence) normalizeNestedIndent(line, previous) else line
         if (index > 0) {
-            val previous = lines[index - 1]
-            val keepSingle = inFence || line.isBlank() || previous.isBlank() ||
+            val keepGroup = (isListItemLine(previous) && (isListItemLine(line) || isIndentedContinuation(line))) ||
+                (isQuoteLine(previous) && isQuoteLine(line))
+            val keepSingle = inFence || line.isBlank() || previous.isBlank() || keepGroup ||
                 isTableOrDiagramLine(line) || isTableOrDiagramLine(previous)
             out.append(if (keepSingle) '\n' else "\n\n")
         }
-        out.append(line)
+        out.append(adjusted)
         val trimmed = line.trimStart()
         if (inFence) {
             if (trimmed.startsWith(fenceMarker)) inFence = false
@@ -196,11 +229,11 @@ internal fun normalizeLessonBreaks(source: String): String {
 }
 
 @Composable
-private fun LessonBlock(node: Node, source: String) {
+private fun LessonBlock(node: Node, source: String, listDepth: Int = 0) {
     when (node) {
         is Heading -> Text(
             node.richText(), color = Ink,
-            style = if (node.level <= 2) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+            style = if (node.level <= 2) LessonType.heading else LessonType.subhead,
         )
         is Paragraph -> {
             val diagram = remember(node, source) {
@@ -210,46 +243,81 @@ private fun LessonBlock(node: Node, source: String) {
             }
             if (diagram != null) LessonDiagram(diagram)
             else {
+                val inQuote = LocalInQuote.current
                 val raw = node.plainText()
                 val equation = raw.contains('=') || raw.contains('＝')
                 val text = node.richText(equation)
                 val flow = remember(text.text) { LessonFlow.parse(text.text) }
                 val formula = remember(raw) { formulaCandidate(raw) }
                 val subhead = remember(raw) { subheadCandidate(raw) }
+                val style = when {
+                    inQuote -> LessonType.quote
+                    listDepth >= 2 -> LessonType.nested
+                    else -> LessonType.body
+                }
+                val color = if (inQuote || listDepth >= 2) Muted else Ink
                 // 顺序：等式块最具体，其次是流程图，再是兜底小标题，最后才是正文。
                 when {
                     formula != null -> LessonFormula(formula)
                     flow != null -> FlowBlock(flow)
-                    subhead != null -> Text(
-                        text, Modifier.padding(top = 4.dp), color = Gold,
-                        style = lessonBody().copy(fontWeight = FontWeight.SemiBold),
+                    subhead != null && !inQuote -> Text(
+                        text, Modifier.padding(top = 4.dp), color = Gold, style = LessonType.subhead,
                     )
-                    else -> Text(text, color = Ink, style = lessonBody())
+                    else -> Text(text, color = color, style = style)
                 }
             }
         }
-        is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
-            val start = (node as? OrderedList)?.markerStartNumber ?: 1
-            node.children().forEachIndexed { index, item ->
-                // 无序列表项若整个就是等式，去掉圆点改排成独立等式行；有序列表保留编号。
-                val onlyChild = item.children().toList().singleOrNull()
-                val formula = (onlyChild as? Paragraph)?.plainText()?.let(::formulaCandidate)
-                    .takeIf { node is BulletList }
-                if (formula != null) LessonFormula(formula)
-                else Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    if (node is OrderedList) Text("${start + index}.", color = Gold, style = lessonBody())
-                    else Box(
-                        Modifier.padding(top = bulletTopPadding()).size(BulletSize).background(Gold, CircleShape),
-                    )
-                    Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
-                        item.children().forEach { LessonBlock(it, source) }
+        is BulletList, is OrderedList -> {
+            val depth = listDepth + 1
+            val nested = depth >= 2
+            val itemStyle = if (nested) LessonType.nested else LessonType.body
+            val bulletSize = if (nested) LessonType.nestedBulletSize else LessonType.bulletSize
+            val bulletColor = if (nested) Muted else Gold
+            Column(
+                Modifier.padding(start = if (nested) LessonType.nestedIndent else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(
+                    if (nested) LessonType.nestedItemGap else LessonType.listItemGap,
+                ),
+            ) {
+                val start = (node as? OrderedList)?.markerStartNumber ?: 1
+                node.children().forEachIndexed { index, item ->
+                    // 无序列表项若整个就是等式，去掉圆点改排成独立等式行；有序列表保留编号。
+                    val onlyChild = item.children().toList().singleOrNull()
+                    val formula = (onlyChild as? Paragraph)?.plainText()?.let(::formulaCandidate)
+                        .takeIf { node is BulletList && !nested }
+                    if (formula != null) LessonFormula(formula)
+                    else Row(horizontalArrangement = Arrangement.spacedBy(if (nested) 8.dp else 10.dp)) {
+                        if (node is OrderedList) Text("${start + index}.", color = Muted, style = itemStyle)
+                        else Box(
+                            Modifier.padding(top = bulletTopPadding(itemStyle, bulletSize))
+                                .size(bulletSize).background(bulletColor, CircleShape),
+                        )
+                        Column(
+                            Modifier.weight(1f, fill = false),
+                            verticalArrangement = Arrangement.spacedBy(
+                                if (nested) LessonType.nestedItemGap else 6.dp,
+                            ),
+                        ) {
+                            item.children().forEach { LessonBlock(it, source, depth) }
+                        }
                     }
                 }
             }
         }
-        is BlockQuote -> Surface(shape = RoundedCornerShape(9.dp), color = Raised) {
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
-                node.children().forEach { LessonBlock(it, source) }
+        // 引用块：左侧主题色竖条 + 淡底 + 小字号，让“提醒/区别”在视觉上降一级。
+        is BlockQuote -> Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                .background(Gold.copy(alpha = .07f)),
+        ) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(Gold))
+            Column(
+                Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+                verticalArrangement = Arrangement.spacedBy(LessonType.quoteGap),
+            ) {
+                CompositionLocalProvider(LocalInQuote provides true) {
+                    node.children().forEach { LessonBlock(it, source, listDepth) }
+                }
             }
         }
         is FencedCodeBlock -> {
@@ -260,7 +328,7 @@ private fun LessonBlock(node: Node, source: String) {
         is HtmlBlock -> CodeBlock(node.literal)
         is ThematicBreak -> HorizontalDivider(color = Line)
         is TableBlock -> LessonTable(node)
-        else -> node.children().forEach { LessonBlock(it, source) }
+        else -> node.children().forEach { LessonBlock(it, source, listDepth) }
     }
 }
 
@@ -270,20 +338,16 @@ private fun LessonFormula(text: String) {
     Surface(shape = FormulaShape, color = Raised) {
         Text(
             text, Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 7.dp),
-            color = Ink,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = 15.sp, lineHeight = 26.sp,
-                fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum",
-            ),
+            color = Ink, style = LessonType.formula,
         )
     }
 }
 
-// 圆点按首行行高居中，字号缩放时跟着一起移动，避免小圆点浮在文字上方。
+// 圆点按首行行高居中，字号与缩放变化时跟着一起移动，避免小圆点浮在文字上方。
 @Composable
-private fun bulletTopPadding(): Dp {
-    val lineHeight = with(LocalDensity.current) { lessonBody().lineHeight.toDp() }
-    return ((lineHeight - BulletSize) / 2).coerceAtLeast(0.dp)
+private fun bulletTopPadding(style: TextStyle, size: Dp): Dp {
+    val lineHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
+    return ((lineHeight - size) / 2).coerceAtLeast(0.dp)
 }
 
 @Composable

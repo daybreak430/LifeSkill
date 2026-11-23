@@ -55,7 +55,8 @@ class TeachingGameStorageTest {
             val original = lesson.blocks + BuiltInTeaching.retiredComparisonDemos
             db.skills().updateTurn(row.copy(teachingBlocks = secret.seal(TeachingBlockProtocol.encode(original).toString(), "${row.id}:blocks")))
             app.library.initialize()
-            assertEquals(1, app.conversations.watch(scope).first().single().teachingBlocks.filterIsInstance<TeachingComparison>().size)
+            // 主对比示例已下线，清理后不应残留任何未经修改的对比卡。
+            assertEquals(0, app.conversations.watch(scope).first().single().teachingBlocks.filterIsInstance<TeachingComparison>().size)
             val edited = BuiltInTeaching.retiredComparisonDemos.first().copy(title = "用户改写的对比")
             val current = db.skills().turn(scope.id, lesson.turnId)!!
             db.skills().updateTurn(current.copy(teachingBlocks = secret.seal(TeachingBlockProtocol.encode(lesson.blocks + edited).toString(), "${row.id}:blocks")))
@@ -68,7 +69,10 @@ class TeachingGameStorageTest {
         val raw = InstrumentationRegistry.getInstrumentation().context.assets
             .open("teaching-legacy-model-samples.json").bufferedReader().use { it.readText() }
         val samples = JSONObject(raw)
-        assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_compare").toString()).blocks.single() is TeachingComparison)
+        // 旧快照仍可解码为对比卡，但历史消息渲染与 AI 输出都按停用状态过滤。
+        val legacyCompare = TeachingBlockProtocol.decode(samples.getJSONObject("legacy_compare").getJSONArray("blocks"))
+        assertTrue(legacyCompare.single() is TeachingComparison)
+        assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_compare").toString()).blocks.isEmpty())
         assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_flow").toString()).blocks.single() is TeachingFlow)
     }
 
@@ -91,7 +95,8 @@ class TeachingGameStorageTest {
                 """{"kind":"teach","reply":"比较两类煤种的用途。","blocks":[{"type":"compare","id":"coal","title":"煤种对比","columns":["动力煤","炼焦煤"],"dimensions":[{"id":"use","title":"用途","values":["燃烧供能","炼制焦炭"]}]}]}"""
             }
             app.conversations.restartLesson(scope, "")
-            assertTrue(app.conversations.watch(scope).first().last().teachingBlocks.single() is TeachingComparison)
+            // 对比卡停用后，模型即便生成 compare 也会被过滤，只保留可读的 reply 正文。
+            assertTrue(app.conversations.watch(scope).first().last().teachingBlocks.isEmpty())
             assertEquals(lesson.goal, app.library.entry(lesson.id)!!.goal)
         } finally { db.close() }
     }

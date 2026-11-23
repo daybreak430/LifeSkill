@@ -25,7 +25,8 @@ internal object BuiltInTeaching {
     const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
     // 停用组件的旧安装标记仍属于演示课，主动恢复时一并清理；标记不得分配给新组件。
-    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_007, 1_008, 1_013, 1_015) +
+    // 1_003 与 1_019 是已停用的对比卡示例。
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_003, 1_007, 1_008, 1_013, 1_015, 1_019) +
         lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
@@ -49,11 +50,6 @@ internal object BuiltInTeaching {
         "D" to "证据支持后，结合收益、成本与依赖确定交付范围。",
         "E" to "补充用户观察或小实验，得到新证据后回到判断。这不等于永久否决需求。",
         "F" to "实现后继续验证结果是否改善，而不只检查功能有没有上线。",
-    ))
-    private val comparison = TeachingComparison("comparison", "需求量变化与需求变化", listOf("需求量变化", "需求变化"), listOf(
-        ComparisonDimension("cause", "变化原因", listOf("商品自身价格改变，例如奶茶从6元降到4元。", "收入、偏好等条件改变，例如更多人开始偏爱奶茶。")),
-        ComparisonDimension("graph", "图上表现", listOf("沿同一条需求曲线移动，曲线本身不变。", "需求曲线整体移动，相同价格下的需求量改变。")),
-        ComparisonDimension("condition", "保持不变的条件", listOf("收入、偏好等其他条件保持不变。", "比较相同价格，但收入、偏好等条件已改变。")),
     ))
     private val comparisonViolet = TeachingComparison("methods", "阅读与动手练习", listOf("阅读理解", "动手练习"), listOf(
         ComparisonDimension("task", "主要任务", listOf("建立概念，理解原理与术语。", "把概念用在具体任务中，发现实际困难。")),
@@ -179,9 +175,6 @@ internal object BuiltInTeaching {
     ))
     private val bridge = TeachingText("bridge", "从观察到解释",
         "**四月借阅最多**是数据直接支持的观察。至于为什么增多，还需要了解活动、开放时间等条件。")
-    private val evidence = TeachingComparison("evidence", "观察与解释", listOf("数据观察", "原因解释"), listOf(
-        ComparisonDimension("basis", "依据", listOf("直接读取图中的数值。", "需要额外证据，不能只凭趋势断定。")))
-    )
     private val mixedQuiz = TeachingQuiz("check", "数据判断", TeachingQuestion("仅凭图中数据，哪项结论最有依据？",
         listOf("四月借阅量最高", "四月一定举办了读书节", "每个月都持续增长"), 0,
         "四月为52次，高于其他月份。数据没有告诉我们增长原因，且三月低于二月。", "只选择能从图中直接读出的信息。"))
@@ -198,12 +191,11 @@ internal object BuiltInTeaching {
 
     // 课时按学习任务归类。新增同类组件只向对应课时追加 item，只有新类别才增加课时节点。
     val lessons: List<BuiltInTeachingLesson> = listOf(
-        BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴、流程与对比表达，理解事件顺序和概念异同。",
-            EntryIcon.BOOK, "同一会话中组合时间线、分支流程与对比卡。先切换关注点，再比较表达方式。",
+        BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴、流程与结构图，理解事件顺序和组成关系。",
+            EntryIcon.BOOK, "同一会话中组合时间线、分支流程与结构图。先切换关注点，再比较表达方式。",
             listOf(
                 BuiltInTeachingItem(1_001, timeline),
                 BuiltInTeachingItem(1_002, flow),
-                BuiltInTeachingItem(1_003, comparison),
                 BuiltInTeachingItem(1_023, writingFigure),
                 BuiltInTeachingItem(1_027, hiringFunnel),
             )),
@@ -236,7 +228,6 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_014, hotspot),
                 BuiltInTeachingItem(1_017, borrowing),
                 BuiltInTeachingItem(1_018, bridge),
-                BuiltInTeachingItem(1_019, evidence),
                 BuiltInTeachingItem(1_020, mixedQuiz),
                 BuiltInTeachingItem(1_021, TeachingExperiment("lever", "杠杆实验台",
                     "移动两侧重物或调整力，试着让杠杆平衡。")),

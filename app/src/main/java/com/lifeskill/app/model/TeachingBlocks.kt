@@ -9,7 +9,8 @@ sealed interface TeachingBlock {
 
 // 暂停的组件仍保留旧快照编解码，避免升级改写用户记录；展示、模型输入输出和交互统一使用此门槛。
 internal val TeachingBlock.isAvailable: Boolean
-    get() = this !is TeachingClassification && this !is TeachingStepTrace && this !is TeachingQuadrant
+    get() = this !is TeachingClassification && this !is TeachingStepTrace && this !is TeachingQuadrant &&
+        this !is TeachingComparison
 
 // 纯展示块没有互动状态，工具栏不提供重置，也不需要放大。
 internal val TeachingBlock.isStaticVisual: Boolean

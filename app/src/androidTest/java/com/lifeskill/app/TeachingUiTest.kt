@@ -104,7 +104,7 @@ class TeachingUiTest {
         ui.onNodeWithContentDescription("放大需求怎样进入开发").assertDoesNotExist()
     }
 
-    @Test fun timelineComparisonAndComposerRemainUsableTogether() {
+    @Test fun timelineAndComposerRemainUsableTogether() {
         val lesson = openLesson("structure")
         scrollTo(hasTestTag("timeline-uprising"))
         ui.onNodeWithTag("timeline-uprising").performTouchInput { click() }
@@ -120,21 +120,15 @@ class TeachingUiTest {
         await("AI 老师")
         back()
         await("课程大纲")
-        val comparison = BuiltInTeaching.lessons.first { it.key == "structure" }
-        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(comparison.name))
-        ui.onNodeWithContentDescription(comparison.name).performClick()
+        // 对比卡已停用：逐项比较改由 Markdown 表格承担，返回大纲后应能重新进入课时。
+        val lessonAgain = BuiltInTeaching.lessons.first { it.key == "structure" }
+        ui.onNodeWithTag("skill-map").performScrollToNode(hasContentDescription(lessonAgain.name))
+        ui.onNodeWithContentDescription(lessonAgain.name).performClick()
         await("学习目标")
-        ui.onNodeWithText("开始学习").performClick()
-        scrollTo(hasText("图上表现"))
-        ui.onNodeWithText("图上表现").performTouchInput { click() }
-        ui.waitUntil(8_000) { state(comparison, "comparison").selection == "graph" }
-        ui.onNodeWithText("需求曲线整体移动，相同价格下的需求量改变。").assertExists()
-        val left = ui.onNodeWithTag("comparison-comparison-column-0").getUnclippedBoundsInRoot()
-        val right = ui.onNodeWithTag("comparison-comparison-column-1").getUnclippedBoundsInRoot()
-        assertEquals(left.bottom.value - left.top.value, right.bottom.value - right.top.value, 0.1f)
+        assertTrue(BuiltInTeaching.lessonByKey("structure")!!.blocks.none { it is TeachingComparison })
     }
 
-    @Test fun additionalChartAndComparisonStylesKeepInteractiveState() {
+    @Test fun additionalChartStylesKeepInteractiveState() {
         val lesson = openLesson("data")
         scrollTo(hasText("科学 68"))
         ui.onNodeWithText("科学 68").performTouchInput { click() }

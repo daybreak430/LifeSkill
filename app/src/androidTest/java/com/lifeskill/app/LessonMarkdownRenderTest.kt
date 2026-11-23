@@ -36,6 +36,40 @@ class LessonMarkdownRenderTest {
         - 相当于 30 元瞬间蒸发，需要多卖 **60%**
     """.trimIndent()
 
+    private val structured = """
+        ### 优惠券的三层代价
+
+        先看结论：折扣伤的不是售价，是利润的斜率。
+
+        1. **第一层：单笔利润变薄。** 标价 200 元、成本 120 元时利润率 40%；发一张满 150 减 30 的券，利润率掉到 25%。
+        2. **第二层：销量必须补位。** 利润率降 15 个点，要多卖 60% 的单量才补得回来。
+          - 用券门槛越高，补位压力越小
+          - 券面额越大，补位压力越大
+        3. **第三层：习惯被改写。** 顾客学会等券，原价订单被自己吃掉。
+
+        > ✅ 区分：折扣率是售价的变化，利润率是成本的相对值，两者不能直接换算。
+
+        要不要我用你店里的客单价算一遍？
+    """.trimIndent()
+
+    @Test fun rendersHeadingsQuotesAndNestedLists() {
+        ui.setContent {
+            LifeSkillTheme(dark = false) {
+                Surface(Modifier.fillMaxWidth().padding(15.dp), color = Color(0xFFFCFDFD)) {
+                    LessonMarkdown(structured)
+                }
+            }
+        }
+        ui.onNodeWithText("优惠券的三层代价").assertIsDisplayed()
+        ui.onNodeWithText("用券门槛越高，补位压力越小").assertIsDisplayed()
+        ui.onNodeWithText("✅ 区分：折扣率是售价的变化，利润率是成本的相对值，两者不能直接换算。").assertIsDisplayed()
+        val bitmap = ui.onRoot().captureToImage().asAndroidBitmap()
+        InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+            .resolve("lesson-markdown-structured.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+    }
+
     @Test fun rendersEquationBlocksSubheadsAndTightLists() {
         ui.setContent {
             // 使用真实主题，截图里的底色与强调色才和线上一致。

@@ -32,6 +32,24 @@ class LessonMarkdownTest {
         assertEquals(source, normalizeLessonBreaks(source))
     }
 
+    @Test fun keepsConsecutiveListItemsInOneList() {
+        // 列表项之间插入空行会让有序列表重新编号，必须保持单换行。
+        assertEquals("1. 第一步\n2. 第二步", normalizeLessonBreaks("1. 第一步\n2. 第二步"))
+        assertEquals("- 甲\n- 乙", normalizeLessonBreaks("- 甲\n- 乙"))
+        // 浅缩进的子项统一补到 3 个空格，保证不同父级都能正确嵌套。
+        assertEquals("- 甲\n   - 子项", normalizeLessonBreaks("- 甲\n  - 子项"))
+        // 有序列表的嵌套项常被模型只缩进 2 个空格，需补到 3 个才不会掉出列表。
+        assertEquals("2. 第二层\n   - 子项\n3. 第三层", normalizeLessonBreaks("2. 第二层\n  - 子项\n3. 第三层"))
+        // 列表之后的正文仍要分隔成新段落。
+        assertEquals("- 甲\n\n结论。", normalizeLessonBreaks("- 甲\n结论。"))
+    }
+
+    @Test fun keepsMultiLineQuotesTogether() {
+        // 引用块的多行内容被拆成空行后会变成两个独立引用。
+        assertEquals("> 第一行\n> 第二行", normalizeLessonBreaks("> 第一行\n> 第二行"))
+        assertEquals("> 注意\n\n正文。", normalizeLessonBreaks("> 注意\n正文。"))
+    }
+
     @Test fun recognizesWholeLineEquationsOnly() {
         assertEquals(
             "订单利润 = 实收金额 − 商品成本 − 各项费用",
