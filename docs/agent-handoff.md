@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `08c21f0`（完整哈希见 `git rev-parse v0.15.23`） |
-| 最新版本 | `0.15.23` |
-| `versionCode` | `110` |
-| 标签 | `v0.15.23` |
-| Release | [LifeSkill 0.15.23](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.23) |
-| APK 文件名 | `LifeSkill-0.15.23-release.apk` |
+| 最新产品与发布提交 | `41b638c`（完整哈希见 `git rev-parse v0.15.24`） |
+| 最新版本 | `0.15.24` |
+| `versionCode` | `111` |
+| 标签 | `v0.15.24` |
+| Release | [LifeSkill 0.15.24](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.24) |
+| APK 文件名 | `LifeSkill-0.15.24-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `687c109857a90801187edf20dd1f73cb92682381c9ceb8e6187826accb0043f7` |
+| APK SHA-256 | `4b8e580888b318e3e7478439ef15597ac3c1b63d5ca36e367a340c23b5dd7577` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.23..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.24..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.23` 已发布：标签指向 `08c21f0`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只放宽小游戏预算与提示词约束，未做模拟器人工游玩验证与覆盖升级安装验证；真机与 Android 8–9 的 WebView 仍未验收。
+`0.15.24` 已发布：标签指向 `41b638c`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改教学正文的 Markdown 渲染，未做覆盖升级安装验证，也未在真机核对排版；同一段回复高度约增加 20%，属于已知取舍。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -117,6 +117,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.21` | `dbfcd98` |
 | `v0.15.22` | `075a31d` |
 | `v0.15.23` | `08c21f0` |
+| `v0.15.24` | `41b638c` |
+
+## 0.15.24 的验证证据
+
+- 触发：截图中的常规讲解虽然已分段，但正文、引导句、加粗公式共用同一层排版，读起来仍是一整块；同时算式里的 ASCII 减号与长数字串在行尾被拆开。
+- 改动（仅渲染层，`ui/LessonMarkdown.kt`）：正文 16sp/27sp 并启用 `tnum`，段距 10→14dp，列表项 5→8dp、圆点按首行行高居中；整行为等式时排成淡底色等式块（15sp semibold）；算式段落内把 ASCII 减号规范为 `−` 并留白，数字之间的运算符用不换行空格粘住；2–24 字、以冒号结尾的独立短段升为 semibold 主题色小标题。
+- 识别规则保守：等式要求左端 ≤14 字、含等号、不以句末标点收尾且 ≤80 字，日期（`2024-01-05`）整段跳过规范化；有序列表不抽等式，避免打乱编号。
+- 测试：`LessonMarkdownTest` 扩到 8 项（等式识别、运算符规范、日期保护、小标题阈值）；新增 `LessonMarkdownRenderTest` 用真实主题独立渲染一条完整回复并断言等式块与小标题文本，在 Android 16 / Pixel 9 Pro AVD 通过；`TeachingUiTest` 15 项通过；单元测试与 `lintDebug` 通过。
+- 截图核对：等式块为淡灰绿底、公式文字 semibold；冒号短段为主题绿；圆点对齐首行；无裁切或错位。
+- 构建侧新增仅调试依赖 `androidx.compose.ui:ui-test-manifest`（含 compose-bom），用于给独立渲染测试提供宿主 Activity，不进入发布包；Release APK 仍为 18,315,751 bytes。
+- 未做覆盖升级安装验证；行高与段距的取值仍可能按真机手感微调。
 
 ## 0.15.23 的验证证据
 
