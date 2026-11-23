@@ -23,9 +23,9 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `2c1c332`（完整哈希见 `git rev-parse v0.15.35`） |
-| 最新版本 | `0.15.35` |
-| `versionCode` | `122` |
+| 最新产品与发布提交 | `e17b5f1`（完整哈希见 `git rev-parse v0.15.36`） |
+| 最新版本 | `0.15.36` |
+| `versionCode` | `123` |
 | 标签 | `v0.15.36` | 实验台参数放宽到 1–4 个；奇数参数时最后一个滑块占满整行，不再留空槽。 |
 | `v0.15.35` | 参数实验台改为通用定义：AI 给参数表与结果表达式，应用用受限求值器计算；移除杠杆动画与内置模型分支。 |
 | `v0.15.34` | 结业考试只出选择（6 单选 + 4 多选，不再填空）；参数实验台新增复利模型，状态改为通用的模型+参数表。 |
@@ -35,15 +35,15 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.35](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.35) |
-| APK 文件名 | `LifeSkill-0.15.35-release.apk` |
+| Release | [LifeSkill 0.15.36](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.36) |
+| APK 文件名 | `LifeSkill-0.15.36-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `db179d7b3c4f8b801b17373fe4e958f5b6403453fc77352a19bfd15907a77276` |
+| APK SHA-256 | `b3a14c3fdf6f596da0d0d871c2010837167fdf8c3bc9c519ada4e41fabe84437` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.35..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.36..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.35` 已发布：标签指向 `2c1c332`，Release 附件大小与 SHA-256 和本地 APK 一致。本次把参数实验台改为 AI 定义的通用组件并移除秤杆动画；未做覆盖升级安装验证，也未用真实模型抽样确认它会写出合法表达式。
+`0.15.36` 已发布：标签指向 `e17b5f1`，Release 附件大小与 SHA-256 和本地 APK 一致。本次把实验台参数放宽到 1–4 个并修好奇数参数的布局；未做覆盖升级安装验证。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -185,6 +185,15 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.34` | `2af607c` |
 | `v0.15.36` | 实验台参数放宽到 1–4 个；奇数参数时最后一个滑块占满整行，不再留空槽。 |
 | `v0.15.35` | `2c1c332` |
+| `v0.15.36` | `e17b5f1` |
+
+## 0.15.36 的验证证据
+
+- 反馈：担心实验台把参数个数写死成 4 个。
+- 核查：协议允许 2–4 个，渲染按每行 2 个自动排布，没有写死 4；但发现两个实际限制：只允许 2 个起步（单因子实验无法生成），以及奇数个参数时最后一个滑块只占半行、右侧留空。
+- 改动：参数范围放宽到 1–4，提示词同步；去掉奇数行的占位 Spacer，让最后一个滑块占满整行。
+- 测试：`ExperimentProtocolTest` 增加单参数实验（含吸附、状态合并与结果格式）；`ExperimentRenderTest` 增加三参数用例并截图核对第三个滑块占满整行、结果 `(30-18)*200=2400` 正确；单元测试与 `lintDebug` 通过，`ExperimentRenderTest` 2 项通过。
+- 未做覆盖升级安装验证；4 个以上参数仍不支持，超过 4 个会让单屏滑块过密，需要时再评估。
 
 ## 0.15.35 的验证证据
 
