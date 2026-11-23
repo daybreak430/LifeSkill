@@ -206,8 +206,12 @@ class TreeAssessmentTest {
         }
 
         val feynman = TreeChallenge.FEYNMAN
+        // 复述目标由 AI 指定，启动时要先有一次模型回复。
+        gateway.reply(challengeFixture("", false, "请用自己的话讲清「用凭证核对金额」的过程，讲给 10 岁的孩子听。"))
         exams.startChallenge(tree.id, feynman)
-        assertTrue(checkNotNull(exams.watchChallenge(tree.id, feynman).first()).prompt.contains("10 岁"))
+        val feynmanPrompt = checkNotNull(exams.watchChallenge(tree.id, feynman).first()).prompt
+        assertTrue(feynmanPrompt.contains("10 岁"))
+        assertTrue(feynmanPrompt.contains("凭证"))
         gateway.reply(challengeFixture("请先解释凭证是什么意思。", false, "用一个买东西的例子说明。"))
         exams.answerChallenge(tree.id, feynman, "对照凭证。")
         assertFalse(checkNotNull(exams.watchChallenge(tree.id, feynman).first()).finished)

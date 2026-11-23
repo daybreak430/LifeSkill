@@ -63,7 +63,7 @@ internal fun ChallengeScreen(
                             when {
                                 !passedExam -> "通过结业考试后可开始复习。"
                                 kind == TreeChallenge.DIAGNOSTIC -> "回答 3 道看似简单的问题，找出理解上的漏洞。"
-                                else -> "用自己的话，把刚学到的概念讲给 10 岁的孩子听。"
+                                else -> "AI 会从课程里指定一个概念、过程或方法论，请用自己的话讲给 10 岁的孩子听。"
                             },
                         ) { ChallengeSigilMedallion(kind, 70.dp) }
                         if (passedExam) Action(if (status.busy) "正在准备" else "开始练习", Glyph.SPARK,

@@ -49,14 +49,18 @@ internal object TreeAssessmentProtocol {
                 exchanges.size + 1 == DIAGNOSTIC_QUESTIONS -> "现在评议第 3 个回答。next 留空。"
                 else -> "现在评议本题回答，并在 next 给出下一道独立题。"
             }
-            TreeChallenge.FEYNMAN -> "现在评议用户的解释。若解释可通过，在反馈中总结之前的薄弱点和本次改善，next 留空。否则在 next 提出最需要补全的一点，要求用户重新解释。"
+            TreeChallenge.FEYNMAN -> when {
+                answer == null -> "现在指定复述目标：从提供的课程内容里挑一个最适合检验理解的概念、过程或方法论，在 next 写成具体任务，要求学习者用自己的话讲给 10 岁孩子听，并说清关键条件或步骤。feedback 为空，accepted 为 false。"
+                else -> "现在评议用户对已指定目标的解释。若解释可通过，在反馈中总结之前的薄弱点和本次改善，next 留空。否则在 next 提出最需要补全的一点，要求用户重新解释。"
+            }
         }
         val instructions = when (kind) {
             TreeChallenge.DIAGNOSTIC -> """
                 问用户 3 个看似简单、能暴露理解漏洞的问题，每次只问一题。每次作答后，明确指出暴露出的基础缺陷。敷衍、只复述术语或回避问题时直说。若回答准确且体现理解，指出其回答做对了什么并设置 accepted 为 true，否则为 false。
             """.trimIndent()
             TreeChallenge.FEYNMAN -> """
-                判断用户能否用自己的话给 10 岁孩子讲明白所学主题。逐一指出没解释清楚的术语、跳过的因果或推理步骤以及失真的过度简化，指出它们暴露出的薄弱点。只有解释准确、具体、连续且孩子听得懂时，accepted 才为 true。否则引导用户继续改述。
+                复述目标由你指定，不能让学习者自己挑：从课程内容里选一个具体的概念、过程或方法论，用一句话写清范围（例如“核对账单的三个步骤”），避免“本章内容”这类笼统说法。
+                判断用户能否用自己的话给 10 岁孩子讲明白这个目标。逐一指出没解释清楚的术语、跳过的因果或推理步骤以及失真的过度简化，指出它们暴露出的薄弱点。只有解释准确、具体、连续且孩子听得懂时，accepted 才为 true。否则引导用户继续改述。
             """.trimIndent()
         }
         return listOf(

@@ -106,12 +106,16 @@ internal class TreeAssessmentRepository(
                 val session = row.decode()
                 if (!session.finished || session.passed) return@withTransaction null
             }
-            row to if (kind == TreeChallenge.DIAGNOSTIC) learningContext(current, treeId) else null
+            // 两种挑战都需要课程内容：诊断题与费曼目标都由 AI 依据课程指定。
+            row to learningContext(current, treeId)
         } ?: return
-        val prompt = if (learning == null) TreeAssessmentProtocol.FEYNMAN_PROMPT else {
+        val prompt = runCatching {
             request(treeId, TreeAssessmentProtocol.challengeRequest(kind, learning, null, null)) {
                 TreeAssessmentProtocol.challenge(it, needsFeedback = false, needsQuestion = true).next
             }
+        }.getOrElse { error ->
+            // 费曼复述允许离线降级为通用提示；诊断题必须由模型出，失败照常抛出。
+            if (kind == TreeChallenge.FEYNMAN) TreeAssessmentProtocol.FEYNMAN_PROMPT else throw error
         }
         saveChallenge(treeId, kind, previous, ChallengeSession(prompt))
     }

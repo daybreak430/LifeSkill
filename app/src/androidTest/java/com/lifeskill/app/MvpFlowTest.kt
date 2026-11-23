@@ -1183,7 +1183,7 @@ class MvpFlowTest {
             await("课程大纲")
             val map = ui.onNodeWithTag("skill-map")
             map.performScrollToNode(hasText("结业考试"))
-            ui.onNodeWithText("查漏补缺").assertDoesNotExist()
+            ui.onNodeWithText("自以为是检测").assertDoesNotExist()
             ui.onNodeWithText("费曼复述").assertDoesNotExist()
             ui.onNodeWithText("结业考试").performTouchInput { click() }
             await("完成全部课时后可参加考试")
@@ -1229,11 +1229,12 @@ class MvpFlowTest {
             }
             map.performScrollToNode(hasText("费曼复述"))
             ui.onNodeWithText("最高 90 分").assertIsDisplayed()
-            ui.onNodeWithText("查漏补缺").assertIsDisplayed()
+            ui.onNodeWithText("自以为是检测").assertIsDisplayed()
             ui.onNodeWithText("费曼复述").performTouchInput { click() }
             await("开始练习")
+            fixture.ai.reply(challengeFixture("", false, "请用自己的话讲清「核对账单的三个步骤」，讲给 10 岁的孩子听。"))
             ui.onNodeWithText("开始练习").performTouchInput { click() }
-            await("请选一个你刚学过的核心概念", substring = true)
+            await("请用自己的话讲清「核对账单的三个步骤」", substring = true)
             fixture.ai.reply(challengeFixture("讲清楚了核对的方法。", true, ""))
             send("把付的钱和收据上的数字比一比。")
             await("练习完成")
