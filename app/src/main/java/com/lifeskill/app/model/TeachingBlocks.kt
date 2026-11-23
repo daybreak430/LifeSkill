@@ -251,11 +251,11 @@ internal object TeachingInteractions {
         is TeachingAction.SetExperimentValue -> {
             if (block !is TeachingExperiment) invalid()
             // 提交值必须落在模型登记的取值与步长上；预览阶段的吸附不代替这里的校验。
-            val parameter = ExperimentCatalog.parameter(block.model, action.parameter) ?: invalid()
+            val parameter = block.parameters.firstOrNull { it.id == action.parameter } ?: invalid()
             if (!parameter.isValid(action.value)) invalid()
             // 单个参数在仓库事务内合并，避免快速调整不同滑块时旧快照覆盖刚保存的其他参数。
-            val current = previous.experiment?.takeIf { it.model == block.model } ?: block.initial
-            previous.copy(experiment = ExperimentMath.update(current, action.parameter, action.value))
+            val current = previous.experiment ?: block.initial
+            previous.copy(experiment = ExperimentMath.update(current, block.parameters, action.parameter, action.value))
         }
         is TeachingAction.Predict -> {
             if (block !is TeachingChart || block.prediction == null || action.index !in block.prediction.options.indices ||
@@ -429,12 +429,8 @@ internal fun TeachingBlock.markdown(): String = buildString {
         }
         is TeachingExperiment -> {
             appendLine(block.prompt)
-            appendLine(
-                if (block.model == ExperimentModel.COMPOUND)
-                    "复利模型：本金按年复利，定投按月复利；参数与结果由应用计算，不生成公式代码。"
-                else "理想轻杆，两侧竖直受力；比较 F × 到支点的水平距离，平衡时两侧相等。倾角仅作方向示意。",
-            )
-            appendLine("初始状态：${ExperimentMath.summary(block.initial)}")
+            appendLine("参数由拖动调整，结果按组件给出的算式在本地计算，不生成代码。")
+            appendLine("初始状态：${ExperimentMath.summary(block, block.initial)}")
         }
         is TeachingQuiz -> {
             appendLine(block.question.question)
@@ -513,10 +509,7 @@ internal fun TeachingBlock.interactionSummary(state: TeachingState): String = wh
             }
         }.orEmpty()
     }
-    is TeachingExperiment -> {
-        val label = if (block.model == ExperimentModel.COMPOUND) "复利实验" else "杠杆实验"
-        "$label：${ExperimentMath.summary(state.experiment ?: block.initial)}"
-    }
+    is TeachingExperiment -> ExperimentMath.summary(block, state.experiment ?: block.initial)
     is TeachingFigure -> ""
     is TeachingMatrix, is TeachingRange, is TeachingFunnel, is TeachingFormula -> ""
     is TeachingQuadrant -> state.positions.entries.joinToString("；") { (id, xy) ->

@@ -160,10 +160,9 @@ class TeachingStorageTest {
         } finally { database.close() }
     }
 
-    @Test fun compoundExperimentRoundTripsAndLegacyLeverStateStillLoads() = runBlocking {
-        val block = TeachingExperiment(
-            "growth", "复利实验台", "调整每月投入与年限。", ExperimentModel.COMPOUND,
-        )
+    @Test fun genericExperimentRoundTripsAndLegacyStatesStillLoad() = runBlocking {
+        val block = BuiltInTeaching.lessons.flatMap { it.blocks }
+            .filterIsInstance<TeachingExperiment>().first { it.id == "compound" }
         val decoded = TeachingBlockProtocol.decode(JSONArray(TeachingBlockProtocol.encode(listOf(block)).toString())).single()
         assertEquals(block, decoded)
 
@@ -173,12 +172,17 @@ class TeachingStorageTest {
         ).getValue(block.id)
         assertEquals(updated.experiment, restored.experiment)
 
-        // 0.15.33 之前只存 lever 字段，读取时应映射为同一模型的参数表。
-        val legacy = TeachingBlockProtocol.decodeStates(
+        // 0.15.33 之前只存 lever 字段，读取时按同名参数收进通用参数表。
+        val legacyLever = TeachingBlockProtocol.decodeStates(
             """{"lab":{"lever":{"leftForce":6,"rightForce":2,"leftArm":2,"rightArm":3}}}""",
         ).getValue("lab")
-        assertEquals(ExperimentModel.LEVER, legacy.experiment!!.model)
-        assertEquals(6.0, legacy.experiment.value("leftForce"), 0.0)
+        assertEquals(6.0, legacyLever.experiment!!.value("leftForce"), 0.0)
+
+        // 0.15.34 存的是 model + values，读取时忽略 model，只取参数。
+        val legacyModel = TeachingBlockProtocol.decodeStates(
+            """{"lab":{"experiment":{"model":"lever","values":{"leftForce":5,"rightForce":2,"leftArm":2,"rightArm":3}}}}""",
+        ).getValue("lab")
+        assertEquals(5.0, legacyModel.experiment!!.value("leftForce"), 0.0)
     }
 
     @Test fun statesAreEncryptedSurviveReopenAndNeverLightTheLesson() = runBlocking {
@@ -310,14 +314,15 @@ class TeachingStorageTest {
             val app = fixture(database, ScriptedGateway())
             app.library.initialize()
             val lesson = BuiltInTeaching.lessonByKey("visual")!!
-            val block = lesson.blocks.filterIsInstance<TeachingExperiment>().single { it.model == ExperimentModel.LEVER }
+            val block = lesson.blocks.filterIsInstance<TeachingExperiment>().single { it.id == "lever" }
             val scope = ChatScope(ChatMode.TUTOR, lesson.id)
             val encoded = TeachingBlockProtocol.encode(listOf(block))
             assertEquals(listOf(block), TeachingBlockProtocol.decode(encoded))
             val reply = AiProtocol.tutor(JSONObject().put("kind", "teach").put("reply", "尝试调平杠杆")
                 .put("blocks", encoded).toString())
             assertEquals(listOf(block), reply.blocks)
-            val malformed = JSONObject(encoded.getJSONObject(0).toString()).put("model", "arbitrary_code")
+            val malformed = JSONObject(encoded.getJSONObject(0).toString())
+            malformed.getJSONArray("outputs").getJSONObject(0).put("expression", "system('x')")
             assertTrue(TeachingBlockProtocol.decode(JSONArray().put(malformed)).isEmpty())
             val fractionalForce = JSONObject(encoded.getJSONObject(0).toString())
             fractionalForce.getJSONObject("initial").put("leftForce", 2.5)
@@ -337,7 +342,7 @@ class TeachingStorageTest {
             assertNull(TeachingBlockProtocol.decodeStates("{\"old\":{}}").getValue("old").experiment)
             val history = AiProtocol.tutorHistory(restored)
             assertTrue(history.contains("experiment"))
-            assertTrue(history.contains("已平衡"))
+            assertTrue(history.contains("力矩差"))
             assertEquals(Mastery.UNLIT, app.library.entry(lesson.id)!!.mastery)
         } finally { database.close() }
     }

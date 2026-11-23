@@ -15,7 +15,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
-import com.lifeskill.app.model.ExperimentModel
+import com.lifeskill.app.model.BuiltInTeaching
 import com.lifeskill.app.model.TeachingExperiment
 import com.lifeskill.app.model.TeachingState
 import com.lifeskill.app.ui.LifeSkillTheme
@@ -23,18 +23,15 @@ import com.lifeskill.app.ui.TeachingExperimentContent
 import org.junit.Rule
 import org.junit.Test
 
-// 参数实验台的第二个模型：拖动参数后看到期末总额与收益占比变化。
-class CompoundExperimentRenderTest {
+// 参数实验台完全由数据驱动：这里用内置的复利示例渲染，确认参数与结果都由定义生成。
+class ExperimentRenderTest {
     @get:Rule
     val ui = createComposeRule()
 
-    private val block = TeachingExperiment(
-        "growth", "复利实验台",
-        "调整本金、每月投入、年化收益和年限，观察期末总额与收益占比怎么变。",
-        ExperimentModel.COMPOUND,
-    )
+    private val block = BuiltInTeaching.lessons.flatMap { it.blocks }
+        .filterIsInstance<TeachingExperiment>().first { it.id == "compound" }
 
-    @Test fun compoundModelShowsHeadlineMetricsAndFourSliders() {
+    @Test fun dataDrivenExperimentShowsOutputsAndSliders() {
         ui.setContent {
             LifeSkillTheme(dark = false) {
                 Surface(Modifier.fillMaxWidth().padding(15.dp), color = Color(0xFFFCFDFD)) {
@@ -42,15 +39,15 @@ class CompoundExperimentRenderTest {
                 }
             }
         }
-        ui.onNodeWithText("期末总额").assertIsDisplayed()
+        ui.onNodeWithText(block.outputs.first().label).assertIsDisplayed()
         ui.onNodeWithTag("experiment-headline").assertIsDisplayed()
         ui.onNodeWithText("累计投入").assertIsDisplayed()
-        listOf("principal", "monthly", "rate", "years").forEach { id ->
-            ui.onNodeWithTag("experiment-$id").assertIsDisplayed()
+        block.parameters.forEach { parameter ->
+            ui.onNodeWithTag("experiment-${parameter.id}").assertIsDisplayed()
         }
         val bitmap = ui.onRoot().captureToImage().asAndroidBitmap()
         InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
-            .resolve("compound-experiment.png").outputStream().use {
+            .resolve("experiment-generic.png").outputStream().use {
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
     }

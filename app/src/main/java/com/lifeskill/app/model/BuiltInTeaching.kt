@@ -168,6 +168,39 @@ internal object BuiltInTeaching {
             ImageHotspot("mitochondria", "线粒体", 79.0, 74.0, "线粒体参与细胞的能量转换。"),
         ), "从外侧边界开始，再寻找中央的控制中心和较大的储存结构。")
 
+    // 参数实验台的示例数据：组件本身不内置模型，这两份只是“AI 会怎么写”的示范。
+    private val leverExperiment = TeachingExperiment(
+        "lever", "杠杆实验台",
+        "拖动两侧重物的位置，或调整两侧的力，让秤杆回到平衡。",
+        parameters = listOf(
+            ExperimentParameter("leftForce", "左侧力", "N", 1.0, 10.0, 1.0, 4.0),
+            ExperimentParameter("rightForce", "右侧力", "N", 1.0, 10.0, 1.0, 2.0),
+            ExperimentParameter("leftArm", "左侧力臂", "m", 1.0, 4.0, .5, 2.0),
+            ExperimentParameter("rightArm", "右侧力臂", "m", 1.0, 4.0, .5, 3.0),
+        ),
+        outputs = listOf(
+            ExperimentOutput("gap", "力矩差", "N·m", "leftForce*leftArm-rightForce*rightArm"),
+            ExperimentOutput("left", "左侧力矩", "N·m", "leftForce*leftArm"),
+            ExperimentOutput("right", "右侧力矩", "N·m", "rightForce*rightArm"),
+        ),
+    )
+    private val compoundExperiment = TeachingExperiment(
+        "compound", "复利实验台",
+        "调整本金、每月投入、年化收益和年限，观察期末总额与收益怎么变。",
+        parameters = listOf(
+            ExperimentParameter("principal", "本金", "元", 10_000.0, 200_000.0, 5_000.0, 50_000.0),
+            ExperimentParameter("monthly", "每月投入", "元", 0.0, 5_000.0, 500.0, 2_000.0),
+            ExperimentParameter("rate", "年化收益", "%", 1.0, 15.0, .5, 8.0, decimals = 1),
+            ExperimentParameter("years", "年限", "年", 1.0, 30.0, 1.0, 10.0),
+        ),
+        outputs = listOf(
+            ExperimentOutput("total", "期末总额", "元",
+                "principal*pow(1+rate/100,years)+monthly*(pow(1+rate/1200,years*12)-1)/(rate/1200)"),
+            ExperimentOutput("invested", "累计投入", "元", "principal+monthly*12*years"),
+            ExperimentOutput("gain", "收益", "元", "total-invested"),
+        ),
+    )
+
     // 课时按学习任务归类。新增同类组件只向对应课时追加 item，只有新类别才增加课时节点。
     val lessons: List<BuiltInTeachingLesson> = listOf(
         BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴与结构图，理解事件顺序和组成关系。",
@@ -199,19 +232,15 @@ internal object BuiltInTeaching {
                     "把 6 块工时拖到三个任务，正好满足各自需求。",
                     """const NEED=[2,3,1],NAME=['访谈','测试','分析'],TONE=['#c9764a','#3f7fa6','#6a9a63'];let a=[0,0,0],used=[0,0,0,0,0,0],drag=-1,gx=0,gy=0,glow=0,done=false;const cardX=i=>4+i*32,chipX=i=>12+i*13;function slot(p){for(let i=0;i<3;i++){if(p.x>cardX(i)&&p.x<cardX(i)+28&&p.y>32&&p.y<62)return i;}return -1;}function check(){if(a[0]===NEED[0]&&a[1]===NEED[1]&&a[2]===NEED[2]){done=true;draw();game.finish('6 块工时刚好覆盖三项研究：先保证访谈拿到一手证据，再做可用性测试，最后留 1 小时分析。');}}function draw(){const n=a[0]+a[1]+a[2],c=[['rect',0,0,100,100,'#f5efe4'],['text','研究工时分配',50,9,5,'#2a4d5e','center','bold'],['rect',20,17,60,5,'#e2d6c4',2.5,0],['rect',20,17,60*n/6,5,'#3f8f6b',2.5,0],['text','已分配 '+n+'/6 小时',50,25,3,'#6b7a83','center']];for(let i=0;i<3;i++){const x=cardX(i),need=NEED[i],full=a[i]===need;c.push(['rect',x,32,28,30,'#fffdf8',4,0]);c.push(['rect',x,32,28,4,TONE[i],4,0]);c.push(['text',NAME[i],x+14,41,3.6,'#33525f','center','bold']);c.push(['text','需 '+need+' 小时',x+14,47.5,2.8,'#8a9aa3','center']);for(let k=0;k<need;k++)c.push(['circle',x+14+(k-(need-1)/2)*7,55,2.7,a[i]>k?'#3f8f6b':'#dde5e8']);c.push(['text',a[i]+'/'+need,x+14,59.5,2.8,full?'#2f8f6b':'#7a8b93','center','bold']);}for(let i=0;i<6;i++){if(used[i]||i===drag)continue;const y=79+Math.sin(glow+i)*0.25;c.push(['rect',chipX(i)-4.5,y-3,9,6,'#8fb7c9',2,0]);c.push(['text','1h',chipX(i),y,2.4,'#ffffff','center','bold']);}if(drag>=0){c.push(['rect',gx-5,gy-3.5,10,7,'#276B91',2.5,0]);c.push(['text','1h',gx,gy,2.6,'#ffffff','center','bold']);}c.push(['text',done?'分配完成：预算正好覆盖三项研究':'拖动蓝色工时块到任务卡',50,91,3.2,done?'#2f8f6b':'#6b7a83','center','bold']);game.draw(c);}game.onPointer(p=>{if(p.phase==='down'&&drag<0){let best=-1,bd=9;for(let i=0;i<6;i++){if(used[i])continue;const d=Math.hypot(p.x-chipX(i),p.y-79);if(d<bd){bd=d;best=i;}}if(best>=0){drag=best;gx=p.x;gy=p.y;draw();}}else if(p.phase==='move'&&drag>=0){gx=p.x;gy=p.y;draw();}else if(p.phase==='up'&&drag>=0){const s=slot(p);if(s>=0&&a[s]<NEED[s]){a[s]++;used[drag]=1;}else if(s>=0){game.say(NAME[s]+'已经够了，换一个任务');}drag=-1;draw();check();}});game.onFrame(t=>{if(drag>=0)glow=(glow+0.2)%6.283;else glow=(glow+0.05)%6.283;});draw();""")),
             )),
-        BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、判断题与参数实验台（杠杆模型）。",
+        BuiltInTeachingLesson("visual", 2_004, "图像与综合", "综合", "组合图片热点、数据观察、文字解释、判断题与参数实验台（杠杆、复利两个示例）。",
             EntryIcon.LEAF, "先探索植物细胞热点，再回到数据观察与解释，比较不同媒介如何承担讲解。",
             listOf(
                 BuiltInTeachingItem(1_014, hotspot),
                 BuiltInTeachingItem(1_017, borrowing),
                 BuiltInTeachingItem(1_018, bridge),
                 BuiltInTeachingItem(1_020, mixedQuiz),
-                BuiltInTeachingItem(1_021, TeachingExperiment("lever", "杠杆实验台",
-                    "移动两侧重物或调整力，试着让杠杆平衡。", ExperimentModel.LEVER)),
-                // 第二个模型：调本金、定投、年化与年限，观察复利终值的变化。
-                BuiltInTeachingItem(1_031, TeachingExperiment("compound", "复利实验台",
-                    "调整本金、每月投入、年化收益和年限，观察期末总额与收益占比怎么变。",
-                    ExperimentModel.COMPOUND)),
+                BuiltInTeachingItem(1_021, leverExperiment),
+                BuiltInTeachingItem(1_031, compoundExperiment),
             )),
     )
 

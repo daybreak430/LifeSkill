@@ -286,37 +286,31 @@ class TeachingUiTest {
         ui.onNodeWithTag("flip-card-turn").assertIsEnabled()
     }
 
-    @Test fun leverSlidersDraggingExpansionResetAndReopenShareOneState() {
+    @Test fun experimentSlidersExpansionResetAndReopenShareOneState() {
         val lesson = openLesson("visual")
         fun expandedNode(tag: String) = ui.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("teaching-expanded")))
         scrollTo(hasContentDescription("放大杠杆实验台"))
         ui.onNodeWithContentDescription("放大杠杆实验台").performClick()
         ui.onNodeWithTag("teaching-expanded").assertIsDisplayed()
-        val arm = expandedNode("lever-right_arm")
-        arm.performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+        // 初始 4 N × 2 m 与 2 N × 3 m，力矩差 2；把右侧力臂调到 4 后应平衡。
+        expandedNode("experiment-headline").assertTextEquals("2 N·m")
+        expandedNode("experiment-rightArm").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
         ui.waitUntil(8_000) { state(lesson, "lever").experiment?.value("rightArm") == 4.0 }
-        expandedNode("lever-status").assertTextEquals("已平衡")
-        expandedNode("lever-left_force").performScrollTo().performTouchInput {
-            swipe(Offset(width * .25f, height / 2f), Offset(width * .70f, height / 2f), 400)
-        }
-        ui.waitUntil(8_000) { (state(lesson, "lever").experiment?.value("leftForce") ?: 0.0) > 4.0 }
-        expandedNode("lever-weight-right").performScrollTo().performTouchInput {
-            swipe(center, center + Offset(-70f, 0f), 450)
-        }
-        ui.waitUntil(8_000) { (state(lesson, "lever").experiment?.value("rightArm") ?: 4.0) < 4.0 }
+        expandedNode("experiment-headline").assertTextEquals("0 N·m")
+        expandedNode("experiment-leftForce").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(6f) }
+        ui.waitUntil(8_000) { state(lesson, "lever").experiment?.value("leftForce") == 6.0 }
         val saved = state(lesson, "lever").experiment
         try {
-            // ActivityScenario取Activity可能等待生命周期收敛，必须在测试线程完成，不能占住UI线程等待旋转。
+            // ActivityScenario 取 Activity 可能等待生命周期收敛，必须在测试线程完成。
             val portraitActivity = ui.activity
             ui.runOnUiThread { portraitActivity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
             ui.waitUntil(8_000) {
                 val bounds = ui.onAllNodes(isRoot()).onFirst().getUnclippedBoundsInRoot()
                 bounds.right - bounds.left > bounds.bottom - bounds.top
             }
-            expandedNode("lever-left_force").performScrollTo().assertIsDisplayed()
-            val scene = expandedNode("lever-scene").getUnclippedBoundsInRoot()
-            val control = expandedNode("lever-left_force").getUnclippedBoundsInRoot()
-            assertTrue(control.left > scene.left)
+            expandedNode("experiment-leftForce").performScrollTo().assertIsDisplayed()
             assertEquals(saved, state(lesson, "lever").experiment)
         } finally {
             val landscapeActivity = ui.activity
@@ -337,9 +331,9 @@ class TeachingUiTest {
         ui.onNodeWithContentDescription("放大杠杆实验台").performClick()
         ui.onNode(hasContentDescription("重置杠杆实验台") and hasAnyAncestor(hasTestTag("teaching-expanded"))).performClick()
         ui.waitUntil(8_000) { state(lesson, "lever").experiment == null }
-        expandedNode("lever-status").assertTextEquals("左侧下沉")
+        expandedNode("experiment-headline").assertTextEquals("2 N·m")
         back()
-        scrollTo(hasTestTag("lever-scene"))
+        scrollTo(hasTestTag("experiment-leftForce"))
         ui.onNodeWithTag("chat-messages").performTouchInput { swipeDown() }
         back()
         await("课程大纲")
