@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.HorizontalDivider
@@ -47,7 +48,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.LessonFlow
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
@@ -93,14 +96,69 @@ internal fun LessonMarkdown(source: String) {
     // 让段落间距稳定出现，不依赖模型遵循提示词。
     val normalized = remember(source) { normalizeLessonBreaks(source) }
     val document = remember(normalized) { lessonParser.parse(normalized) }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(ParagraphGap)) {
         document.children().forEach { LessonBlock(it, normalized) }
     }
 }
 
+// 正文排版集中在几个常量里：行高与段距决定段落边界是否可辨，
+// 行内数字启用等宽（tnum），金额和百分比才能按列对齐。
+private val ParagraphGap = 14.dp
+private val ListItemGap = 8.dp
+private val BulletSize = 5.dp
+
+@Composable
+private fun lessonBody() = MaterialTheme.typography.bodyLarge.copy(lineHeight = 27.sp, fontFeatureSettings = "tnum")
+
+// 等式行比正文略小、加粗并单独成块，避免和普通段落抢同一层阅读权重。
+private val FormulaShape = RoundedCornerShape(9.dp)
+
 private val fencePattern = Regex("^(```+|~~~+)")
 private val asciiBorderPattern = Regex("""\+[=-]{2,}\+""")
 private val asciiBranchPattern = Regex("""^[ |]*[+|`\\]--""")
+
+// 等式识别：左端是短名词短语、含单个等号、不以句末标点收尾。
+// 阈值刻意保守，宁可把公式留在正文里，也不要把带等号的普通句子变成色块。
+private val formulaPattern = Regex("""^[^。！？；，、：:]{1,14}\s*[=＝]\s*[^。！？]{1,60}$""")
+private val datePattern = Regex("""\d{4}-\d{1,2}-\d{1,2}""")
+private val spacedEquals = Regex("""(?<![=<>!])\s*[=＝]\s*(?!=)""")
+private val digitMinus = Regex("""(?<=\d)\s*-\s*(?=\d)""")
+// 中文算式里的减号两侧通常是名词短语，靠空白识别，避免把“3-5 天”这类区间误改。
+private val spacedHyphen = Regex("""\s-\s""")
+// 数字之间的运算符用不换行空格粘住，避免算式被行尾拆成“200 - 100 -”＋“20”。
+private val breakableDigitOperator = Regex("""(?<=\d) ([=＝−+×÷]) (?=\d)""")
+
+/**
+ * 把行内算式里的 ASCII 减号换成两侧带空白的减号，等号也统一留白。
+ * 只在确定是算式的文本里调用，并且跳过日期（2024-01-05）这类会被误伤的写法。
+ */
+internal fun normalizeEquationOperators(text: String): String {
+    if (!text.contains('=') && !text.contains('＝')) return text
+    if (datePattern.containsMatchIn(text)) return text
+    return text.replace(spacedEquals, " = ")
+        .replace(digitMinus, " − ")
+        .replace(spacedHyphen, " − ")
+        .replace(breakableDigitOperator) { "\u00A0${it.groupValues[1]}\u00A0" }
+}
+
+/** 整段就是一个等式时返回可用于独立排版的内容，否则返回 null。 */
+internal fun formulaCandidate(text: String): String? {
+    val trimmed = text.trim()
+    if (trimmed.length > 80 || !formulaPattern.matches(trimmed)) return null
+    return normalizeEquationOperators(trimmed)
+}
+
+/**
+ * 兜底小标题：模型常把引导句写成独立短段并以冒号结尾（“先讲一个底层公式：”）。
+ * 渲染层据此提升层级，不依赖模型输出 Markdown 标题。
+ */
+internal fun subheadCandidate(text: String): String? {
+    val trimmed = text.trim()
+    if (trimmed.length !in 2..24) return null
+    if (!trimmed.endsWith("：") && !trimmed.endsWith(":")) return null
+    if (trimmed.any { it in "。！？；=" } || trimmed.contains('＝')) return null
+    return trimmed
+}
 
 // 表格行和字符图行必须保持单换行：表格靠连续行识别，
 // 未围栏的字符图靠整段 sourceSpans 识别，拆开就都不成立。
@@ -152,24 +210,45 @@ private fun LessonBlock(node: Node, source: String) {
             }
             if (diagram != null) LessonDiagram(diagram)
             else {
-                val text = node.richText()
+                val raw = node.plainText()
+                val equation = raw.contains('=') || raw.contains('＝')
+                val text = node.richText(equation)
                 val flow = remember(text.text) { LessonFlow.parse(text.text) }
-                if (flow == null) Text(text, color = Ink, style = MaterialTheme.typography.bodyLarge) else FlowBlock(flow)
+                val formula = remember(raw) { formulaCandidate(raw) }
+                val subhead = remember(raw) { subheadCandidate(raw) }
+                // 顺序：等式块最具体，其次是流程图，再是兜底小标题，最后才是正文。
+                when {
+                    formula != null -> LessonFormula(formula)
+                    flow != null -> FlowBlock(flow)
+                    subhead != null -> Text(
+                        text, Modifier.padding(top = 4.dp), color = Gold,
+                        style = lessonBody().copy(fontWeight = FontWeight.SemiBold),
+                    )
+                    else -> Text(text, color = Ink, style = lessonBody())
+                }
             }
         }
-        is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
             val start = (node as? OrderedList)?.markerStartNumber ?: 1
             node.children().forEachIndexed { index, item ->
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(if (node is OrderedList) "${start + index}." else "•", color = Gold, style = MaterialTheme.typography.bodyLarge)
-                    Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                // 无序列表项若整个就是等式，去掉圆点改排成独立等式行；有序列表保留编号。
+                val onlyChild = item.children().toList().singleOrNull()
+                val formula = (onlyChild as? Paragraph)?.plainText()?.let(::formulaCandidate)
+                    .takeIf { node is BulletList }
+                if (formula != null) LessonFormula(formula)
+                else Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    if (node is OrderedList) Text("${start + index}.", color = Gold, style = lessonBody())
+                    else Box(
+                        Modifier.padding(top = bulletTopPadding()).size(BulletSize).background(Gold, CircleShape),
+                    )
+                    Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
                         item.children().forEach { LessonBlock(it, source) }
                     }
                 }
             }
         }
         is BlockQuote -> Surface(shape = RoundedCornerShape(9.dp), color = Raised) {
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(ListItemGap)) {
                 node.children().forEach { LessonBlock(it, source) }
             }
         }
@@ -183,6 +262,28 @@ private fun LessonBlock(node: Node, source: String) {
         is TableBlock -> LessonTable(node)
         else -> node.children().forEach { LessonBlock(it, source) }
     }
+}
+
+// 等式行用淡底色单独成块，和正文拉开层次；运算符已由 normalizeEquationOperators 统一。
+@Composable
+private fun LessonFormula(text: String) {
+    Surface(shape = FormulaShape, color = Raised) {
+        Text(
+            text, Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 7.dp),
+            color = Ink,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 15.sp, lineHeight = 26.sp,
+                fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum",
+            ),
+        )
+    }
+}
+
+// 圆点按首行行高居中，字号缩放时跟着一起移动，避免小圆点浮在文字上方。
+@Composable
+private fun bulletTopPadding(): Dp {
+    val lineHeight = with(LocalDensity.current) { lessonBody().lineHeight.toDp() }
+    return ((lineHeight - BulletSize) / 2).coerceAtLeast(0.dp)
 }
 
 @Composable
@@ -203,32 +304,47 @@ private fun LessonCode(source: String, language: String = "") {
 
 private fun Node.children(): Sequence<Node> = generateSequence(firstChild) { it.next }
 
-@Composable
-private fun Node.richText(): AnnotatedString {
-    val colors = MaterialTheme.colorScheme
-    return buildAnnotatedString { appendChildren(this@richText, colors) }
-}
+// 取节点里的纯文字：跳过 Markdown 标记，用于识别等式与小标题，不参与渲染。
+private fun Node.plainText(): String = buildString { appendPlainText(this@plainText) }
 
-private fun AnnotatedString.Builder.appendChildren(parent: Node, colors: ColorScheme) {
+private fun StringBuilder.appendPlainText(parent: Node) {
     for (node in parent.children()) {
         when (node) {
             is PlainText -> append(node.literal)
+            is Code -> append(node.literal)
+            is SoftLineBreak, is HardLineBreak -> append('\n')
+            else -> appendPlainText(node)
+        }
+    }
+}
+
+@Composable
+private fun Node.richText(equation: Boolean = false): AnnotatedString {
+    val colors = MaterialTheme.colorScheme
+    return buildAnnotatedString { appendChildren(this@richText, colors, equation) }
+}
+
+private fun AnnotatedString.Builder.appendChildren(parent: Node, colors: ColorScheme, equation: Boolean = false) {
+    for (node in parent.children()) {
+        when (node) {
+            // 只有算式段落才改写运算符：普通中文里的连字符（如年份区间）保持原样。
+            is PlainText -> append(if (equation) normalizeEquationOperators(node.literal) else node.literal)
             is SoftLineBreak, is HardLineBreak -> append("\n")
             is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceVariant, color = colors.primary)) {
                 append(node.literal)
             }
-            is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendChildren(node, colors) }
-            is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendChildren(node, colors) }
+            is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendChildren(node, colors, equation) }
+            is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendChildren(node, colors, equation) }
             is Link -> {
                 val url = runCatching { URI(node.destination) }.getOrNull()
                 if (url != null && url.scheme in listOf("https", "http") && !url.host.isNullOrBlank()) {
                     withLink(LinkAnnotation.Url(node.destination, TextLinkStyles(
                         SpanStyle(color = colors.secondary, textDecoration = TextDecoration.Underline),
-                    ))) { appendChildren(node, colors) }
-                } else appendChildren(node, colors)
+                    ))) { appendChildren(node, colors, equation) }
+                } else appendChildren(node, colors, equation)
             }
             is HtmlInline -> Unit
-            else -> appendChildren(node, colors)
+            else -> appendChildren(node, colors, equation)
         }
     }
 }
