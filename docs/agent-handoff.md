@@ -23,22 +23,22 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `e15faa4`（完整哈希见 `git rev-parse v0.15.30`） |
-| 最新版本 | `0.15.30` |
-| `versionCode` | `117` |
+| 最新产品与发布提交 | `1fd64a7`（完整哈希见 `git rev-parse v0.15.31`） |
+| 最新版本 | `0.15.31` |
+| `versionCode` | `118` |
 | 标签 | `v0.15.31` | 公式组件自适应：优先缩放到最小 0.76 倍，超宽在等号处折行，仅无等号超长表达式保留横滑。 |
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.30](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.30) |
-| APK 文件名 | `LifeSkill-0.15.30-release.apk` |
+| Release | [LifeSkill 0.15.31](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.31) |
+| APK 文件名 | `LifeSkill-0.15.31-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `d55649b1e726f55a188215efb5cbb3c6ab0dc166955181cced61af3211f51542` |
+| APK SHA-256 | `9409fffdc3d4e16d9a85ec3a45c236eded6eb0a5f5101ecc3b5467ca59a49db7` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.30..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.31..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.30` 已发布：标签指向 `e15faa4`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改 Markdown 表格的渲染排版，未做覆盖升级安装验证，也未在真机核对表格在窄屏上的换行。
+`0.15.31` 已发布：标签指向 `1fd64a7`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改公式组件的宽度适配，未做覆盖升级安装验证，也未在真机核对实际公式字号观感。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -140,6 +140,14 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.29` | `edd1ce7` |
 | `v0.15.31` | 公式组件自适应：优先缩放到最小 0.76 倍，超宽在等号处折行，仅无等号超长表达式保留横滑。 |
 | `v0.15.30` | `e15faa4` |
+| `v0.15.31` | `1fd64a7` |
+
+## 0.15.31 的验证证据
+
+- 现象：真实课时里的公式卡片“支付金额 = 访客数 × 转化率 × 客单价”在手机宽度下溢出，只能左右拖动；此前每行固定 19sp 且默认横向滚动。
+- 改动（`ui/TeachingFormula.kt`）：每行先用 `TextMeasurer` 逐原子测量宽度（分式取分子分母较宽一侧、根号补符号与线宽、每个原子加 2dp 间距），放得下就用 19sp；放不下等比缩到最小 0.76 倍（约 14.4sp）；缩到下限仍超宽时在第一个等号处折成两行（等号留在上行）；只有无等号且仍超宽的表达式才保留横滑。
+- 测试：新增 `TeachingFormulaLayoutTest` 覆盖等号拆分与缩放上下限；`LessonMarkdownRenderTest` 增加 330dp 宽度下的公式渲染用例并截图核对，断言“支付金额”“客单价”均可见；`StructuredBlocksTest` 与渲染测试合计 9 项通过，单元测试与 `lintDebug` 通过。
+- 未做覆盖升级安装验证；折行阈值与 0.76 下限是按当前 19sp 底噪估的，真机上若觉得字偏小可抬高下限改为更早折行。
 
 ## 0.15.30 的验证证据
 
