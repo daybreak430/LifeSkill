@@ -167,6 +167,9 @@ class AiProtocolTest {
         assertTrue(prompt.contains("Markdown 表格"))
         // 有序列表必须有明确的使用条件，否则模型一律退回无序列表。
         assertTrue(prompt.contains("有先后顺序、步骤、阶段或排名时用有序列表"))
+        // 组件不能只在“用户点名”时才出现，否则默认讲解会退化成纯文字。
+        assertTrue(prompt.contains("每轮先判断有没有匹配的组件"))
+        assertTrue(prompt.contains("\"blocks\":[{\"id\":\"t\",\"type\":\"timeline\""))
         assertFalse(prompt.contains("首选compare"))
     }
 }

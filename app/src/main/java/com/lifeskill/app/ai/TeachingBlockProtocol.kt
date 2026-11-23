@@ -469,7 +469,7 @@ internal object TeachingBlockProtocol {
     private fun JSONArray.strings(limit: Int): List<String> = List(length()) { (get(it) as String).trim().also { value -> require(value.length in 1..limit) } }
 
     val instructions = """
-        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点、变量实验台、小游戏或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。普通组件只描述数据，禁止生成HTML、可执行表达式或外部资源链接；只有game.code允许遵循下方专用API生成短JavaScript。
+        可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件。每轮先判断有没有匹配的组件：内容涉及时间先后、组成结构、数量趋势、多方案打分、公式、区间预估、层级转化、需要回忆或排序的练习、空间定位、参数实验时，用对应组件承载结构与数量，文字只负责因果、判断和提醒，reply 保持 2–4 句、不重复组件里的数字与标签；确实没有匹配类型、或只是追问细节时才只回文字。用户点名要图表、时间轴、翻卡、排序、热点、实验台、小游戏或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。普通组件只描述数据，禁止生成HTML、可执行表达式或外部资源链接；只有game.code允许遵循下方专用API生成短JavaScript。
         先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序既画成流程图又用sort，不要把同一概念先做表格再出quiz重复说明，也不要在首次讲解时把“讲解＋图表＋表格＋测验”一次全部塞入。
         主题与组件选择参考：
         - 历史、事件、阶段、制度演变：timeline；只放已发生或有明确日期的事件，不把未开始的实施步骤塞进时间轴（那是流程图），也不要用它代替单一数值预估。
@@ -503,7 +503,8 @@ internal object TeachingBlockProtocol {
         game.say(反馈文字) 更新提示条；game.buttons([{id,label}]) 最多6个按钮，只用于“重开、下一步、确认”等辅助操作，不能用来选择答案；game.onPointer(({phase,x,y})=>{}) 接收 down/move/up 拖动，game.onTap((x,y)=>{}) 接收点击，两者都注册时抬起动作会先进入 onPointer 的 up 再触发 onTap，不要在两边重复结算同一次操作；game.onAction(id=>{}) 接收按钮，game.onFrame(t=>{}) 由应用按约30帧/秒驱动、必须在初始化时注册，适合进度条、计时、位移动画；game.finish(总结文字) 标记完成并解释知识。每帧只重绘必要内容，不累积对象；所有回调必须快速返回，不使用 requestAnimationFrame/setInterval/setTimeout。不要调用浏览器、宿主或 Worker 的其他接口。应用提供重开和关闭，游戏不需要自己画功能图标。
         示例（拖动＋动效）：{"id":"balance","type":"game","title":"调平天平","goal":"理解力臂与力矩的关系","instructions":"拖动砝码，让两端力矩相等。","code":"let x=22,drag=false,pulse=0;const target=70;function draw(){const ok=Math.abs(x-target)<3;game.draw([['rect',0,0,100,100,'#fbf7ef'],['circle',50,82,24,'#efe5d6'],['rect',8,76,84,2,'#d8c9b5'],['poly',[16,62,84,62,84,67,16,67,drag?'#276B91':'#9db9cc'],['circle',80,64,4,'#c9a227'],['circle',x,64,5,ok?'#2f8f6b':'#276B91'],['text',''+Math.round(x)+' : '+Math.round(100-x),50,16,5,'#276B91','center','bold'],['text',ok?'力矩相等':'拖动砝码到金点',50,93,3.5,'#6b7a83','center']]);}game.onPointer(p=>{if(p.phase==='down'&&Math.hypot(p.x-x,p.y-64)<14)drag=true;else if(p.phase==='move'&&drag){x=Math.max(10,Math.min(90,p.x));}else if(p.phase==='up'&&drag){drag=false;if(Math.abs(x-target)<3)game.finish('力矩相等时杠杆平衡：力臂越长，需要的力越小。');}});game.onFrame(t=>{if(!drag)return;pulse=(pulse+1)%2;if(pulse===0)draw();});draw();"}
         分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
-        支持以下格式（示例只说明协议，具体内容按本节目标生成）：
+        支持以下格式（示例只说明协议，具体内容按本节目标生成）。
+        完整回复示例（只演示 JSON 结构，组件按本节目标选择）：{"kind":"teach","reply":"先看时间顺序：制度不是一次改完的。","blocks":[{"id":"t","type":"timeline","title":"制度变化","events":[{"id":"e1","date":"1980","title":"试点","detail":"先在局部试行"},{"id":"e2","date":"1985","title":"推广","detail":"扩展到全国"}]}]}
         流程图只写在 reply 的 mermaid 代码围栏里（首行 flowchart TD，每行一条 A[简短步骤] --> B{判断}），不生成独立的流程组件；围栏之外用一两句话概括流程，不重复抄写节点文字。
         {"id":"t","type":"timeline","title":"事件顺序","events":[{"id":"e1","date":"第一天","title":"提出问题","detail":"背景与影响"},{"id":"e2","date":"第二天","title":"验证假设","detail":"观察结果"}]}
         {"id":"fig","type":"figure","title":"结构与数量","rows":[{"cols":1,"items":[{"title":"整体","note":"一句限定","tone":"amber"}]},{"arrow":"由两部分组成"},{"cols":2,"items":[{"title":"部分一","value":"435","note":"席位全部改选","tone":"blue"},{"title":"部分二","value":"100","items":["要点一","要点二"]}]}],"caption":"一句话说明两部分的关系。"}
