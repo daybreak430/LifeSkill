@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `41b638c`（完整哈希见 `git rev-parse v0.15.24`） |
-| 最新版本 | `0.15.24` |
-| `versionCode` | `111` |
-| 标签 | `v0.15.24` |
-| Release | [LifeSkill 0.15.24](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.24) |
-| APK 文件名 | `LifeSkill-0.15.24-release.apk` |
+| 最新产品与发布提交 | `5a46abc`（完整哈希见 `git rev-parse v0.15.25`） |
+| 最新版本 | `0.15.25` |
+| `versionCode` | `112` |
+| 标签 | `v0.15.25` |
+| Release | [LifeSkill 0.15.25](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.25) |
+| APK 文件名 | `LifeSkill-0.15.25-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `4b8e580888b318e3e7478439ef15597ac3c1b63d5ca36e367a340c23b5dd7577` |
+| APK SHA-256 | `7873f7494bb19f129847a27e8327e59731bd4b0717fbb7980503fb5fe8b164c2` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.24..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.25..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.24` 已发布：标签指向 `41b638c`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改教学正文的 Markdown 渲染，未做覆盖升级安装验证，也未在真机核对排版；同一段回复高度约增加 20%，属于已知取舍。
+`0.15.25` 已发布：标签指向 `5a46abc`，Release 附件大小与 SHA-256 和本地 APK 一致。本次重做正文排版与提示词结构，并停用对比卡；未做覆盖升级安装验证，也未在真机核对排版与真实模型输出。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -119,6 +119,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.22` | `075a31d` |
 | `v0.15.23` | `08c21f0` |
 | `v0.15.24` | `41b638c` |
+| `v0.15.25` | `5a46abc` |
+
+## 0.15.25 的验证证据
+
+- 触发：截图对比显示豆包的节奏来自“块间松、块内紧 + 引用块降级 + 标题贴正文”，而本项目所有块统一 14dp、引用是灰底正文、标题浮动。
+- 排版侧：新增 `ui/LessonTypography.kt`（标题 20sp、兜底小标题 17sp、正文 16/27、引用 14.5/24、嵌套 15/24、等式 15/26；间距 18/6、16、12、4、6dp）；引用块改为左 3dp 主题色竖条 + 7% 淡底；嵌套列表次级色 + 16dp 缩进；有序序号改中性等宽数字。
+- 修复两个影响节奏的老问题：`normalizeLessonBreaks` 之前会把连续列表项拆成独立段落（有序列表重新从 1 编号），现在列表项、引用行内部的单换行保持不变；模型常用的 2 空格嵌套缩进统一补到 3 空格，子项不再掉出列表。
+- 提示词：先给结论、3 段以上用 `###`、提醒与区别用 `>`（最多 1 个）、列表 2–4 项、结尾给下一步；讲解示例换成“结论 + 小标题 + 列表 + 引用 + 收尾”。
+- 对比卡停用：`isAvailable` 过滤 `TeachingComparison`；内置结构与图像会话删除对比卡示例并保留标记 1003/1019；提示词改要求 Markdown 表格；旧快照仍可解码，`legacy_compare` 样本经 `AiProtocol.tutor` 过滤后为空。
+- 测试：`LessonMarkdownTest` 12 项（新增列表/引用分组、嵌套缩进）；`LessonMarkdownRenderTest` 2 项在 Android 16 / Pixel 9 Pro AVD 渲染并截图核对标题、嵌套列表、引用块与等式块；`TeachingUiTest`、`TeachingGameStorageTest`、`AiProtocolTest`、`GraphModelSamplesTest` 合计 27 项通过；单元测试与 `lintDebug` 通过。
+- 未做覆盖升级安装验证，也未用真实模型抽样验证 P4 结构是否稳定出现；引用块视觉依赖模型写 `>`，若模型不写则不会出现。
 
 ## 0.15.24 的验证证据
 
