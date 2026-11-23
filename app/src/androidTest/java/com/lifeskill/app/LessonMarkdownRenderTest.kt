@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
 import com.lifeskill.app.ui.LessonMarkdown
 import com.lifeskill.app.ui.LifeSkillTheme
 import androidx.test.platform.app.InstrumentationRegistry
@@ -51,6 +52,29 @@ class LessonMarkdownRenderTest {
 
         要不要我用你店里的客单价算一遍？
     """.trimIndent()
+
+    @Test fun wideFormulaShrinksOrSplitsInsteadOfScrolling() {
+        // 真实案例：支付金额 = 访客数 × 转化率 × 客单价，在 300dp 内容宽度里放不下。
+        val block = com.lifeskill.app.model.TeachingFormula(
+            "store-profit", "店铺经营的核心公式",
+            listOf("支付金额 = 访客数 × 转化率 × 客单价"),
+            "拆三块，就能定位是流量、转化还是金额的问题。",
+        )
+        ui.setContent {
+            LifeSkillTheme(dark = false) {
+                Surface(Modifier.width(330.dp).padding(15.dp), color = Color(0xFFFCFDFD)) {
+                    com.lifeskill.app.ui.TeachingFormulaContent(block)
+                }
+            }
+        }
+        ui.onNodeWithText("支付金额", substring = true).assertIsDisplayed()
+        ui.onNodeWithText("客单价", substring = true).assertIsDisplayed()
+        val bitmap = ui.onRoot().captureToImage().asAndroidBitmap()
+        InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+            .resolve("lesson-formula-wide.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+    }
 
     @Test fun rendersMarkdownTableAsCard() {
         val markdown = """
