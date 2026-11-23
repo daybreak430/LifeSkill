@@ -23,20 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `aa0803b`（完整哈希见 `git rev-parse v0.15.26`） |
-| 最新版本 | `0.15.26` |
-| `versionCode` | `113` |
-| 标签 | `v0.15.27` | 停用流程图组件，流程图统一由 mermaid 围栏渲染；修复漏写语言标记时流程图被当成代码块的问题。 |
-| `v0.15.26` |
-| Release | [LifeSkill 0.15.26](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.26) |
-| APK 文件名 | `LifeSkill-0.15.26-release.apk` |
+| 最新产品与发布提交 | `b1b7e72`（完整哈希见 `git rev-parse v0.15.27`） |
+| 最新版本 | `0.15.27` |
+| `versionCode` | `114` |
+| 标签 | `v0.15.27` |
+| Release | [LifeSkill 0.15.27](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.27) |
+| APK 文件名 | `LifeSkill-0.15.27-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `c9ac9670b35da3609672d37416cef481dffe167f8a9ec36c3159a8c727cdedcc` |
+| APK SHA-256 | `b6c6e543640166b4e50736867d1e031d2b8ec07bc4966d5b7ccf87c23ff6eb44` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.26..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.27..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.26` 已发布：标签指向 `aa0803b`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只回退 0.15.25 加入的结构化提示词，排版与对比卡下线保持不变；未做覆盖升级安装验证，也未用真实模型确认语气是否恢复自然。
+`0.15.27` 已发布：标签指向 `b1b7e72`，Release 附件大小与 SHA-256 和本地 APK 一致。本次修复流程图渲染并停用流程图组件；未做覆盖升级安装验证，也未用真实模型抽样确认漏写语言标记的比例。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -94,8 +93,8 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.23` | 再次放宽小游戏预算（代码16000字符、512条命令、64KB消息、120秒单局），提示词改要求分层写法与四项自查，减少为省字符导致的逻辑 bug。 |
 | `v0.15.24` | 正文排版：行高27sp、段距14dp、列表8dp与圆点、等式独立成块并规范运算符、等宽数字、兜底小标题。 |
 | `v0.15.25` | 阅读体验：分级间距、引用块重做、标题贴正文、嵌套列表次级化、排版 token 集中；提示词要求结论+小标题+引用结构；对比卡停用改 Markdown 表格。 |
-| `v0.15.27` | 停用流程图组件，流程图统一由 mermaid 围栏渲染；修复漏写语言标记时流程图被当成代码块的问题。 |
 | `v0.15.26` | 回退结构化提示词（结论/###/引用/列表/收尾的硬性模板），保留排版改进与对比卡下线。 |
+| `v0.15.27` | 停用流程图组件，流程图统一由 mermaid 围栏渲染；修复漏写语言标记时流程图被当成代码块的问题。 |
 
 对应提交如下：
 
@@ -123,8 +122,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.23` | `08c21f0` |
 | `v0.15.24` | `41b638c` |
 | `v0.15.25` | `5a46abc` |
-| `v0.15.27` | 停用流程图组件，流程图统一由 mermaid 围栏渲染；修复漏写语言标记时流程图被当成代码块的问题。 |
 | `v0.15.26` | `aa0803b` |
+| `v0.15.27` | `b1b7e72` |
+
+## 0.15.27 的验证证据
+
+- 现象：真实回复里的 mermaid 流程围栏被显示成等宽代码块。根因不是解析失败，而是 `LessonCode` 先判断“是否字符图”：模型漏写 `mermaid` 语言标记时，多行 `-->` 命中 `looksLikeTextDiagram` 的分支判断，流程文本被当成 ASCII 示意图。
+- 修复：`LessonCode` 改为先尝试 `LessonFlow.parse`，成功即走原生流程图排版；失败后才退回字符图或代码块。语言写成 `mermaid`、`text` 或留空都能出图，解析失败时仍显示源码。
+- 组件下线：`TeachingFlow` 加入 `isAvailable` 过滤，旧快照仍可解码但不展示、不生成；内置「结构与过程」删除流程图示例，安装标记 1002 永久保留并加入恢复清理；提示词把操作步骤、判断分支、反馈循环指向 reply 里的 mermaid 围栏，保留“禁止 ASCII 流程图”的约束。
+- 测试：新增 `LessonMarkdownRenderTest` 的“无语言标记的 mermaid 围栏仍渲染为流程图”回归用例并截图核对；删除依赖 flow 节点交互的 UI 用例；`TeachingStorageTest` 的旧课时合并改为只验证仍可用组件。`TeachingUiTest`、`TeachingStorageTest`、`TeachingGameStorageTest`、`AiProtocolTest`、`GraphModelSamplesTest`、`LessonMarkdownRenderTest` 合计 40 项通过，单元测试与 `lintDebug` 通过。
+- 已核验 0.15.27 发布包内的提示词：新规则存在、旧的“反馈循环：flow”表述不存在。
+- 未做覆盖升级安装验证；也未抽样统计模型漏写 mermaid 标记的比例，只是让渲染端不再依赖语言标记。
 
 ## 0.15.26 的验证证据
 
