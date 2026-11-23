@@ -25,8 +25,8 @@ internal object BuiltInTeaching {
     const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
     // 停用组件的旧安装标记仍属于演示课，主动恢复时一并清理；标记不得分配给新组件。
-    // 1_002 是已停用的流程图组件，1_003 与 1_019 是已停用的对比卡示例。
-    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_002, 1_003, 1_007, 1_008, 1_013, 1_015, 1_019) +
+    // 1_002 流程图、1_003/1_019 对比卡、1_025 区间条均为已停用组件。
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_002, 1_003, 1_007, 1_008, 1_013, 1_015, 1_019, 1_025) +
         lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
@@ -72,11 +72,6 @@ internal object BuiltInTeaching {
         listOf("自建", "采购", "外包"), listOf("成本", "风险", "可维护"),
         listOf(listOf(5.0, 3.0, 4.0), listOf(3.0, 5.0, 3.0), listOf(2.0, 2.0, 5.0)),
         "1–5 分；分数只帮你比较，不替代判断。",
-    )
-    private val deliveryRange = TeachingRange(
-        "delivery-range", "预计多久能上线",
-        "预计 3–5 天", 0.0, 10.0, 3.0, 5.0, 4.2, "天",
-        "区间来自三个同类需求的历史耗时。",
     )
     private val quadratic = TeachingFormula(
         "quadratic", "求根公式",
@@ -190,7 +185,6 @@ internal object BuiltInTeaching {
                 BuiltInTeachingItem(1_009, bar),
                 BuiltInTeachingItem(1_010, area),
                 BuiltInTeachingItem(1_024, toolMatrix),
-                BuiltInTeachingItem(1_025, deliveryRange),
                 BuiltInTeachingItem(1_026, quadratic),
                 BuiltInTeachingItem(1_028, studyScatter),
                 BuiltInTeachingItem(1_029, monthlyWaterfall),

@@ -32,6 +32,11 @@ class GraphModelSamplesTest {
             assertTrue("$scenario 缺少正文", reply.reply.isNotBlank())
 
             val expected = entry.optString("type")
+            if (expected == "range") {
+                // 区间条自 0.15.32 起停用：样本仍能解码，但 tutor 输出会把它过滤掉。
+                assertTrue("$scenario 应被过滤为无组件", reply.blocks.isEmpty())
+                continue
+            }
             if (expected.isEmpty()) {
                 // 模型认为信息不足时允许只回文字，不能因此判失败。
                 assertTrue("$scenario 记录为无组件", reply.blocks.isEmpty())
@@ -53,7 +58,7 @@ class GraphModelSamplesTest {
                 else -> Unit
             }
         }
-        assertEquals(setOf("matrix", "chart", "range", "funnel", "formula", "figure"), covered)
+        assertEquals(setOf("matrix", "chart", "funnel", "formula", "figure"), covered)
     }
 
     private fun TeachingBlock.typeName(): String = when (this) {

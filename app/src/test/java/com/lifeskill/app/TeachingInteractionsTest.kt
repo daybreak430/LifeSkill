@@ -43,6 +43,10 @@ class TeachingInteractionsTest {
     private val chart get() = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingChart>()
         .first { it.mode == TeachingChartMode.LINEAR_DEMAND }
 
+    private val legacyRange = TeachingRange(
+        "legacy-range", "旧区间条", "预计 3–5 天", 0.0, 10.0, 3.0, 5.0, 4.2, "天", "旧示例。",
+    )
+
     private val legacyFlow = TeachingFlow(
         "legacy-flow", "旧流程图", "flowchart TD\nA[开始] --> B[结束]",
         mapOf("A" to "起点", "B" to "终点"),
@@ -62,11 +66,13 @@ class TeachingInteractionsTest {
             setOf(
                 TeachingClassification::class.java, TeachingStepTrace::class.java,
                 TeachingQuadrant::class.java, TeachingComparison::class.java, TeachingFlow::class.java,
+                TeachingRange::class.java,
             )
         assertFalse(legacyClassification.isAvailable)
         assertFalse(legacyTrace.isAvailable)
         assertFalse(legacyComparison.isAvailable)
         assertFalse(legacyFlow.isAvailable)
+        assertFalse(legacyRange.isAvailable)
         assertTrue(BuiltInTeaching.lessons.flatMap { it.blocks }.all { it.isAvailable })
         val showcased = BuiltInTeaching.lessons.flatMap { it.blocks }.map { it.javaClass }.toSet()
         assertEquals(required, showcased)

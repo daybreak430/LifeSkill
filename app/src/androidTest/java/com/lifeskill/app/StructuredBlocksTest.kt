@@ -38,7 +38,6 @@ class StructuredBlocksTest {
         "mx", "方案评分", listOf("自建", "采购"), listOf("成本", "风险", "可维护"),
         listOf(listOf(5.0, 3.0, 4.0), listOf(3.0, 5.0, 3.0)), "1–5 分，依据见讲解。",
     )
-    private val range = TeachingRange("rg", "上线时间", "预计 3–5 天", 0.0, 10.0, 3.0, 5.0, 4.2, "天", "来自历史耗时。")
     private val funnel = TeachingFunnel(
         "fn", "从投递到录用", FunnelMode.FUNNEL,
         listOf(FunnelStage("投递", "240", 100), FunnelStage("初筛", "96", 78), FunnelStage("录用", "8", 32)),
@@ -63,15 +62,14 @@ class StructuredBlocksTest {
 
     @Test fun roundTripKeepsAllFourStructures() {
         val decoded = TeachingBlockProtocol.decode(
-            TeachingBlockProtocol.encode(listOf(matrix, range, funnel, formula, scatter, waterfall)),
+            TeachingBlockProtocol.encode(listOf(matrix, funnel, formula, scatter, waterfall)),
         )
-        assertEquals(6, decoded.size)
+        assertEquals(5, decoded.size)
         assertEquals(matrix, decoded[0])
-        assertEquals(range, decoded[1])
-        assertEquals(funnel, decoded[2])
-        assertEquals(formula, decoded[3])
-        assertEquals(scatter, decoded[4])
-        assertEquals(waterfall, decoded[5])
+        assertEquals(funnel, decoded[1])
+        assertEquals(formula, decoded[2])
+        assertEquals(scatter, decoded[3])
+        assertEquals(waterfall, decoded[4])
     }
 
     @Test fun rejectsWrongShapesAndDirections() {
@@ -89,7 +87,7 @@ class StructuredBlocksTest {
         val structure = BuiltInTeaching.lessonByKey("structure")!!
         assertTrue(structure.items.any { it.installMarker == 1_027 })
         val data = BuiltInTeaching.lessonByKey("data")!!
-        listOf(1_024, 1_025, 1_026).forEach { marker ->
+        listOf(1_024, 1_026).forEach { marker ->
             assertTrue(data.items.any { it.installMarker == marker })
         }
         assertEquals(4, BuiltInTeaching.lessons.size)
@@ -102,7 +100,7 @@ class StructuredBlocksTest {
                     TeachingContent(
                         Turn(
                             "structured-ui", Speaker.ASSISTANT, TurnKind.MESSAGE, "四种图形",
-                            teachingBlocks = listOf(matrix, range, funnel, formula, scatter),
+                            teachingBlocks = listOf(matrix, funnel, formula, scatter),
                         ),
                         true,
                     ) { _, _ -> }
@@ -111,8 +109,6 @@ class StructuredBlocksTest {
         }
         ui.onNodeWithTag("matrix-mx").assertIsDisplayed()
         ui.onNodeWithText("可维护").assertExists()
-        ui.onNodeWithTag("range-rg").assertExists()
-        ui.onNodeWithText("预计 3–5 天").assertExists()
         ui.onNodeWithTag("funnel-fn").assertExists()
         ui.onNodeWithText("投递").assertExists()
         ui.onNodeWithTag("formula-fm").assertExists()
