@@ -52,6 +52,35 @@ class LessonMarkdownRenderTest {
         要不要我用你店里的客单价算一遍？
     """.trimIndent()
 
+    @Test fun rendersMermaidFenceEvenWithoutLanguageMarker() {
+        // 回归：模型偶尔漏写 mermaid 语言标记，带箭头的围栏内容曾被当成字符图或代码块。
+        val markdown = """
+            先把这条因果链对上号：
+
+            ```
+            flowchart TD
+            A[库存不准] --> B{卖超}
+            B -->|是| C[无法发货]
+            C --> D[订单被取消]
+            ```
+        """.trimIndent()
+        ui.setContent {
+            LifeSkillTheme(dark = false) {
+                Surface(Modifier.fillMaxWidth().padding(15.dp), color = Color(0xFFFCFDFD)) {
+                    LessonMarkdown(markdown)
+                }
+            }
+        }
+        ui.onNodeWithText("库存不准").assertIsDisplayed()
+        ui.onNodeWithText("卖超").assertIsDisplayed()
+        ui.onNodeWithText("flowchart TD", substring = true).assertDoesNotExist()
+        val bitmap = ui.onRoot().captureToImage().asAndroidBitmap()
+        InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+            .resolve("lesson-markdown-flow.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+    }
+
     @Test fun rendersHeadingsQuotesAndNestedLists() {
         ui.setContent {
             LifeSkillTheme(dark = false) {

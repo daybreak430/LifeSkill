@@ -118,14 +118,12 @@ class TeachingStorageTest {
                 database.openHelper.writableDatabase.execSQL("DELETE FROM bootstrap WHERE id = ${it.installMarker}")
             }
 
-            val legacy = listOf("timeline", "flow").map { key ->
+            // 流程图组件已停用，旧独立课时不再参与合并；这里只验证仍可用组件能并入分类会话。
+            val legacy = listOf("timeline").map { key ->
                 checkNotNull(BuiltInTeaching.legacyDemos.find { it.key == key })
             }
             val blocks = legacy.map { demo ->
-                when (demo.key) {
-                    "timeline" -> BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingTimeline>().first()
-                    else -> BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingFlow>().first()
-                }.also { block ->
+                BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingTimeline>().first().also { block ->
                     database.skills().insertEntry(EntryRow(
                         demo.id, course.id, EntryKind.SKILL.name,
                         secret.seal(demo.name, "${demo.id}:name"), secret.seal(demo.goal, "${demo.id}:goal"),
@@ -156,9 +154,9 @@ class TeachingStorageTest {
                 JSONArray(secret.open(turn.teachingBlocks.orEmpty(), "${structure.turnId}:blocks")),
             )
             assertTrue(merged.any { it.id == "timeline" })
-            assertTrue(merged.any { it.id == "flow" })
+            assertTrue(merged.none { it.id == "flow" })
             assertEquals(1, database.skills().turnsForChat(ChatScope(ChatMode.TUTOR, structure.id).id).size)
-            assertTrue(blocks.size == 2)
+            assertEquals(1, blocks.size)
         } finally { database.close() }
     }
 

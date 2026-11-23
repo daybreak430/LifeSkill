@@ -158,7 +158,10 @@ class AiProtocolTest {
         assertTrue(prompt.contains("没有匹配的教学意图时只用文字"))
         assertTrue(prompt.contains("历史、事件、阶段、制度演变：timeline"))
         assertTrue(prompt.contains("每次教学回复最多用2个组件"))
-        assertTrue(prompt.contains("不要把同一顺序同时做成flow和sort"))
+        assertTrue(prompt.contains("不要把同一顺序既画成流程图又用sort"))
+        // 流程图组件已停用：流程只能通过 mermaid 围栏渲染。
+        assertTrue(prompt.contains("mermaid 代码围栏"))
+        assertFalse(prompt.contains("：flow；"))
         assertTrue(prompt.contains("当前只支持plant_cell植物细胞示意图"))
         assertTrue(prompt.contains("科学和数据分析可优先chart"))
         assertTrue(prompt.contains("Markdown 表格"))

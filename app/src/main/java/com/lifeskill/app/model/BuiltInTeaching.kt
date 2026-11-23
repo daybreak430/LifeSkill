@@ -25,8 +25,8 @@ internal object BuiltInTeaching {
     const val FALLBACK_PARENT_ID = "lifeskill:showcase-direction"
     const val COURSE_NAME = "交互教学体验"
     // 停用组件的旧安装标记仍属于演示课，主动恢复时一并清理；标记不得分配给新组件。
-    // 1_003 与 1_019 是已停用的对比卡示例。
-    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_003, 1_007, 1_008, 1_013, 1_015, 1_019) +
+    // 1_002 是已停用的流程图组件，1_003 与 1_019 是已停用的对比卡示例。
+    val installMarkerIds: List<Int> get() = listOf(INSTALL_MARKER, 1_002, 1_003, 1_007, 1_008, 1_013, 1_015, 1_019) +
         lessons.flatMap { lesson -> listOf(lesson.installMarker) + lesson.items.map { it.installMarker } }
 
     private val timeline = TeachingTimeline("timeline", "从统一到灭亡", listOf(
@@ -34,22 +34,6 @@ internal object BuiltInTeaching {
         TimelineEvent("succession", "前210年", "秦始皇去世", "继承危机与权力斗争使中央政治局势动荡。它是重要转折，但不是秦亡的唯一原因。"),
         TimelineEvent("uprising", "前209年", "陈胜吴广起义", "大规模反秦战争开始。比较相邻事件，区分长期矛盾与直接触发因素。"),
         TimelineEvent("surrender", "前207年", "子婴投降", "刘邦进入关中，子婴投降，秦朝统治结束。楚汉战争属于随后的阶段。"),
-    ))
-    private val flow = TeachingFlow("flow", "需求怎样进入开发", """
-        flowchart TD
-        A[收集问题] --> B[澄清目标]
-        B --> C{证据充分}
-        C -->|是| D[排期]
-        C -->|否| E[回访用户]
-        D --> F[开发验证]
-        E --> C
-    """.trimIndent(), linkedMapOf(
-        "A" to "先记录谁在什么场景遇到什么困难，不急着把问题写成具体功能。",
-        "B" to "确定希望改善的结果和判断标准，例如减少一次重复录入。",
-        "C" to "访谈、使用数据或小实验，是否支持这个问题与解法？选择不同分支继续探索。",
-        "D" to "证据支持后，结合收益、成本与依赖确定交付范围。",
-        "E" to "补充用户观察或小实验，得到新证据后回到判断。这不等于永久否决需求。",
-        "F" to "实现后继续验证结果是否改善，而不只检查功能有没有上线。",
     ))
     private val comparisonViolet = TeachingComparison("methods", "阅读与动手练习", listOf("阅读理解", "动手练习"), listOf(
         ComparisonDimension("task", "主要任务", listOf("建立概念，理解原理与术语。", "把概念用在具体任务中，发现实际困难。")),
@@ -191,11 +175,10 @@ internal object BuiltInTeaching {
 
     // 课时按学习任务归类。新增同类组件只向对应课时追加 item，只有新类别才增加课时节点。
     val lessons: List<BuiltInTeachingLesson> = listOf(
-        BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴、流程与结构图，理解事件顺序和组成关系。",
-            EntryIcon.BOOK, "同一会话中组合时间线、分支流程与结构图。先切换关注点，再比较表达方式。",
+        BuiltInTeachingLesson("structure", 2_001, "结构与过程", "结构", "组合时间轴与结构图，理解事件顺序和组成关系。",
+            EntryIcon.BOOK, "同一会话中组合时间线与结构图。先切换关注点，再比较表达方式。",
             listOf(
                 BuiltInTeachingItem(1_001, timeline),
-                BuiltInTeachingItem(1_002, flow),
                 BuiltInTeachingItem(1_023, writingFigure),
                 BuiltInTeachingItem(1_027, hiringFunnel),
             )),

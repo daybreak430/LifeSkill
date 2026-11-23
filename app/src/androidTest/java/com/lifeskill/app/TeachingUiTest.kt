@@ -84,26 +84,6 @@ class TeachingUiTest {
         assertEquals(Mastery.UNLIT, runBlocking { app.library.entry(lesson.id)?.mastery })
     }
 
-    @Test fun flowHorizontalAndVerticalScrollingDoesNotTriggerNodesAndBackClosesOnlyTheDiagram() {
-        val lesson = openLesson("structure")
-        scrollTo(hasTestTag("flow-node-B"))
-        ui.onNodeWithTag("flow-node-B").performSemanticsAction(SemanticsActions.OnClick)
-        ui.waitUntil(8_000) { state(lesson, "flow").selection == "B" }
-        scrollTo(hasTestTag("flow-node-C"))
-        ui.onNodeWithTag("flow-node-C").performSemanticsAction(SemanticsActions.OnClick)
-        ui.waitUntil(8_000) { state(lesson, "flow").selection == "C" }
-        scrollTo(hasTestTag("flow-node-C"))
-        val node = ui.onNodeWithTag("flow-node-C")
-        // 在节点上起手横滑只移动流程图，不把滑动误判成节点点击。
-        node.performTouchInput { swipe(Offset(width*.8f,height/2f),Offset(width*.1f,height/2f),450) }
-        assertEquals("C", state(lesson, "flow").selection)
-        ui.onNodeWithTag("chat-messages").performTouchInput { swipeUp() }
-        scrollTo(hasText("否 → 回访用户"))
-        ui.onNodeWithText("否 → 回访用户").performTouchInput { click() }
-        ui.waitUntil(8_000) { state(lesson, "flow").selection == "E" }
-        ui.onNodeWithContentDescription("放大需求怎样进入开发").assertDoesNotExist()
-    }
-
     @Test fun timelineAndComposerRemainUsableTogether() {
         val lesson = openLesson("structure")
         scrollTo(hasTestTag("timeline-uprising"))

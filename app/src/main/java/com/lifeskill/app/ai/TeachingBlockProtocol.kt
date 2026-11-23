@@ -470,10 +470,10 @@ internal object TeachingBlockProtocol {
 
     val instructions = """
         可在 teach 或 offer_check 的顶层 JSON 增加 blocks 数组，把讲解与原生互动组件组合。reply 必须保留可独立阅读的文字解释，组件不可用时仍能读懂。最多3个组件，仅在有助理解时使用，普通追问可只回文字。用户要求图表、时间轴、比较、流程、翻卡、排序、图片热点、变量实验台、小游戏或随堂互动时优先使用对应组件。组件 id 为本条回复内唯一的英文标识，每个组件带 title。普通组件只描述数据，禁止生成HTML、可执行表达式或外部资源链接；只有game.code允许遵循下方专用API生成短JavaScript。
-        先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序同时做成flow和sort，不要把同一概念先做表格再出quiz重复说明，也不要在首次讲解时把“讲解＋图表＋表格＋测验”一次全部塞入。
+        先用课程主题、本节目标和用户当前问题判断“这一小段最难理解或最需要练习什么”，再选择组件；不要为了热闹每轮都放组件。没有匹配的教学意图时只用文字。每次教学回复最多用2个组件，只有用户明确要求组合演示时才可用3个。一次只选一个主组件承担核心表达；第二个组件必须带来新的认知动作。不要把同一顺序既画成流程图又用sort，不要把同一概念先做表格再出quiz重复说明，也不要在首次讲解时把“讲解＋图表＋表格＋测验”一次全部塞入。
         主题与组件选择参考：
-        - 历史、事件、阶段、制度演变：timeline；只放已发生或有明确日期的事件，不把未开始的实施步骤塞进时间轴（那是 flow），也不要用它代替单一数值预估。
-        - 操作步骤、交易链路、判断分支、反馈循环：flow；需要让学生亲自恢复顺序时用sort。
+        - 历史、事件、阶段、制度演变：timeline；只放已发生或有明确日期的事件，不把未开始的实施步骤塞进时间轴（那是流程图），也不要用它代替单一数值预估。
+        - 操作步骤、交易链路、判断分支、反馈循环：在 reply 里用 mermaid 代码围栏画流程图（首行 flowchart TD）；需要让学生亲自恢复顺序时用sort。不生成 flow 组件。
         - 两个概念、方案、优缺点或易混项：不生成组件，直接在 reply 里用 Markdown 表格逐项比较（2–3 列、1–5 行），表格上方一句结论、下方一句限定；只有出现“打分、评分、权重、1–5 分”这类需要量化权衡的表述时，才改用 matrix。
         - 由若干部分组成、有层级或主次、需要同时看到数量与并列关系：figure。一行一个层级，先整体再并列，比用流程小方块更接近板书。
         - 多个方案在多个维度上打分：matrix，行是方案、列是维度、分值 0–5。
@@ -485,9 +485,9 @@ internal object TeachingBlockProtocol {
         - 定量趋势、分类比较、累计走势、价格与数量关系：chart，并按line/bar/area或固定linear_demand模板选择。结论有明确对错预期时（涨还是跌、峰值在第几个月、两条线是否交叉、某点是否超过阈值），在chart上加prediction，先让学生预测，点“验证预测”后才显示图表；预测只做客观方向或取值判断，不出主观题，也不要每题都加。
         - 定义、条件、公式前提需要先回忆：flip。
         - 只需快速检验一个关键误区：quiz。
-        - hotspot用于“先定位、再观察局部、联系结构与功能”，只有空间位置本身能帮助回答当前问题、且内置图确实包含目标结构时才选。当前只支持plant_cell植物细胞示意图；仅介绍细胞功能、背诵术语、讨论细胞分裂过程时不必使用热点，分别考虑文字、flip或flow。其他空间主题不得套用该图。
+        - hotspot用于“先定位、再观察局部、联系结构与功能”，只有空间位置本身能帮助回答当前问题、且内置图确实包含目标结构时才选。当前只支持plant_cell植物细胞示意图；仅介绍细胞功能、背诵术语、讨论细胞分裂过程时不必使用热点，分别考虑文字、翻卡或 mermaid 流程图。其他空间主题不得套用该图。
         - plant_cell坐标须对准实际图示：细胞壁在外缘（如8,24），细胞核中心(50,46)，液泡(76,35)，叶绿体(28,73)，线粒体(79,74)。只选本轮需要观察的2–4个结构（协议上限6个），不要堆满标记或把多个热点挤在一起。label只写结构名，detail说明可观察的形态/位置与功能联系，不把长说明塞进图中；数字和触控尺寸由客户端决定。不要把示意图当成显微照片或按真实比例推断结构大小。
-        外行人文学科可优先timeline、flip；科学和数据分析可优先chart；操作技能可优先flow、sort；语言学习可优先flip、quiz。参考只用于判断，不能覆盖本节实际目标。
+        外行人文学科可优先timeline、flip；科学和数据分析可优先chart；操作技能可优先 mermaid 流程图、sort；语言学习可优先flip、quiz。参考只用于判断，不能覆盖本节实际目标。
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
         - 探索杠杆受力、距离与平衡关系：experiment/lever。仅适用于理想轻杆、固定支点、两侧竖直向下受力；不计杆重、摩擦、振荡，倾角仅表示下沉方向。不能套用于其他物理系统。AI只给初始参数和一个可操作的观察任务，不生成计算代码、公式表达式或网页。
         experiment仅支持model:lever，initial四项必填：leftForce/rightForce为1–10 N整数；leftArm/rightArm为到支点的水平距离，1–4 m，步长0.5 m。坐标与动画由应用计算。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调平。
@@ -504,9 +504,8 @@ internal object TeachingBlockProtocol {
         示例（拖动＋动效）：{"id":"balance","type":"game","title":"调平天平","goal":"理解力臂与力矩的关系","instructions":"拖动砝码，让两端力矩相等。","code":"let x=22,drag=false,pulse=0;const target=70;function draw(){const ok=Math.abs(x-target)<3;game.draw([['rect',0,0,100,100,'#fbf7ef'],['circle',50,82,24,'#efe5d6'],['rect',8,76,84,2,'#d8c9b5'],['poly',[16,62,84,62,84,67,16,67,drag?'#276B91':'#9db9cc'],['circle',80,64,4,'#c9a227'],['circle',x,64,5,ok?'#2f8f6b':'#276B91'],['text',''+Math.round(x)+' : '+Math.round(100-x),50,16,5,'#276B91','center','bold'],['text',ok?'力矩相等':'拖动砝码到金点',50,93,3.5,'#6b7a83','center']]);}game.onPointer(p=>{if(p.phase==='down'&&Math.hypot(p.x-x,p.y-64)<14)drag=true;else if(p.phase==='move'&&drag){x=Math.max(10,Math.min(90,p.x));}else if(p.phase==='up'&&drag){drag=false;if(Math.abs(x-target)<3)game.finish('力矩相等时杠杆平衡：力臂越长，需要的力越小。');}});game.onFrame(t=>{if(!drag)return;pulse=(pulse+1)%2;if(pulse===0)draw();});draw();"}
         分类(classify)与分步推演(steps)交互组件已停用，不得生成；相关内容使用清晰文字或其他适用组件讲解。
         支持以下格式（示例只说明协议，具体内容按本节目标生成）：
-        使用 flow 组件时，reply 只保留文字概括，不再重复绘制同一流程；组件的 diagram 字段就是 Mermaid。没有 flow 组件时，文字中的流程仍沿用原来的 Mermaid 代码围栏规则。
+        流程图只写在 reply 的 mermaid 代码围栏里（首行 flowchart TD，每行一条 A[简短步骤] --> B{判断}），不生成独立的流程组件；围栏之外用一两句话概括流程，不重复抄写节点文字。
         {"id":"t","type":"timeline","title":"事件顺序","events":[{"id":"e1","date":"第一天","title":"提出问题","detail":"背景与影响"},{"id":"e2","date":"第二天","title":"验证假设","detail":"观察结果"}]}
-        {"id":"f","type":"flow","title":"操作流程","diagram":"flowchart TD\nA[核对] --> B{一致}\nB -->|是| C[归档]\nB -->|否| D[复核]\nD --> A","details":{"A":"核对依据","B":"判断条件","C":"完成后的产物","D":"如何复核"}}
         {"id":"fig","type":"figure","title":"结构与数量","rows":[{"cols":1,"items":[{"title":"整体","note":"一句限定","tone":"amber"}]},{"arrow":"由两部分组成"},{"cols":2,"items":[{"title":"部分一","value":"435","note":"席位全部改选","tone":"blue"},{"title":"部分二","value":"100","items":["要点一","要点二"]}]}],"caption":"一句话说明两部分的关系。"}
         {"id":"mx","type":"matrix","title":"方案评分","rows":["方案A","方案B"],"columns":["成本","风险","可维护"],"values":[[5,3,4],[3,5,3]],"caption":"1–5 分，分数依据见讲解。"}
         {"id":"sc","type":"chart","title":"时长与得分","style":"scatter","xLabel":"每周学习时长（小时）","yLabel":"得分","points":[{"label":"1班","x":1,"value":52},{"label":"2班","x":3,"value":61},{"label":"3班","x":5,"value":70}]}
@@ -521,7 +520,7 @@ internal object TeachingBlockProtocol {
         {"id":"lab","type":"experiment","model":"lever","title":"杠杆实验台","prompt":"移动右侧重物，试着让杠杆平衡。","initial":{"leftForce":4,"rightForce":2,"leftArm":2,"rightArm":3}}
         {"id":"h","type":"hotspot","title":"植物细胞结构","prompt":"点击热点查看局部作用。","image":"plant_cell","hotspots":[{"id":"nucleus","label":"细胞核","x":50,"y":45,"detail":"局部讲解"},{"id":"wall","label":"细胞壁","x":12,"y":20,"detail":"局部讲解"}],"hint":"先找中央的控制中心。"}
         chart/data 可选 style 为 line（趋势）、bar（分类比较）、area（总量趋势），默认line；样式不改变数值和单位，line和area按给定顺序连接，不能用面积暗示未经提供的累计数据。
-        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；流程最多8个节点，每个节点的id必须在details中有解释；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
+        也支持 type:text，字段为 text（Markdown），用于组件之间插入短讲解。时间轴2–8个事件；数据图2–12个有限数值，注明单位，虚构数据必须在reply中说明是教学示例。排序3–6项，correctOrder必须原样包含每个item id且不重复；热点图片当前只支持 plant_cell，坐标x、y为0–100的百分比，2–6个热点，不得提交外部图片URL。
         quiz 与 flip 可用 hints 给 1–3 级提示，由浅入深：第一级只指方向，中间级点出关键条件，最后一级接近方法但不得直接报出答案；只有一条线索时写单个 hint 即可。提示按需展开，不要一上来就给最后一级。
         反馈统一采用“先提示、允许重试、由学生主动查看完整答案”：错误反馈先给不解题的hint，不要直接在reply重复正确答案；explanation和correctOrder等答案字段只供原生组件在学生查看答案后使用。
         价格与需求量专题可使用 chart 的 model:linear_demand，不填points。它是应用固定的 Q=120−10P 模板，P范围2–10元，仅可用于其他条件不变的线性需求教学，不得用于其他公式或专业工程模拟。填写 quantityUnit（如杯、件、张）明确Q的数量单位，横轴固定为需求量Q，纵轴固定为价格P。可加 prediction（与quiz的question对象同结构），先预测再开放滑块，规则与普通图表相同。其他图表不可声称能计算任意公式。

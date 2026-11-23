@@ -352,6 +352,13 @@ private fun bulletTopPadding(style: TextStyle, size: Dp): Dp {
 
 @Composable
 private fun LessonCode(source: String, language: String = "") {
+    // 先尝试解析成流程图：模型经常漏写 mermaid 语言标记，而带多行箭头的内容
+    // 又很像字符图，先判断流程图才能避免把 mermaid 原样显示成代码块。
+    val flow = remember(source, language) { LessonFlow.parse(source, mermaidFence = language == "mermaid") }
+    if (flow != null) {
+        FlowBlock(flow)
+        return
+    }
     val diagram = remember(source, language) {
         when (language) {
             "diagram", "ascii", "box-drawing" -> true
@@ -359,11 +366,7 @@ private fun LessonCode(source: String, language: String = "") {
             else -> false
         }
     }
-    if (diagram) LessonDiagram(source)
-    else {
-        val flow = remember(source, language) { LessonFlow.parse(source, mermaidFence = language == "mermaid") }
-        if (flow == null) CodeBlock(source) else FlowBlock(flow)
-    }
+    if (diagram) LessonDiagram(source) else CodeBlock(source)
 }
 
 private fun Node.children(): Sequence<Node> = generateSequence(firstChild) { it.next }

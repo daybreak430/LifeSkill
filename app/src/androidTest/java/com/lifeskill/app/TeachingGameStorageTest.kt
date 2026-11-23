@@ -73,7 +73,10 @@ class TeachingGameStorageTest {
         val legacyCompare = TeachingBlockProtocol.decode(samples.getJSONObject("legacy_compare").getJSONArray("blocks"))
         assertTrue(legacyCompare.single() is TeachingComparison)
         assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_compare").toString()).blocks.isEmpty())
-        assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_flow").toString()).blocks.single() is TeachingFlow)
+        val legacyFlow = TeachingBlockProtocol.decode(samples.getJSONObject("legacy_flow").getJSONArray("blocks"))
+        assertTrue(legacyFlow.single() is TeachingFlow)
+        // 流程图组件停用后，历史与 AI 输出都改由 mermaid 围栏渲染，不再保留 flow 组件。
+        assertTrue(AiProtocol.tutor(samples.getJSONObject("legacy_flow").toString()).blocks.isEmpty())
     }
 
     @Test fun legacyPlainCourseRestartUsesCurrentProtocolAndAcceptsNativeComponents() = runBlocking {
