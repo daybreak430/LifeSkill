@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `6a0737f`（完整哈希见 `git rev-parse v0.15.37`） |
-| 最新版本 | `0.15.37` |
-| `versionCode` | `124` |
-| 标签 | `v0.15.37` |
-| Release | [LifeSkill 0.15.37](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.37) |
-| APK 文件名 | `LifeSkill-0.15.37-release.apk` |
+| 最新产品与发布提交 | `c8d3058`（完整哈希见 `git rev-parse v0.15.38`） |
+| 最新版本 | `0.15.38` |
+| `versionCode` | `125` |
+| 标签 | `v0.15.38` |
+| Release | [LifeSkill 0.15.38](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.38) |
+| APK 文件名 | `LifeSkill-0.15.38-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `84407441b37f30c6fd1109ff9ef6e38636c206b693a97fe20d7740cd40b98ca3` |
+| APK SHA-256 | `df08b31c8c819b6d33e5813211f00a9c6556ada03d8984b5032d4be4466eecd2` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.37..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.38..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.37` 已发布：标签指向 `6a0737f`，Release 附件大小与 SHA-256 和本地 APK 一致。本次改名「自以为是检测」并让 AI 指定复述目标；未做覆盖升级安装验证。
+`0.15.38` 已发布：标签指向 `c8d3058`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词与资料要点长度，未做覆盖升级安装验证，也未用真实模型抽样确认它是否按原文出课。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -71,6 +71,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 | 版本 | 主要变化 |
 | --- | --- |
+| `v0.15.38` | 课程生成与讲解以原文为准：先通读再规划、sourceNotes 写到可复述原文（上限 800 字）、补充内容须标明、搜索与深度思考只补背景；追加课时同样适用。 |
 | `v0.15.37` | 「查漏补缺」改名「自以为是检测」；费曼复述由 AI 从课程指定具体概念/过程/方法论作为复述目标。 |
 | `v0.15.36` | 实验台参数放宽到 1–4 个；奇数参数时最后一个滑块占满整行，不再留空槽。 |
 | `v0.15.35` | 参数实验台改为通用定义：AI 给参数表与结果表达式，应用用受限求值器计算；移除杠杆动画与内置模型分支。 |
@@ -110,6 +111,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 | 版本 | 提交 |
 | --- | --- |
+| `v0.15.38` | `c8d3058` |
 | `v0.15.37` | `6a0737f` |
 | `v0.15.36` | `e17b5f1` |
 | `v0.15.35` | `2c1c332` |
@@ -148,6 +150,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.2` | `a60d257` |
 | `v0.15.1` | `8f0acbb` |
 | `v0.15.0` | `9810b48` |
+
+## 0.15.38 的验证证据
+
+- 反馈：用上传文档生成课程时，AI 应熟读文档、生成依托原文件的课程，而不是随意发挥；追问可适度拓展；开联网搜索与深度思考时同样尽可能依托原文。
+- 课程生成（`AiProtocol.generationPrompt`）：先通读全部资料再规划，理清目录/章节/条款/表格/附录与强制要求、条件例外、示例的差别；每节课的 sourceNotes 必须能指回具体章节条款并记录要求、数值、单位、步骤、例外；原文没有的内容只能标为补充，冲突以原文为准；partial 附件只覆盖已读部分并说明缺失；未确认生成时的 reply 要点明依据的文件与覆盖范围；搜索与深度思考不得改写原文要求。资料规则原先只在新建课程时生效，现在追加课时也包含。
+- 讲解（`tutorPrompt`）：有 sourceNotes 时先讲原文要求、条件、数字与例外，再说明怎么用，并据此出题判分；追问允许拓展背景、类比与反例，但须标明是补充，不冒充原文条款；搜索结果与原文冲突时以原文为准并指出差异。
+- `SOURCE_NOTES_LIMIT` 480→800：课后讲解只能看到这份摘要，原文里每节的要求与数值需要能据此复述。提示词同步改为“3–5 句”。
+- 搜索（`DeepSeekSearch.searchInstructions`）：新增优先级说明，有上传资料或 sourceNotes 时以原文为准，搜索只补充背景与核对时效。
+- 测试：`AiProtocolTest` 新增 `documentCourseMustStayGroundedInTheAttachment`（新建/追加两条路径）与 `tutorGroundsSourceNotesAndAllowsLabelledExpansion`（讲解与搜索说明），并修正一处 0.15.35 遗留的过期断言（“不是‘杠杆组件’”已随实验台通用化删除）；与 `RepositoryTest` 的文档课程用例合计 10 项通过，单元测试与 `lintDebug` 通过。
+- 边界：单次课程生成仍最多 6 个附件、48,000 字符正文，PDF 读取前 50 页；超出部分以 `partial` 标注并如实说明缺失，不是全文解析。未做覆盖升级安装验证，也未用真实模型抽样。
+- 提示：发布包里用 dex grep 局部中文句子会因长字符串分块而误判“缺失”，验收以仪器测试断言与运行时提示词为准。
 
 ## 0.15.37 的验证证据
 
