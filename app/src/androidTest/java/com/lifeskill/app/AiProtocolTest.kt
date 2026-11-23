@@ -2,6 +2,7 @@ package com.lifeskill.app
 
 import com.lifeskill.app.ai.AiProtocol
 import com.lifeskill.app.ai.RecoverableReply
+import com.lifeskill.app.ai.searchInstructions
 import com.lifeskill.app.model.Entry
 import com.lifeskill.app.model.EntryIcon
 import com.lifeskill.app.model.EntryKind
@@ -169,10 +170,46 @@ class AiProtocolTest {
         assertTrue(prompt.contains("有先后顺序、步骤、阶段或排名时用有序列表"))
         // 组件不能只在“用户点名”时才出现，否则默认讲解会退化成纯文字。
         assertTrue(prompt.contains("每轮先判断有没有匹配的组件"))
-        // 实验台是组件类型，杠杆只是当前模型，提示词不能把两者混为一谈。
+        // 实验台是通用组件：提示词不能让模型以为它只有某个固定模型。
         assertTrue(prompt.contains("experiment（参数实验台）"))
-        assertTrue(prompt.contains("不是“杠杆组件”"))
+        assertTrue(prompt.contains("参数与结果由你当场定义"))
+        assertFalse(prompt.contains("model:lever"))
         assertTrue(prompt.contains("\"blocks\":[{\"id\":\"t\",\"type\":\"timeline\""))
         assertFalse(prompt.contains("首选compare"))
+    }
+
+    @Test fun documentCourseMustStayGroundedInTheAttachment() {
+        val options = GenerationOptions(GenerationLevel.BEGINNER, 3..5)
+        val prompt = AiProtocol.generationPrompt(null, emptyList(), emptyMap(), emptyMap(), options)
+        // 先通读再规划、课时可回溯到条款、原文没有的不冒称原文、搜索不能覆盖原文。
+        assertTrue(prompt.contains("先通读收到的全部资料"))
+        assertTrue(prompt.contains("每节课都必须能指回原文"))
+        assertTrue(prompt.contains("原文没有的内容不能写成原文"))
+        assertTrue(prompt.contains("不能把搜索结论写成文件里的规定"))
+        assertTrue(prompt.contains("仅当、不得、至少"))
+        assertTrue(prompt.contains("3–5 句"))
+
+        // 追加课时同样可能带资料：课程已存在时也要保留这套规则。
+        val tree = Entry("tree", null, EntryKind.TREE, "交接规程", "读懂交接与异常处置")
+        val appendPrompt = AiProtocol.generationPrompt(tree, emptyList(), emptyMap(), emptyMap())
+        assertTrue(appendPrompt.contains("先通读收到的全部资料"))
+        assertTrue(appendPrompt.contains("使用附件生成课程或追加课时时"))
+    }
+
+    @Test fun tutorGroundsSourceNotesAndAllowsLabelledExpansion() {
+        val prompt = AiProtocol.tutorPrompt(
+            Entry("prompt-test", null, EntryKind.SKILL, "异常上报", "能在 30 分钟内上报",
+                sourceNotes = "异常处置.txt 第三章：发现异常后须在 30 分钟内上报。"),
+            pending = null, askedQuestions = emptyList(), reissue = false,
+        )
+        assertTrue(prompt.contains("讲解、示例和出题都以它为准"))
+        assertTrue(prompt.contains("可以在原文基础上适度拓展背景、类比和反例"))
+        assertTrue(prompt.contains("与原文冲突时以原文为准并指出差异"))
+
+        // 联网搜索的说明也要把原文排在搜索结果之前。
+        val search = JSONArray().put(JSONObject().put("title", "官方说明").put("url", "https://example.com")
+            .put("summary", "示例摘要")).searchInstructions()
+        assertTrue(search.contains("以原文为准"))
+        assertTrue(search.contains("不要把搜索结果写成文件里的规定"))
     }
 }
