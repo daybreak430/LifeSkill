@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `e17b5f1`（完整哈希见 `git rev-parse v0.15.36`） |
-| 最新版本 | `0.15.36` |
-| `versionCode` | `123` |
-| 标签 | `v0.15.36` |
-| Release | [LifeSkill 0.15.36](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.36) |
-| APK 文件名 | `LifeSkill-0.15.36-release.apk` |
+| 最新产品与发布提交 | `6a0737f`（完整哈希见 `git rev-parse v0.15.37`） |
+| 最新版本 | `0.15.37` |
+| `versionCode` | `124` |
+| 标签 | `v0.15.37` |
+| Release | [LifeSkill 0.15.37](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.37) |
+| APK 文件名 | `LifeSkill-0.15.37-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `b3a14c3fdf6f596da0d0d871c2010837167fdf8c3bc9c519ada4e41fabe84437` |
+| APK SHA-256 | `84407441b37f30c6fd1109ff9ef6e38636c206b693a97fe20d7740cd40b98ca3` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.36..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.37..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.36` 已发布：标签指向 `e17b5f1`，Release 附件大小与 SHA-256 和本地 APK 一致。本次把实验台参数放宽到 1–4 个并修好奇数参数的布局；未做覆盖升级安装验证。
+`0.15.37` 已发布：标签指向 `6a0737f`，Release 附件大小与 SHA-256 和本地 APK 一致。本次改名「自以为是检测」并让 AI 指定复述目标；未做覆盖升级安装验证。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -111,6 +111,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | 版本 | 提交 |
 | --- | --- |
 | `v0.15.36` | `e17b5f1` |
+| `v0.15.37` | `6a0737f` |
 | `v0.15.35` | `2c1c332` |
 | `v0.15.34` | `2af607c` |
 | `v0.15.33` | `cd8d4e3` |
@@ -147,6 +148,14 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.2` | `a60d257` |
 | `v0.15.1` | `8f0acbb` |
 | `v0.15.0` | `9810b48` |
+
+## 0.15.37 的验证证据
+
+- 反馈：课后复习两块要改——「查漏补缺」改名「自以为是检测」；「费曼复述」应由 AI 从课程里指定一个概念、过程或方法论，而不是让学习者自己挑。
+- 改动：`TreeChallenge.DIAGNOSTIC` 标题改为「自以为是检测」，行为不变。`startChallenge` 对费曼复述也取课程上下文并请求模型，启动阶段在 `next` 返回具体复述目标（`feedback` 空、`accepted=false`），存进 `ChallengeSession.prompt`，后续评分与反馈都引用它；模型不可用时降级为 `FEYNMAN_PROMPT` 通用提示。提示词补充“复述目标由你指定、目标要具体、不要让学习者自己挑”。
+- 测试：`TreeAssessmentTest` 在启动费曼前注入目标回复，断言 prompt 含「10 岁」与课程关键词「凭证」；`MvpFlowTest` 的结业/挑战流程改为先投递目标回复，再断言界面显示该目标，并把「查漏补缺」断言改为「自以为是检测」。两项测试通过，`lintDebug` 通过。
+- 顺手修复：交接文档的基线表、版本表与提交表此前被批量替换污染（标签行被写成版本说明、版本行在表间重复），已按唯一版本号重建三张表，证据段落未动。
+- 未做覆盖升级安装验证；也未用真实模型抽样确认它挑的复述目标是否具体。
 
 ## 0.15.36 的验证证据
 
