@@ -23,23 +23,23 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `1fd64a7`（完整哈希见 `git rev-parse v0.15.31`） |
-| 最新版本 | `0.15.31` |
-| `versionCode` | `118` |
+| 最新产品与发布提交 | `8b93693`（完整哈希见 `git rev-parse v0.15.32`） |
+| 最新版本 | `0.15.32` |
+| `versionCode` | `119` |
 | 标签 | `v0.15.32` | 停用区间条组件：读数易被当成进度/评分，预估改为文字写区间；旧快照仍解码但不展示。 |
 | `v0.15.31` | 公式组件自适应：优先缩放到最小 0.76 倍，超宽在等号处折行，仅无等号超长表达式保留横滑。 |
 | `v0.15.30` | Markdown 表格改为卡片排版：维度列收窄降级、对象列等宽、2–3 列自适应不横滑；不恢复对比卡组件。 |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.31](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.31) |
-| APK 文件名 | `LifeSkill-0.15.31-release.apk` |
+| Release | [LifeSkill 0.15.32](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.32) |
+| APK 文件名 | `LifeSkill-0.15.32-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `9409fffdc3d4e16d9a85ec3a45c236eded6eb0a5f5101ecc3b5467ca59a49db7` |
+| APK SHA-256 | `1fa030afadbb543b8189f1f27212483f21af0dd71858d4dcdc616b409d2c5925` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.31..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.32..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.31` 已发布：标签指向 `1fd64a7`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改公式组件的宽度适配，未做覆盖升级安装验证，也未在真机核对实际公式字号观感。
+`0.15.32` 已发布：标签指向 `8b93693`，Release 附件大小与 SHA-256 和本地 APK 一致。本次停用区间条组件并改为文字预估，未做覆盖升级安装验证。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -147,6 +147,14 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.30` | `e15faa4` |
 | `v0.15.32` | 停用区间条组件：读数易被当成进度/评分，预估改为文字写区间；旧快照仍解码但不展示。 |
 | `v0.15.31` | `1fd64a7` |
+| `v0.15.32` | `8b93693` |
+
+## 0.15.32 的验证证据
+
+- 反馈：截图里的区间条“本周改进优先级 / 当前 66 分”没有实际用途，且读起来像进度或评分。
+- 改动：`TeachingRange` 加入 `isAvailable` 过滤，旧快照仍可解码但不展示、不生成；内置「数据图表」删除区间示例，标记 1025 永久保留并加入恢复清理；提示词把“单一数值预估”改为直接写文字区间与前提，删除矩阵段落里的区间说明与 range 示例 JSON。
+- 测试：`StructuredBlocksTest` 往返与渲染断言移除区间；`GraphModelSamplesTest` 的真实样本改为断言区间被过滤为无组件，覆盖集合去掉 range；`TeachingInteractionsTest` 把区间加入停用类型与旧快照 fixture。`StructuredBlocksTest`、`GraphModelSamplesTest`、`TeachingUiTest` 合计 19 项通过，单元测试与 `lintDebug` 通过。
+- 未做覆盖升级安装验证；也未确认模型在“工期/费用预估”场景下是否稳定改用文字，需要真实回复抽样。
 
 ## 0.15.31 的验证证据
 
