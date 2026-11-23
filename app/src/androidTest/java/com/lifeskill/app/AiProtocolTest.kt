@@ -165,6 +165,8 @@ class AiProtocolTest {
         assertTrue(prompt.contains("当前只支持plant_cell植物细胞示意图"))
         assertTrue(prompt.contains("科学和数据分析可优先chart"))
         assertTrue(prompt.contains("Markdown 表格"))
+        // 有序列表必须有明确的使用条件，否则模型一律退回无序列表。
+        assertTrue(prompt.contains("有先后顺序、步骤、阶段或排名时用有序列表"))
         assertFalse(prompt.contains("首选compare"))
     }
 }
