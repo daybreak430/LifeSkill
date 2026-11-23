@@ -102,7 +102,6 @@ private fun ExperimentSliders(
                         )
                     }
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

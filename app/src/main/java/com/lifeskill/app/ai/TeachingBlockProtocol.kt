@@ -488,7 +488,7 @@ internal object TeachingBlockProtocol {
     }
 
     /**
-     * 解析 AI 自造的实验：参数表 2–4 项、结果表 1–3 项，结果表达式在初始值上必须能算出来。
+     * 解析 AI 自造的实验：参数表 1–4 项、结果表 1–3 项，结果表达式在初始值上必须能算出来。
      * model 字段只用于读取 0.15.34 及更早的内置模型，新数据不再写这个字段。
      */
     private fun experiment(json: JSONObject, id: String, title: String): TeachingExperiment {
@@ -513,7 +513,7 @@ internal object TeachingBlockProtocol {
                 decimals = ((item.opt("decimals") as? Number)?.toInt() ?: 0).also { require(it in 0..2) },
             )
         }
-        require(parameters.size in 2..4) { "实验参数应为 2–4 个" }
+        require(parameters.size in 1..4) { "实验参数应为 1–4 个" }
         require(parameters.map { it.id }.distinct().size == parameters.size)
         require(outputs.map { it.id }.distinct().size == outputs.size)
         require(outputs.map { it.id }.toSet().intersect(parameters.map { it.id }.toSet()).isEmpty())
@@ -585,9 +585,9 @@ internal object TeachingBlockProtocol {
         外行人文学科可优先timeline、flip；科学和数据分析可优先chart；操作技能可优先 mermaid 流程图、sort；语言学习可优先flip、quiz。参考只用于判断，不能覆盖本节实际目标。
         首轮讲解新概念时优先选一个主组件；把quiz、sort等练习留到讲解完成、学生需要尝试或用户明确要求练习时，同一轮不要用练习组件替代必要讲解。
         - 需要学习者亲手调参数、观察结果随之变化：experiment（参数实验台）。先判断这个主题是否存在“调一个量 → 结果怎么变”的因果关系；只有这条因果关系本身就是本节目标时才生成，单纯记住结论、背公式或算一道题不用它。
-        experiment 不带任何预设模型，参数与结果由你当场定义：params 给 2–4 个（id、label、unit、min、max、step、default，可选 decimals）；outputs 给 1–3 个（id、label、unit、expression，可选 decimals）。第一个 output 是大字主结果，其余是副指标；后面的表达式可以引用前一个 output 的 id。
+        experiment 不带任何预设模型，参数与结果由你当场定义：params 给 1–4 个（id、label、unit、min、max、step、default，可选 decimals）；outputs 给 1–3 个（id、label、unit、expression，可选 decimals）。第一个 output 是大字主结果，其余是副指标；后面的表达式可以引用前一个 output 的 id。
         expression 只允许数字、参数名、前序结果 id、+ - * / % ^、括号，以及 pow(a,b)、sqrt、abs、round、floor、ceil、min、max；常量 pi、e。不允许属性访问、赋值、函数定义或其他函数，长度不超过 300 字；默认值必须在范围内，且在默认值上必须能算出有限结果，单位不超过 6 字。
-        设计要点：参数挑 2–4 个真正影响结果的量，范围覆盖“明显偏小—明显偏大”，默认值给一个有意义的中间态；结果指标最多 3 个，第一个放最想让人看到的变化量。示例思路：杠杆用 leftForce*leftArm-rightForce*rightArm 看力矩差；复利用本金、月投、年化、年限算期末总额；月供用贷款额、利率、年限算月供与总利息。
+        设计要点：参数挑 1–4 个真正影响结果的量，范围覆盖“明显偏小—明显偏大”，默认值给一个有意义的中间态；结果指标最多 3 个，第一个放最想让人看到的变化量。示例思路：杠杆用 leftForce*leftArm-rightForce*rightArm 看力矩差；复利用本金、月投、年化、年限算期末总额；月供用贷款额、利率、年限算月供与总利息。
         不要用它做有客观对错的判断（用 quiz/chart），也不要替代流程图；复利、理财类只讲机制，不给具体产品建议或收益承诺。用户已调整的参数见历史互动摘要，讲解需依据实际参数，不凭空声称学生已经调到某个结果。
         结构图 figure：用于讲“由哪些部分组成、谁对谁负责、几项并列但有主次”。一行只放一个层级；需要说明关系走向时单独插一条 arrow 行，写“立法、制衡、监督”这类概括关系，不要画成流程箭头。节点 title 用 4–12 字名词短语；value 只在讲解已给出确切数字时填写；note 只补一条关键限定；items 最多 2 条短语。每行 1–3 列，整图最多 6 行、8 个节点，一行最多 3 个；tone 只用于区分类别（两院、两派、两类因素），每图最多两种，不要给每个节点都上色。reply 负责因果与判断，figure 只承载结构与数量，不要把 reply 整段抄进节点，也不要用图代替推导过程。层级流程用 mermaid 流程图，两个对象的逐项对比直接写成 Markdown 表格，只有趋势与分布用 chart。
         矩阵 matrix：行 2–6、列 2–5、分值 0–5，每行每列都要有值。只在维度本身可打分、且能说明评分依据时使用，与 Markdown 表格比较的分界是“有没有分值”；依据写在 reply 或 caption，不许只给分不解释。颜色只表示高低。散点 chart(style:scatter)：每个点写 x（自变量）与 value（因变量），2–12 个点，两轴都要有单位；不要混入不同量纲，也不要用散点宣称因果。单一数值的预估（如工期、费用）用文字写结论区间，不做成图形。漏斗与金字塔 funnel：mode=funnel 时 ratio 逐级递减（转化、筛选），mode=pyramid 时逐级递增（层级依赖），2–5 层，label 不超过 10 字；漏斗不是排名，金字塔不是流程。公式 formula：lines 1–6 行，每行一个式子，支持 frac{a}{b}、sqrt{x}、x^{2}、a_{i}，运算符直接写 × ÷ ± ≤ ≥ ≠ √ π 等符号（不要用反斜杠命令，JSON 转义容易出错），不求值、不写代码；多步推导一行一步，并在 reply 说明依据。

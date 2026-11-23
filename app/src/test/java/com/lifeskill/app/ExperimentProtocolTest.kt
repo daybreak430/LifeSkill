@@ -59,6 +59,19 @@ class ExperimentProtocolTest {
         assertEquals(TeachingState(), TeachingInteractions.apply(block, second, TeachingAction.Reset))
     }
 
+    @Test fun singleParameterExperimentIsSupported() {
+        // 只有一个可调量的主题也应该能用：滑块占满整行，结果照常计算。
+        val block = TeachingExperiment(
+            "rate-only", "利率与月供", "拖动利率，观察月供变化。",
+            parameters = listOf(ExperimentParameter("rate", "年利率", "%", 3.0, 8.0, .1, 5.0, decimals = 1)),
+            outputs = listOf(ExperimentOutput("pay", "月供", "元", "100000*rate/100/12+2000")),
+        )
+        assertEquals(2_416.67, ExperimentMath.evaluate(block, block.initial)[0], 0.5)
+        assertEquals("2417 元", ExperimentMath.observe(block, block.initial).headline)
+        val updated = TeachingInteractions.apply(block, TeachingState(), TeachingAction.SetExperimentValue("rate", 6.0))
+        assertEquals(6.0, updated.experiment!!.value("rate"), 0.0)
+    }
+
     @Test fun builtInExamplesCoverLeverAndCompound() {
         val examples = BuiltInTeaching.lessons.flatMap { it.blocks }.filterIsInstance<TeachingExperiment>()
         assertEquals(2, examples.size)
