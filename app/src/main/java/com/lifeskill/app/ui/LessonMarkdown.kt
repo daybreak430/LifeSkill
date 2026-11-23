@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import com.lifeskill.app.model.LessonFlow
 import java.net.URI
 import org.commonmark.ext.gfm.tables.TableBlock
+import org.commonmark.ext.gfm.tables.TableBody
 import org.commonmark.ext.gfm.tables.TableCell
 import org.commonmark.ext.gfm.tables.TableHead
 import org.commonmark.ext.gfm.tables.TableRow
@@ -428,27 +429,77 @@ private fun CodeBlock(code: String) {
 
 @Composable
 private fun LessonTable(table: TableBlock) {
-    Surface(shape = ControlShape, color = Ground) {
-        Column(Modifier.horizontalScroll(rememberScrollState())) {
-            table.children().forEach { section ->
-                val header = section is TableHead
-                section.children().filterIsInstance<TableRow>().forEach { row ->
-                    Row(Modifier.background(if (header) Raised else Ground)) {
-                        row.children().filterIsInstance<TableCell>().forEach { cell ->
-                            Text(
-                                cell.richText(), Modifier.width(118.dp).padding(horizontal = 9.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (header) Gold else Ink,
-                            )
-                        }
-                    }
-                    HorizontalDivider(color = Line.copy(alpha = .62f))
+    val header = table.children().filterIsInstance<TableHead>().firstOrNull()
+        ?.children()?.filterIsInstance<TableRow>()?.firstOrNull()
+    val body = table.children().filterIsInstance<TableBody>().firstOrNull()
+        ?.children()?.filterIsInstance<TableRow>()?.toList().orEmpty()
+    val columns = (listOfNotNull(header) + body).map { row ->
+        row.children().filterIsInstance<TableCell>().count()
+    }.maxOrNull() ?: return
+    // 2–3 列收进卡片宽度，不再横滑；超过 3 列才保留横向滚动，避免每列被压成一条。
+    val scrollable = columns > 3
+    val dividerModifier = if (scrollable) Modifier.width(TableCellWidth * columns) else Modifier.fillMaxWidth()
+    Surface(
+        shape = RoundedCornerShape(14.dp), color = Panel,
+        border = BorderStroke(1.dp, Line.copy(alpha = .55f)),
+    ) {
+        Column(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier.fillMaxWidth()) {
+            header?.let { row ->
+                TableRowContent(row, columns, header = true, scrollable = scrollable)
+                HorizontalDivider(modifier = dividerModifier, color = Line)
+            }
+            body.forEachIndexed { index, row ->
+                TableRowContent(row, columns, header = false, scrollable = scrollable)
+                if (index < body.lastIndex) {
+                    HorizontalDivider(modifier = dividerModifier, color = Line.copy(alpha = .5f))
                 }
             }
         }
     }
 }
+
+private val TableCellWidth = 118.dp
+private val TableLabelWidth = 78.dp
+
+/**
+ * 一行表格。第一列是维度名，收窄并降为次级色；其余列是对象，等宽分配剩余宽度。
+ * 横滑模式下所有单元格固定宽度，保证各行对齐。
+ */
+@Composable
+private fun TableRowContent(row: TableRow, columns: Int, header: Boolean, scrollable: Boolean) {
+    val cells = row.children().filterIsInstance<TableCell>().toList()
+    Row(if (scrollable) Modifier else Modifier.fillMaxWidth()) {
+        for (index in 0 until columns) {
+            val cell = cells.getOrNull(index)
+            val first = index == 0
+            val cellModifier = when {
+                scrollable -> Modifier.width(TableCellWidth)
+                first -> Modifier.width(TableLabelWidth)
+                else -> Modifier.weight(1f)
+            }
+            Box(
+                cellModifier.padding(
+                    start = if (first) 12.dp else 9.dp, end = 9.dp, top = 9.dp, bottom = 9.dp,
+                ),
+            ) {
+                if (cell != null) Text(
+                    cell.richText(),
+                    style = when {
+                        header && first -> TableLabelStyle.copy(fontWeight = FontWeight.Medium)
+                        header -> TableHeadStyle
+                        first -> TableLabelStyle
+                        else -> TableBodyStyle
+                    },
+                    color = if (first) Muted else Ink,
+                )
+            }
+        }
+    }
+}
+
+private val TableLabelStyle = TextStyle(fontSize = 12.5.sp, lineHeight = 20.sp)
+private val TableHeadStyle = TextStyle(fontSize = 13.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
+private val TableBodyStyle = TextStyle(fontSize = 13.5.sp, lineHeight = 21.sp, fontFeatureSettings = "tnum")
 
 @Composable
 internal fun FlowBlock(flow: LessonFlow, selectedNode: String? = null, onSelect: ((String) -> Unit)? = null) {

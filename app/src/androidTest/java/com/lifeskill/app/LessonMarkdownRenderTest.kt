@@ -52,6 +52,30 @@ class LessonMarkdownRenderTest {
         要不要我用你店里的客单价算一遍？
     """.trimIndent()
 
+    @Test fun rendersMarkdownTableAsCard() {
+        val markdown = """
+            | 维度 | 满减券 | 折扣券 |
+            | --- | --- | --- |
+            | 计价 | 满 150 减 30，额度固定 | 全场 8 折，随客单价放大 |
+            | 顾客感受 | 直减 30 元，感知明确 | “8 折”更直观 |
+            | 利润 | 客单价越高越省 | 低价单也被打折 |
+        """.trimIndent()
+        ui.setContent {
+            LifeSkillTheme(dark = false) {
+                Surface(Modifier.fillMaxWidth().padding(15.dp), color = Color(0xFFFCFDFD)) {
+                    LessonMarkdown(markdown)
+                }
+            }
+        }
+        ui.onNodeWithText("满减券").assertIsDisplayed()
+        ui.onNodeWithText("低价单也被打折").assertIsDisplayed()
+        val bitmap = ui.onRoot().captureToImage().asAndroidBitmap()
+        InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+            .resolve("lesson-markdown-table.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+    }
+
     @Test fun rendersMermaidFenceEvenWithoutLanguageMarker() {
         // 回归：模型偶尔漏写 mermaid 语言标记，带箭头的围栏内容曾被当成字符图或代码块。
         val markdown = """
