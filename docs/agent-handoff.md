@@ -23,19 +23,19 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `b1b7e72`（完整哈希见 `git rev-parse v0.15.27`） |
-| 最新版本 | `0.15.27` |
-| `versionCode` | `114` |
-| 标签 | `v0.15.27` |
-| Release | [LifeSkill 0.15.27](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.27) |
-| APK 文件名 | `LifeSkill-0.15.27-release.apk` |
+| 最新产品与发布提交 | `66b8bc3`（完整哈希见 `git rev-parse v0.15.28`） |
+| 最新版本 | `0.15.28` |
+| `versionCode` | `115` |
+| 标签 | `v0.15.28` |
+| Release | [LifeSkill 0.15.28](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.28) |
+| APK 文件名 | `LifeSkill-0.15.28-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `b6c6e543640166b4e50736867d1e031d2b8ec07bc4966d5b7ccf87c23ff6eb44` |
+| APK SHA-256 | `56e7e39438368c90e633f55f39fb36cd716da0066ed6bf95d97057a30dcdcbc1` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.27..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.28..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.27` 已发布：标签指向 `b1b7e72`，Release 附件大小与 SHA-256 和本地 APK 一致。本次修复流程图渲染并停用流程图组件；未做覆盖升级安装验证，也未用真实模型抽样确认漏写语言标记的比例。
+`0.15.28` 已发布：标签指向 `66b8bc3`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词的列表类型规则，未做覆盖升级安装验证，也未用真实模型抽样确认模型是否按顺序感选择有序列表。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -125,6 +125,17 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.25` | `5a46abc` |
 | `v0.15.26` | `aa0803b` |
 | `v0.15.27` | `b1b7e72` |
+| `v0.15.28` | `66b8bc3` |
+
+## 0.15.28 的验证证据
+
+- 反馈：AI 回复几乎不出现有序列表，明显有步骤关系时也用 `-`，偶尔把每步写成加粗段落。
+- 原因：提示词只有“用列表”这种笼统要求，讲解示例的列表项也是 `-`，模型按示例一律输出无序列表；没有规则要求区分顺序性。
+- 改动（仅提示词）：明确“有先后顺序、步骤、阶段或排名时用有序列表（1. 2. 3.），只有并列、可互换顺序的要点才用无序列表（-），不要把步骤写成 - 列表，也不要每步写成一个加粗段落”；讲解示例换成“三步核对流程”，用有序列表当格式锚点。
+- 渲染层未改：有序列表的编号、缩进、嵌套与等宽数字沿用 0.15.25 的实现，独立渲染测试中的 1./2./3. 与嵌套项截图核对通过。
+- 测试：`AiProtocolTest` 增加“提示词含有序列表规则”的断言；`AiProtocolTest` 与 `LessonMarkdownRenderTest` 合计 10 项在 Android 16 / Pixel 9 Pro AVD 通过，单元测试与 `lintDebug` 通过。
+- 已核验 0.15.28 发布包内存在新规则与新示例文本。
+- 未做覆盖升级安装验证，也未用真实模型抽样确认实际选择比例。
 
 ## 0.15.27 的验证证据
 
