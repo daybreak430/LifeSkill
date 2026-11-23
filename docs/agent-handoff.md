@@ -23,20 +23,20 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 | --- | --- |
 | 快照日期 | 2026-11-22，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `66b8bc3`（完整哈希见 `git rev-parse v0.15.28`） |
-| 最新版本 | `0.15.28` |
-| `versionCode` | `115` |
+| 最新产品与发布提交 | `edd1ce7`（完整哈希见 `git rev-parse v0.15.29`） |
+| 最新版本 | `0.15.29` |
+| `versionCode` | `116` |
 | 标签 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` |
-| Release | [LifeSkill 0.15.28](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.28) |
-| APK 文件名 | `LifeSkill-0.15.28-release.apk` |
+| Release | [LifeSkill 0.15.29](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.29) |
+| APK 文件名 | `LifeSkill-0.15.29-release.apk` |
 | APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `56e7e39438368c90e633f55f39fb36cd716da0066ed6bf95d97057a30dcdcbc1` |
+| APK SHA-256 | `3015a39d287e63e67f234be583f9552649c2a8cce284c4513ff359c8aa172db4` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.28..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.29..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.28` 已发布：标签指向 `66b8bc3`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词的列表类型规则，未做覆盖升级安装验证，也未用真实模型抽样确认模型是否按顺序感选择有序列表。
+`0.15.29` 已发布：标签指向 `edd1ce7`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词的组件使用规则与示例，未做覆盖升级安装验证，也未用真实模型抽样确认组件是否恢复出现。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -129,6 +129,16 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.27` | `b1b7e72` |
 | `v0.15.29` | 组件优先规则：每轮先判断匹配组件，reply 2–4 句；新增带 blocks 的完整回复示例，修复组件几乎不出现。 |
 | `v0.15.28` | `66b8bc3` |
+| `v0.15.29` | `edd1ce7` |
+
+## 0.15.29 的验证证据
+
+- 反馈：AI 讲解里看不到教学组件了。
+- 排查：`TeachingBlockProtocol.decode`、仓库加密写入、`TeachingContent` 渲染与 `isAvailable` 过滤逐段核对，未发现丢弃剩余组件的路径；`TeachingUiTest` 仍能打开内置课时并点击时间轴节点与图表芯片，`TeachingStorageTest` 带 blocks 的回复可解析入库。结论是模型不再生成 `blocks`，不是链路故障。
+- 提示词层面的两个诱因：0.15.25 停用对比卡、0.15.27 停用流程图组件后，提示词多次出现“不生成组件”；讲解示例是无 `blocks` 的纯文字，模型顺势只回文字，而比较与流程恰好是此前最常出卡片的两类内容。
+- 改动：首段改为“每轮先判断有没有匹配的组件”，按时间、组成、趋势、打分、公式、区间、漏斗、回忆/排序、空间定位、参数实验逐项点名；要求有组件时 reply 保持 2–4 句、不重复组件内容；新增一条带 `blocks` 的完整回复示例。
+- 验证：导出运行中的系统提示词（27,719 字符）确认新规则与新示例都在；示例本身经 `json.loads` 校验为合法 JSON；`AiProtocolTest`、`TeachingUiTest`、`TeachingStorageTest` 共 32 项仪器测试通过，单元测试与 `lintDebug` 通过。
+- 未做覆盖升级安装验证；也未用真实模型抽样确认组件出现率，需下轮实际使用观察。对比卡与流程图组件仍保持停用，是否恢复由用户决定。
 
 ## 0.15.28 的验证证据
 
