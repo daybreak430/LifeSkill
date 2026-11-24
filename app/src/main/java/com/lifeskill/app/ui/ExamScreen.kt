@@ -1,6 +1,7 @@
 package com.lifeskill.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,20 @@ import com.lifeskill.app.model.ExamQuestion
 import com.lifeskill.app.model.ExamQuestionType
 import com.lifeskill.app.model.SkillState
 
+/**
+ * 考试页的阶段快照。
+ *
+ * 阶段切换（进考场 → 答题 → 出分 → 错题集）是一次大内容替换，用 AnimatedContent 交代。
+ * 快照自带当时的答卷，退场的那一帧不会拿到新阶段的数据，因此不会出现“分数还没出来就先读分”的空值。
+ */
+private data class ExamStage(
+    val kind: Kind,
+    val attempt: ExamAttempt? = null,
+    val graded: Boolean = false,
+) {
+    enum class Kind { REVIEW, RESULT, PAPER, LOADING, INTRO }
+}
+
 @Composable
 internal fun ExamScreen(
     tree: Entry, ready: Boolean, app: AppViewModel, model: TreeAssessmentViewModel, active: Boolean,
@@ -64,6 +79,13 @@ internal fun ExamScreen(
     val best = attempts.orEmpty().mapNotNull(ExamAttempt::score).maxOrNull()
     var reviewing by rememberSaveable { mutableStateOf(false) }
     val close = { if (reviewing) reviewing = false else app.back() }
+    val stage = when {
+        reviewing -> ExamStage(ExamStage.Kind.REVIEW)
+        latest?.score != null -> ExamStage(ExamStage.Kind.RESULT, latest, graded = true)
+        latest != null -> ExamStage(ExamStage.Kind.PAPER, latest)
+        attempts == null -> ExamStage(ExamStage.Kind.LOADING)
+        else -> ExamStage(ExamStage.Kind.INTRO)
+    }
 
     BackHandler(enabled = active && reviewing) { reviewing = false }
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -72,25 +94,40 @@ internal fun ExamScreen(
                 GlyphButton(Glyph.BOOK, "查看错题集", { reviewing = true })
             }
         }
-        when {
-            reviewing -> ExamReview(attempts.orEmpty(), Modifier.weight(1f))
-            latest?.score != null -> key(latest.id) {
-                ExamResult(
-                    tree.name, checkNotNull(latest.score), CertificateStyle.forTree(tree), certificate,
-                    checkNotNull(best), ready, status, active, model::startExam, { reviewing = true },
-                    { nickname -> model.collectCertificate(latest.id, nickname) },
-                    model::destroyCertificate, usage,
-                )
+        AnimatedContent(
+            targetState = stage,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            // 只有阶段变化才换场；答题过程中答卷内容的更新不应该重播转场。
+            contentKey = { it.kind },
+            transitionSpec = { contentSwap(sizeAnimation = false) },
+            label = "考试阶段",
+        ) { shown ->
+            when (shown.kind) {
+                ExamStage.Kind.REVIEW -> ExamReview(attempts.orEmpty(), Modifier.fillMaxSize())
+                ExamStage.Kind.RESULT -> {
+                    val attempt = shown.attempt
+                    val score = attempt?.score
+                    if (attempt != null && score != null && shown.graded) key(attempt.id) {
+                        ExamResult(
+                            tree.name, score, CertificateStyle.forTree(tree), certificate,
+                            best ?: 0, ready, status, active, model::startExam, { reviewing = true },
+                            { nickname -> model.collectCertificate(attempt.id, nickname) },
+                            model::destroyCertificate, usage,
+                        )
+                    }
+                }
+                ExamStage.Kind.PAPER -> shown.attempt?.let { attempt ->
+                    val answers = draft?.takeIf { it.attemptId == attempt.id }?.answers ?: attempt.answers
+                    key(attempt.id) {
+                        ExamPaper(attempt, answers, status, { index, answer -> model.updateAnswer(attempt, index, answer) },
+                            { model.submitExam(attempt) })
+                    }
+                }
+                ExamStage.Kind.LOADING -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (status.error == null) Loading() else AssessmentStatusText(status)
+                }
+                ExamStage.Kind.INTRO -> ExamIntro(ready, status, model::startExam)
             }
-            latest != null -> key(latest.id) {
-                val answers = draft?.takeIf { it.attemptId == latest.id }?.answers ?: latest.answers
-                ExamPaper(latest, answers, status, { index, answer -> model.updateAnswer(latest, index, answer) },
-                    { model.submitExam(latest) })
-            }
-            attempts == null -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                if (status.error == null) Loading() else AssessmentStatusText(status)
-            }
-            else -> ExamIntro(ready, status, model::startExam)
         }
     }
 }
@@ -204,7 +241,7 @@ private fun ExamPaper(
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AssessmentStatusText(status)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("已答 $completed / ${answers.size}", Modifier.weight(1f), color = Muted,
+                    ChangingText("已答 $completed / ${answers.size}", Modifier.weight(1f), color = Muted,
                         style = MaterialTheme.typography.labelLarge)
                     Action(if (status.busy) "正在批阅" else "交卷", Glyph.CHECK, {
                         keyboard?.hide()

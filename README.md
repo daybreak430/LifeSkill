@@ -4,7 +4,7 @@ LifeSkill 是一款原生 Android 学习应用。你可以按学习方向整理�
 
 ## 安装
 
-LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.15.38，本地签名安装包路径为 `release/LifeSkill-0.15.38-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
+LifeSkill 支持 Android 8.0（API 26）及以上。当前源码版本为 0.15.39，本地签名安装包路径为 `release/LifeSkill-0.15.39-release.apk`。已发布的安装包可在 [GitHub Releases](https://github.com/daybreak430/LifeSkill/releases) 下载，克隆仓库后也可以自行构建 Debug 安装包。
 
 手动管理课程无需模型账户。要使用 AI 功能，在「我的 → 设置 → 模型设置」填入自己的服务商 API Key。自定义服务使用 HTTPS Base URL、模型名和 API Key。详见 [使用指南](docs/user-guide.md)。
 
@@ -35,6 +35,7 @@ Debug 构建使用本机调试签名。如果设备已装同包名、不同签�
 ## 开发文档
 
 - [架构与代码导航](docs/architecture.md)覆盖页面入口、数据流、关键文件和持久化约束。
+- [动效语言](docs/motion.md)规定状态变化的时长、曲线与各场景做法，新增动效按此取值。
 - [二次开发指南](docs/customization.md)包含模型接入、证书主题、验收规则和 Fork 配置。
 - [MVP 技术设计](docs/mvp.md)记录完整业务规则和实现决策。
 - [Agent 交接基线](docs/agent-handoff.md)记录当前版本、发布提交、验证证据、已知限制和后续接手步骤。

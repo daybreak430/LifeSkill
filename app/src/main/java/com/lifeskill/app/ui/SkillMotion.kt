@@ -135,7 +135,7 @@ internal fun CelebrationContent(key: String, skill: Entry, onClose: () -> Unit) 
     }
     LaunchedEffect(key, closing) {
         if (closing) {
-            exit.animateTo(1f, tween(180))
+            exit.animateTo(1f, motion(Motion.Quick))
             close.value()
         }
     }

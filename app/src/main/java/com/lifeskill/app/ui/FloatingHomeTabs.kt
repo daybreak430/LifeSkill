@@ -1,9 +1,9 @@
 package com.lifeskill.app.ui
 
 import android.os.Build
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -68,7 +68,7 @@ internal fun FloatingHomeTabs(page: Page, backdrop: Backdrop, dark: Boolean, sel
         else listOf(Color.White.copy(alpha = .95f), GoldGround.copy(alpha = .79f))
     val slide by animateFloatAsState(
         if (page == Page.ME) 1f else 0f,
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        motionSpring(dampingRatio = Spring.DampingRatioNoBouncy),
         label = "标签选中胶囊",
     )
     BoxWithConstraints(
@@ -90,7 +90,8 @@ internal fun FloatingHomeTabs(page: Page, backdrop: Backdrop, dark: Boolean, sel
 
 @Composable
 private fun RowScope.HomeTab(label: String, icon: Glyph, tag: String, selected: Boolean, onClick: () -> Unit) {
-    val color = if (selected) Gold else Ink
+    // 胶囊先滑到位置，文字和图标再同时变色；两者同一条曲线，看起来是一次“选中”。
+    val color by animateColorAsState(if (selected) Gold else Ink, motion(Motion.Quick), label = "标签选中色")
     Column(
         Modifier.weight(1f).heightIn(min = 52.dp).clip(CircleShape)
             .selectable(selected, role = Role.Tab, onClick = onClick).testTag(tag).padding(vertical = 6.dp),

@@ -109,8 +109,9 @@ internal fun SkillTreeScreen(
         ) {
             Text("课程大纲", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             Surface(shape = CircleShape, color = GoldGround) {
-                Text(
-                    "已完成 ${progress.lit} / ${progress.total} 节", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                ChangingText(
+                    "已完成 ${progress.lit} / ${progress.total} 节",
+                    Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
@@ -274,7 +275,8 @@ private fun SkillMap(
         ) {
             items(layout.rowCount) { row ->
                 val gap = if (row < layout.rowCount - 1) 22.dp else 0.dp
-                Box(Modifier.fillMaxWidth()) {
+                // 新增课时会让地图多出一行：新行淡入、旧行顺移，读者能看出地图“长了一节”。
+                Box(Modifier.fillMaxWidth().animateItem()) {
                     // 每行由实际节点和文字撑开，连线从这一行的文字下方开始。
                     Canvas(Modifier.matchParentSize()) {
                         val originX = left.toPx()

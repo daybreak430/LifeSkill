@@ -1,8 +1,9 @@
 package com.lifeskill.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -258,7 +259,7 @@ internal fun ChatScreen(
                 val choices = if (active) exercise.choices else turn.choices
                 Column(
                     // 尺寸动画会把气泡阴影裁在消息边界内，列表只保留淡入淡出。
-                    Modifier.animateItem(fadeInSpec = tween(170), fadeOutSpec = tween(120), placementSpec = null),
+                    Modifier.animateItem(fadeInSpec = motionIn<Float>(Motion.Quick), fadeOutSpec = motionOut<Float>(Motion.Instant), placementSpec = null),
                 ) {
                     turn.searchSources?.let { sources ->
                         val links = sources.searchSourceLinks()
@@ -304,8 +305,12 @@ internal fun ChatScreen(
                         )
                     }
                     if (turn.id == latestReply?.id) {
-                        if (choices.isEmpty() && (exercise == null || exercise.choices.isEmpty())) {
-                            val quickReply = if (exercise == null) TutorRules.CONTINUE_REPLY else TutorRules.REISSUE_REPLY
+                        val quickReply = if (exercise == null) TutorRules.CONTINUE_REPLY else TutorRules.REISSUE_REPLY
+                        // 快捷回复会随“是否还有练习待答”出现和收起，用同一套展开节奏交代它的来去。
+                        AnimatedVisibility(
+                            visible = choices.isEmpty() && (exercise == null || exercise.choices.isEmpty()),
+                            enter = expandFade(Motion.Quick), exit = shrinkFade(),
+                        ) {
                             FlowRow(
                                 Modifier.padding(top = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -329,8 +334,11 @@ internal fun ChatScreen(
             }
             if (footerVisible && !restartLoading) {
                 item(key = CHAT_STATUS) {
-                    // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上。
-                    ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry) { turn ->
+                    // 回复插入时立即移除旧卡片，避免退出动画绘制到新气泡上；
+                    // 出现时用列表项淡入跟随新气泡，不额外占用一帧空白。
+                    ChatFooter(status.takeIf { statusMatches } ?: ChatStatus(), pending, retry = chat::retry,
+                        modifier = Modifier.animateItem(fadeInSpec = motionIn<Float>(Motion.Quick), fadeOutSpec = null,
+                            placementSpec = null)) { turn ->
                         if (turn.kind == TurnKind.MESSAGE) chat.editPending(turn) {
                             draft = turn.text
                             deepThinking = turn.deepThinking
@@ -545,21 +553,30 @@ private fun ChatBubble(
                 }
                 if (!user && turn.teachingBlocks.isNotEmpty()) TeachingContent(turn, teachingEnabled, onTeachingAction)
                 if (choices.isNotEmpty()) {
-                    Column(Modifier.padding(top = 7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        choices.forEachIndexed { index, choice ->
-                            val answer = choiceAnswer(index, choice)
-                            if (active) {
-                                Button(
-                                    onClick = { onAnswer(answer) }, modifier = Modifier.fillMaxWidth(),
-                                    enabled = canAnswer,
-                                    shape = ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = colors.chip, contentColor = colors.accent,
-                                        disabledContainerColor = Raised, disabledContentColor = Muted,
-                                    ),
-                                ) { Text(answer, Modifier.fillMaxWidth()) }
-                            } else {
-                                Text(answer, Modifier.padding(vertical = 3.dp), color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    // 作答后选项由按钮变成一行答案，这是“已经交卷”的信号：
+                    // 整组一起换，高度跟着过渡，而不是四个按钮凭空消失。
+                    AnimatedContent(
+                        targetState = active,
+                        modifier = Modifier.padding(top = 7.dp),
+                        transitionSpec = { contentSwap() },
+                        label = "选项作答状态",
+                    ) { answering ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            choices.forEachIndexed { index, choice ->
+                                val answer = choiceAnswer(index, choice)
+                                if (answering) {
+                                    Button(
+                                        onClick = { onAnswer(answer) }, modifier = Modifier.fillMaxWidth(),
+                                        enabled = canAnswer,
+                                        shape = ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = colors.chip, contentColor = colors.accent,
+                                            disabledContainerColor = Raised, disabledContentColor = Muted,
+                                        ),
+                                    ) { Text(answer, Modifier.fillMaxWidth()) }
+                                } else {
+                                    Text(answer, Modifier.padding(vertical = 3.dp), color = Muted, style = MaterialTheme.typography.bodyMedium)
+                                }
                             }
                         }
                     }
@@ -644,9 +661,12 @@ private fun CreationReceipt(text: String, result: Entry?, open: (Entry) -> Unit)
 }
 
 @Composable
-private fun ChatFooter(status: ChatStatus, pending: Turn?, retry: (Turn) -> Unit, discard: (Turn) -> Unit) {
+private fun ChatFooter(
+    status: ChatStatus, pending: Turn?, modifier: Modifier = Modifier,
+    retry: (Turn) -> Unit, discard: (Turn) -> Unit,
+) {
     Surface(
-        Modifier.fillMaxWidth().animateContentSize(tween(170))
+        modifier.fillMaxWidth().animateContentSize(motion(Motion.Quick))
             .semantics { liveRegion = LiveRegionMode.Polite },
         shape = ControlShape, color = aiColors.panel,
     ) {

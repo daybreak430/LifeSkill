@@ -1,8 +1,8 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,7 +97,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                 // 只滚动表单内容，键盘弹出和选择区展开时，底部操作仍可见。
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
-                        .animateContentSize(tween(180))
+                        .animateContentSize(motion(Motion.Base))
                         .testTag("entry-form").padding(horizontal = 20.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -126,16 +126,20 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                 },
                             )
                         }
-                        if (showPrerequisites) {
+                        // 展开区只负责淡入淡出，高度由表单容器统一过渡，避免两层尺寸动画互相追赶。
+                        AnimatedVisibility(showPrerequisites, enter = appearFade(), exit = disappearFade()) {
                             val choices = remember(library, initial, selected) {
                                 library.prerequisiteChoices(initial.parentId, initial.id, selected)
                             }
                             siblings.forEach { entry ->
                                 val checked = entry.id in selected
                                 val canSelect = entry.id in choices
+                                val fill by androidx.compose.animation.animateColorAsState(
+                                    if (checked) GoldGround else Ground, motion(Motion.Quick), label = "先修课勾选底色",
+                                )
                                 Row(
                                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
-                                        .background(if (checked) GoldGround else Ground)
+                                        .background(fill)
                                         .toggleable(checked, enabled = canSelect && !editor.saving, role = Role.Checkbox) {
                                             selected = if (it) selected + entry.id else selected - entry.id
                                         }.padding(horizontal = 10.dp),
@@ -169,7 +173,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                 if (direction) iconTint.copy(alpha = .12f) else GoldGround, diameter = 32.dp)
                         },
                     )
-                    if (showIcons) {
+                    AnimatedVisibility(showIcons, enter = appearFade(), exit = disappearFade()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             SelectionChip(
                                 label = "默认",
@@ -203,7 +207,7 @@ internal fun EditorDialog(editor: Editor, library: Library, app: AppViewModel) {
                                 showIcons = false
                             },
                         )
-                        if (showColors) {
+                        AnimatedVisibility(showColors, enter = appearFade(), exit = disappearFade()) {
                             FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 SelectionChip("自动", directionColor == null, {
                                     directionColor = null
@@ -315,7 +319,8 @@ internal fun TreeGenerationDialog(onDismiss: () -> Unit, onConfirm: (GenerationO
                         }
                     }
                 }
-                if (countOption == CourseCountOption.CUSTOM) {
+                // 选“自定义”后多出一个输入框：这里没有父级尺寸动画，所以由它自己撑开高度。
+                AnimatedVisibility(countOption == CourseCountOption.CUSTOM, enter = expandFade(), exit = shrinkFade()) {
                     EditorField(
                         customCount, { customCount = it }, "课数（1–${GenerationOptions.COURSE_LIMIT}）", enabled = true,
                         error = if (customCount.isNotEmpty() && validCustom == null) {
@@ -340,7 +345,7 @@ private fun EditorPickerRow(
     title: String, value: String, expanded: Boolean, enabled: Boolean, onClick: () -> Unit,
     leading: (@Composable () -> Unit)? = null,
 ) {
-    val angle by animateFloatAsState(if (expanded) 90f else 0f, tween(180), label = "表单展开")
+    val angle by animateFloatAsState(if (expanded) 90f else 0f, motion(Motion.Quick), label = "表单展开")
     Surface(
         onClick = onClick, enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { role = Role.Button },

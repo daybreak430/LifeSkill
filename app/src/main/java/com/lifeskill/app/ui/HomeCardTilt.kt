@@ -68,7 +68,7 @@ internal fun rememberHomeCardTilt(enabled: Boolean): State<Offset> {
                 tilt.value = Offset.Zero
             }
         } else if (tilt.value != Offset.Zero) {
-            Animatable(tilt.value, Offset.VectorConverter).animateTo(Offset.Zero, tween(240)) { tilt.value = value }
+            Animatable(tilt.value, Offset.VectorConverter).animateTo(Offset.Zero, motion(Motion.Base)) { tilt.value = value }
         }
     }
 

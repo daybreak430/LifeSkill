@@ -1,7 +1,8 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -80,23 +81,33 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                             )
                         }
                     }
-                    if (config.provider == Provider.CUSTOM) {
-                        OutlinedTextField(
-                            config.baseUrl, { model.edit(config.copy(baseUrl = it)) }, Modifier.fillMaxWidth(),
-                            label = { Text("Base URL") }, placeholder = { Text("https://example.com/v1") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            singleLine = true, enabled = !state.working, shape = ControlShape, colors = fieldColors(),
-                        )
-                        OutlinedTextField(
-                            config.model, { model.edit(config.copy(model = it)) }, Modifier.fillMaxWidth(),
-                            label = { Text("模型名") }, singleLine = true, enabled = !state.working,
-                            shape = ControlShape, colors = fieldColors(),
-                        )
-                    } else {
-                        Surface(shape = ControlShape, color = Ground) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(config.model, style = MaterialTheme.typography.titleMedium)
-                                Text(config.baseUrl, style = MaterialTheme.typography.bodyMedium, color = Muted)
+                    // 切换服务商时，只读卡片与自定义输入框互换内容；高度由卡片统一过渡，
+                    // 这里只做淡入淡出，避免两层尺寸动画互相追赶。
+                    AnimatedContent(
+                        targetState = config.provider,
+                        transitionSpec = { contentSwap(sizeAnimation = false) },
+                        label = "服务商详情",
+                    ) { provider ->
+                        if (provider == Provider.CUSTOM) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedTextField(
+                                    config.baseUrl, { model.edit(config.copy(baseUrl = it)) }, Modifier.fillMaxWidth(),
+                                    label = { Text("Base URL") }, placeholder = { Text("https://example.com/v1") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                    singleLine = true, enabled = !state.working, shape = ControlShape, colors = fieldColors(),
+                                )
+                                OutlinedTextField(
+                                    config.model, { model.edit(config.copy(model = it)) }, Modifier.fillMaxWidth(),
+                                    label = { Text("模型名") }, singleLine = true, enabled = !state.working,
+                                    shape = ControlShape, colors = fieldColors(),
+                                )
+                            }
+                        } else {
+                            Surface(shape = ControlShape, color = Ground) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(config.model, style = MaterialTheme.typography.titleMedium)
+                                    Text(config.baseUrl, style = MaterialTheme.typography.bodyMedium, color = Muted)
+                                }
                             }
                         }
                     }
@@ -120,9 +131,11 @@ internal fun SettingsScreen(app: AppViewModel, model: SettingsViewModel) {
                     Text("AI 功能会把当前任务内容发送给选定的模型服务。", color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.working && config != null) Loading(Modifier.fillMaxWidth().padding(8.dp))
-                state.message?.let {
-                    Text(
-                        it, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                // 保存/测试的反馈只在需要时出现：高度由外层卡片统一过渡，这里只负责淡入淡出。
+                AnimatedVisibility(visible = state.message != null, enter = appearFade(), exit = disappearFade()) {
+                    val message = state.message
+                    if (message != null) Text(
+                        message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         color = if (state.error) MaterialTheme.colorScheme.error else Gold,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -168,7 +181,8 @@ private fun AppVersionCard() {
                 Mark(Glyph.NEXT, Gold, Modifier.size(16.dp))
             }
         }
-        if (openFailed) {
+        // 打不开链接是意外状态，出现时由卡片高度过渡带出，文字本身只淡入。
+        AnimatedVisibility(visible = openFailed, enter = appearFade(), exit = disappearFade()) {
             Text(
                 "无法打开发布页面，请确认设备上有可用的浏览器。",
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -194,25 +208,38 @@ private fun DeepSeekBalanceRow(state: SettingsStatus, refresh: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text("账户余额", style = MaterialTheme.typography.labelLarge, color = Muted)
-                when {
-                    state.balanceWorking -> Text("查询中…", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                    state.balanceMessage != null -> Text(
-                        state.balanceMessage, color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    state.balance != null -> {
-                        state.balance.balances.forEach { balance ->
-                            Text(
-                                "${currencySymbol(balance.currency)}${balance.totalBalance}",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                // 查询中 → 金额 → 出错是一条状态链，换挡时淡入淡出，金额本身再轻推一次。
+                val slot = when {
+                    state.balanceWorking -> 0
+                    state.balanceMessage != null -> 1
+                    state.balance != null -> 2
+                    else -> 3
+                }
+                AnimatedContent(
+                    targetState = slot,
+                    transitionSpec = { contentSwap(sizeAnimation = false) },
+                    label = "账户余额状态",
+                ) { shown ->
+                    when (shown) {
+                        0 -> Text("查询中…", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                        1 -> Text(
+                            state.balanceMessage.orEmpty(), color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        2 -> Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            state.balance?.balances?.forEach { balance ->
+                                ChangingText(
+                                    "${currencySymbol(balance.currency)}${balance.totalBalance}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            if (state.balance?.isAvailable == false) {
+                                Text("余额不足，暂不可调用 API", color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
                         }
-                        if (!state.balance.isAvailable) {
-                            Text("余额不足，暂不可调用 API", color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall)
-                        }
+                        else -> Text("填写 API Key 后可查询", color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
-                    !hasKey -> Text("填写 API Key 后可查询", color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
             TextButton(
@@ -234,7 +261,7 @@ private fun currencySymbol(currency: String): String = when (currency.uppercase(
 
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Surface(Modifier.fillMaxWidth().animateContentSize(tween(180)).panelShadow(), shape = PanelShape, color = Panel) {
+    Surface(Modifier.fillMaxWidth().animateContentSize(motion(Motion.Base)).panelShadow(), shape = PanelShape, color = Panel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()

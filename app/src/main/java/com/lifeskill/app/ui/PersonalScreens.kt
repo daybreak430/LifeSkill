@@ -127,7 +127,7 @@ internal fun PersonalScreen(
                     }
                 }
                 items(visible, key = { it.treeId }) { certificate ->
-                    CertificateDisplay(certificate, dark) {
+                    CertificateDisplay(certificate, dark, Modifier.animateItem()) {
                         browsingHidden = false
                         selectedId = certificate.treeId
                     }
@@ -211,10 +211,17 @@ private fun StudyStatisticsCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(progress.lit.toString(), Modifier.alignByBaseline(), color = StatisticsWhite,
-                            style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                        Text("/ ${progress.total}", Modifier.alignByBaseline(), color = StatisticsMint,
-                            style = MaterialTheme.typography.titleMedium)
+                        // 数字变化时轻推一次，不让“完成课时”硬跳。
+                        ChangingText(
+                            progress.lit.toString(),
+                            Modifier.alignByBaseline(),
+                            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = StatisticsWhite,
+                        )
+                        ChangingText(
+                            "/ ${progress.total}", Modifier.alignByBaseline(), color = StatisticsMint,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
                     Text("已完成课时", color = StatisticsMint, style = MaterialTheme.typography.labelLarge)
                 }
@@ -223,7 +230,7 @@ private fun StudyStatisticsCard(
                         progress = { progress.fraction }, modifier = Modifier.fillMaxSize().clearAndSetSemantics {},
                         color = Color(0xFFBAE6CD), trackColor = StatisticsDivider, strokeWidth = 4.dp,
                     )
-                    Text("${(progress.fraction * 100).roundToInt()}%", color = StatisticsWhite,
+                    ChangingText("${(progress.fraction * 100).roundToInt()}%", color = StatisticsWhite,
                         style = MaterialTheme.typography.labelMedium)
                 }
             }
@@ -242,20 +249,23 @@ private fun StudyStatisticsCard(
 private fun StudyMetric(value: String, label: String, modifier: Modifier) {
     Row(modifier.semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(value, color = StatisticsWhite, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        ChangingText(value, color = StatisticsWhite,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
         Text(label, color = StatisticsMint, style = MaterialTheme.typography.labelMedium)
     }
 }
 
 @Composable
-private fun CertificateDisplay(certificate: CollectedCertificate, dark: Boolean, open: () -> Unit) {
+private fun CertificateDisplay(
+    certificate: CollectedCertificate, dark: Boolean, modifier: Modifier = Modifier, open: () -> Unit,
+) {
     val frame = RoundedCornerShape(17.dp)
     val wall = if (dark) listOf(Color(0xFF292923), Color(0xFF34332C), Color(0xFF282721))
         else listOf(Color(0xFFF3EEE3), Color(0xFFFFFCF3), Color(0xFFEAE1D0))
     val ledge = if (dark) listOf(Color(0xFF877051), Color(0xFF4F4132))
         else listOf(Color(0xFFCCB38B), Color(0xFFA9895F))
     Column(
-        Modifier.fillMaxWidth().clip(frame).clickable(role = Role.Button, onClickLabel = "查看结业证书", onClick = open)
+        modifier.fillMaxWidth().clip(frame).clickable(role = Role.Button, onClickLabel = "查看结业证书", onClick = open)
             .testTag("collected-certificate-${certificate.treeId}"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

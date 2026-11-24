@@ -1,8 +1,9 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
@@ -15,9 +16,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.lifeskill.app.model.*
 
 @Composable
@@ -55,39 +60,68 @@ internal fun TeachingContent(turn: Turn, enabled: Boolean, onAction: (String, Te
         }
     }
     val expanded = availableBlocks.find { it.id == expandedId }
-    if (expanded != null) Dialog(
-        onDismissRequest = { expandedId = null },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = .42f)).safeDrawingPadding().padding(12.dp),
-            contentAlignment = Alignment.Center,
+    if (expanded != null) {
+        // 放大图示是一个全屏浮层：遮罩与卡片一起长出来，关闭时先收回去再真正移除，
+        // 关闭动画进行中也不再接受第二次关闭。
+        val appear = remember(expanded.id) { Animatable(0f) }
+        var closing by remember(expanded.id) { mutableStateOf(false) }
+        val dismiss = { if (!closing) closing = true }
+        LaunchedEffect(expanded.id) { appear.animateTo(1f, motion(Motion.Gentle)) }
+        LaunchedEffect(expanded.id, closing) {
+            if (closing) {
+                appear.animateTo(0f, motion(Motion.Base, Motion.Accelerate))
+                expandedId = null
+            }
+        }
+        Dialog(
+            onDismissRequest = dismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
-            Surface(
-                Modifier.fillMaxSize().testTag("teaching-expanded"),
-                shape = RoundedCornerShape(28.dp),
-                color = Ground,
-                tonalElevation = 6.dp,
-                shadowElevation = 18.dp,
+            val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+            SideEffect {
+                window?.let {
+                    // 遮罩与缩放由这里统一控制，关掉窗口自带的淡入淡出，避免两层透明度叠加。
+                    it.setWindowAnimations(0)
+                    it.setDimAmount(0f)
+                }
+            }
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = .42f * appear.value))
+                    .safeDrawingPadding().padding(12.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Column {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 22.dp, end = 8.dp, top = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
-                        if (expanded !is TeachingText && expanded.isStaticVisual.not()) {
-                            GlyphButton(Glyph.RESTART, if (expanded is TeachingGame) "重新开始小游戏" else "重置${expanded.title}",
-                                { if (expanded is TeachingGame) gameEpoch++ else onAction(expanded.id, TeachingAction.Reset) }, enabled = enabled)
+                Surface(
+                    Modifier.fillMaxSize().testTag("teaching-expanded").graphicsLayer {
+                        val scale = .94f + .06f * appear.value
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = appear.value
+                    },
+                    shape = RoundedCornerShape(28.dp),
+                    color = Ground,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 18.dp,
+                ) {
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 22.dp, end = 8.dp, top = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(expanded.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = Ink)
+                            if (expanded !is TeachingText && expanded.isStaticVisual.not()) {
+                                GlyphButton(Glyph.RESTART, if (expanded is TeachingGame) "重新开始小游戏" else "重置${expanded.title}",
+                                    { if (expanded is TeachingGame) gameEpoch++ else onAction(expanded.id, TeachingAction.Reset) },
+                                    enabled = enabled && !closing)
+                            }
+                            GlyphButton(Glyph.CLOSE, "关闭互动图示", dismiss, enabled = !closing)
                         }
-                        GlyphButton(Glyph.CLOSE, "关闭互动图示", { expandedId = null })
-                    }
-                    if (expanded is TeachingGame) TeachingGamePlayer(expanded, gameEpoch, Modifier.weight(1f).fillMaxWidth())
-                    else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
-                        TeachingBlockBody(
-                            expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
-                            { action -> onAction(expanded.id, action) }, expanded = true,
-                        )
+                        if (expanded is TeachingGame) TeachingGamePlayer(expanded, gameEpoch, Modifier.weight(1f).fillMaxWidth())
+                        else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                            TeachingBlockBody(
+                                expanded, turn.teachingStates[expanded.id] ?: TeachingState(), enabled,
+                                { action -> onAction(expanded.id, action) }, expanded = true,
+                            )
+                        }
                     }
                 }
             }
@@ -103,7 +137,7 @@ private fun TeachingCard(
     Surface(Modifier.fillMaxWidth().testTag("teaching-block-${block.id}"), shape = PanelShape,
         color = Panel, border = BorderStroke(1.dp, aiColors.outline)) {
         // 时间轴由每行协调展开，其余组件由卡片协调高度，避免嵌套尺寸动画互相追赶。
-        Column(Modifier.then(if (block is TeachingTimeline) Modifier else Modifier.animateContentSize(tween(220)))
+        Column(Modifier.then(if (block is TeachingTimeline) Modifier else Modifier.animateContentSize(motion(Motion.Base)))
             .padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(block.title, Modifier.weight(1f), color = Ink, style = MaterialTheme.typography.titleSmall)
@@ -170,7 +204,7 @@ private fun TimelineContent(block: TeachingTimeline, state: TeachingState, enabl
                     modifier = Modifier.fillMaxWidth().testTag("timeline-${event.id}").semantics { this.selected = active },
                     shape = ControlShape, color = if (active) aiColors.chip else Ground,
                     border = if (active) BorderStroke(1.dp, accent.copy(alpha = .4f)) else null) {
-                    Column(Modifier.animateContentSize(tween(220)).heightIn(min = 52.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.animateContentSize(motion(Motion.Base)).heightIn(min = 52.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(event.date, color = accent, style = MaterialTheme.typography.labelMedium)
                         Text(event.title, style = MaterialTheme.typography.titleSmall, color = Ink)
                         if (active) Text(event.detail, style = MaterialTheme.typography.bodyMedium, color = Muted)
@@ -240,7 +274,8 @@ private fun PracticeContent(block: TeachingQuiz, state: TeachingState, enabled: 
             enabled && !correct && !state.revealed,
             Modifier.fillMaxWidth().testTag("practice-choice-$index"), { onAction(TeachingAction.Select(index.toString())) })
     }
-    if (state.submitted) {
+    // 提交后判分卡由卡片高度带出，文字淡入，和排序题用的是同一套反馈节奏。
+    AnimatedVisibility(visible = state.submitted, enter = appearFade(), exit = disappearFade()) {
         Surface(shape = ControlShape, color = aiColors.chip) {
             Column(Modifier.fillMaxWidth().padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -280,10 +315,12 @@ private fun PracticeContent(block: TeachingQuiz, state: TeachingState, enabled: 
 
 @Composable
 internal fun TeachingOption(text: String, active: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val background by animateColorAsState(if (active) aiColors.chip else Ground, tween(180), label = "教学选项颜色")
+    val background by animateColorAsState(if (active) aiColors.chip else Ground, motion(Motion.Quick), label = "教学选项颜色")
+    // 底色和描边必须同一拍变化，否则会出现“底色先变、边框后到”的错位感。
+    val outline by animateColorAsState(if (active) aiColors.accent else Line, motion(Motion.Quick), label = "教学选项描边")
     Surface(onClick = onClick, enabled = enabled, shape = ControlShape,
         color = background,
-        border = BorderStroke(1.dp, if (active) aiColors.accent else Line),
+        border = BorderStroke(1.dp, outline),
         modifier = modifier.semantics { selected = active }) {
         // 最小高度属于容器，文字只按自身行高测量，再在容器内居中；不能把最小高度直接加在 Text 上。
         Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 12.dp), contentAlignment = Alignment.CenterStart) {

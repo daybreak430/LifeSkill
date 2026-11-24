@@ -4,10 +4,11 @@ import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -62,8 +63,6 @@ import com.lifeskill.app.model.examAvailable
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
-private const val PAGE_MOTION_MS = 220
-
 @Composable
 internal fun LifeSkillApp(
     container: AppContainer,
@@ -116,124 +115,134 @@ internal fun LifeSkillApp(
     }
 
     LifeSkillTheme(dark) {
-        if (library == null && error == null) {
-            val launchBackground = colorResource(R.color.launch_background)
-            SideEffect { onSystemBars(systemDark, launchBackground) }
-            LaunchLoading(launchBackground)
-            return@LifeSkillTheme
-        }
-        val gradient = when (route.page) {
-            Page.TUTOR, Page.GENERATE, Page.DIAGNOSTIC, Page.FEYNMAN -> aiColors.backdrop
-            else -> studyColors.backdrop
-        }
-        val backdrop = key(dark) {
-            val top by animateColorAsState(gradient.first(), tween(PAGE_MOTION_MS), label = "页面顶部")
-            val middle by animateColorAsState(
-                if (gradient.size == 3) gradient[1] else lerp(gradient.first(), gradient.last(), .5f),
-                tween(PAGE_MOTION_MS), label = "页面中部",
-            )
-            val bottom by animateColorAsState(gradient.last(), tween(PAGE_MOTION_MS), label = "页面底部")
-            val brush = { Brush.verticalGradient(listOf(top, middle, bottom)) }
-            brush
-        }
-        SideEffect { onSystemBars(dark, gradient.first()) }
-        val showTabs = library != null && (route.page == Page.HOME || route.page == Page.ME)
-        val tabBackdrop = rememberLayerBackdrop()
-        // 玻璃层记录它下方的页面和渐变，标签栏作为独立浮层绘制，滚动内容可以从下面经过。
-        val recording = if (showTabs && liveTabGlass) Modifier.layerBackdrop(tabBackdrop)
-            .drawBehind { drawRect(backdrop()) } else Modifier
-        Scaffold(
-            modifier = Modifier.fillMaxSize()
-                .drawBehind { drawRect(backdrop()) }.safeDrawingPadding(),
-            containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (showTabs) HomeTabClearance else 0.dp)) },
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                val current = library
-                if (current == null) {
-                    error?.let { Action("$it 点击重试", Glyph.TREE, app::load, Modifier.align(Alignment.Center)) }
-                } else {
-                    AnimatedContent(
-                        targetState = navigation,
-                        modifier = Modifier.fillMaxSize().clipToBounds().then(recording),
-                        contentKey = { it.route.encode() },
-                        transitionSpec = {
-                            val backToTree = initialState.route.page == Page.TUTOR && targetState.route.page == Page.TREE
-                            val direction = if (targetState.depth < initialState.depth || backToTree) -1 else 1
-                            (fadeIn(tween(PAGE_MOTION_MS)) + slideInHorizontally(tween(PAGE_MOTION_MS, easing = FastOutSlowInEasing)) {
-                                direction * it / 14
-                            }) togetherWith (fadeOut(tween(160)) + slideOutHorizontally(tween(PAGE_MOTION_MS, easing = FastOutSlowInEasing)) {
-                                -direction * it / 22
-                            })
-                        },
-                        label = "页面转场",
-                    ) { frame ->
-                        val displayedRoute = frame.route
-                        val active = displayedRoute == route
-                        // 删除后退场页仍使用最后一帧的数据，避免卡片先消失。
-                        var lastLibrary by remember { mutableStateOf(current) }
-                        SideEffect { if (active) lastLibrary = current }
-                        val displayedLibrary = if (active) current else lastLibrary
-                        val entry = displayedLibrary.byId[displayedRoute.id]
-                        val latestStudySkill = displayedLibrary.byId[latestStudySkillId]
-                        val addition = addedEntryId.takeIf { active }
-                        Box(Modifier.fillMaxSize().routeInput(active)) {
-                            stateHolder.SaveableStateProvider(displayedRoute.encode()) {
-                                when (displayedRoute.page) {
-                                    Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition, active)
-                                    Page.ME -> {
-                                        val statistics = remember(displayedLibrary, assessments) {
-                                            LearningStatistics.from(displayedLibrary, assessments)
+        val launching = library == null && error == null
+        val launchBackground = colorResource(R.color.launch_background)
+        if (launching) SideEffect { onSystemBars(systemDark, launchBackground) }
+        Box(Modifier.fillMaxSize()) {
+            if (!launching) {
+                val gradient = when (route.page) {
+                    Page.TUTOR, Page.GENERATE, Page.DIAGNOSTIC, Page.FEYNMAN -> aiColors.backdrop
+                    else -> studyColors.backdrop
+                }
+                val backdrop = key(dark) {
+                    // 页面底色跟着页面走：换到 AI 会话时整片背景一起过渡，避免白/蓝底色硬切。
+                    val top by animateColorAsState(gradient.first(), motion(Motion.Base), label = "页面顶部")
+                    val middle by animateColorAsState(
+                        if (gradient.size == 3) gradient[1] else lerp(gradient.first(), gradient.last(), .5f),
+                        motion(Motion.Base), label = "页面中部",
+                    )
+                    val bottom by animateColorAsState(gradient.last(), motion(Motion.Base), label = "页面底部")
+                    val brush = { Brush.verticalGradient(listOf(top, middle, bottom)) }
+                    brush
+                }
+                SideEffect { onSystemBars(dark, gradient.first()) }
+                val showTabs = library != null && (route.page == Page.HOME || route.page == Page.ME)
+                val tabBackdrop = rememberLayerBackdrop()
+                // 玻璃层记录它下方的页面和渐变，标签栏作为独立浮层绘制，滚动内容可以从下面经过。
+                val recording = if (showTabs && liveTabGlass) Modifier.layerBackdrop(tabBackdrop)
+                    .drawBehind { drawRect(backdrop()) } else Modifier
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                        .drawBehind { drawRect(backdrop()) }.safeDrawingPadding(),
+                    containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (showTabs) HomeTabClearance else 0.dp)) },
+                ) { padding ->
+                    Box(Modifier.fillMaxSize().padding(padding)) {
+                        val current = library
+                        if (current == null) {
+                            error?.let { Action("$it 点击重试", Glyph.TREE, app::load, Modifier.align(Alignment.Center)) }
+                        } else {
+                            AnimatedContent(
+                                targetState = navigation,
+                                modifier = Modifier.fillMaxSize().clipToBounds().then(recording),
+                                contentKey = { it.route.encode() },
+                                transitionSpec = {
+                                    val backToTree = initialState.route.page == Page.TUTOR && targetState.route.page == Page.TREE
+                                    val direction = if (targetState.depth < initialState.depth || backToTree) -1 else 1
+                                    // 进入页带一点视差（整宽的 6%），退出页反向位移更短（4.5%），
+                                    // 两页不会同步平移，读起来是“新页面压上来”，而不是整块画面在滑。
+                                    (fadeIn(motionIn<Float>(Motion.Base)) +
+                                        slideInHorizontally(motion(Motion.Base)) { direction * it / 16 }) togetherWith
+                                        (fadeOut(motionOut<Float>()) +
+                                            slideOutHorizontally(motion(Motion.Base, Motion.Accelerate)) { -direction * it / 22 })
+                                },
+                                label = "页面转场",
+                            ) { frame ->
+                                val displayedRoute = frame.route
+                                val active = displayedRoute == route
+                                // 删除后退场页仍使用最后一帧的数据，避免卡片先消失。
+                                var lastLibrary by remember { mutableStateOf(current) }
+                                SideEffect { if (active) lastLibrary = current }
+                                val displayedLibrary = if (active) current else lastLibrary
+                                val entry = displayedLibrary.byId[displayedRoute.id]
+                                val latestStudySkill = displayedLibrary.byId[latestStudySkillId]
+                                val addition = addedEntryId.takeIf { active }
+                                Box(Modifier.fillMaxSize().routeInput(active)) {
+                                    stateHolder.SaveableStateProvider(displayedRoute.encode()) {
+                                        when (displayedRoute.page) {
+                                            Page.HOME -> HomeScreen(displayedLibrary, latestStudySkill, app, addition, active)
+                                            Page.ME -> {
+                                                val statistics = remember(displayedLibrary, assessments) {
+                                                    LearningStatistics.from(displayedLibrary, assessments)
+                                                }
+                                                PersonalScreen(app, personalModel(container), statistics, active, dark, usage)
+                                            }
+                                            Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
+                                            Page.DIRECTION -> entry?.let {
+                                                val issuedCourseIds by container.certificates.issuedCourseIds.collectAsStateWithLifecycle(emptySet())
+                                                DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, issuedCourseIds, app, addition)
+                                            }
+                                            Page.TREE -> entry?.let {
+                                                val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
+                                                SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition,
+                                                    assessments[it.id] ?: TreeAssessmentSummary(), usage.courses[it.id], usage.generation[it.id],
+                                                    onExportConversation = { exportConversation(it.id) })
+                                            }
+                                            Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app, usage.lessons[it.id]) }
+                                            Page.SETTINGS -> {
+                                                val model: SettingsViewModel = viewModel(
+                                                    factory = remember(container) {
+                                                        viewModelFactory { initializer { SettingsViewModel(container) } }
+                                                    },
+                                                )
+                                                SettingsScreen(app, model)
+                                            }
+                                            Page.GENERATE, Page.TUTOR -> {
+                                                val mode = if (displayedRoute.page == Page.GENERATE) ChatMode.GENERATE else ChatMode.TUTOR
+                                                val scope = ChatScope(mode, displayedRoute.id)
+                                                val onExport = scope.ownerId?.takeIf { mode == ChatMode.TUTOR }
+                                                    ?.let { id -> { exportConversation(id) } }
+                                                ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active,
+                                                    onExport, usage.lessons[scope.ownerId])
+                                            }
+                                            Page.EXAM -> entry?.let {
+                                                ExamScreen(it, displayedLibrary.examAvailable(it.id), app,
+                                                    assessmentModel(container, it.id), active, usage.courses[it.id])
+                                            }
+                                            Page.DIAGNOSTIC, Page.FEYNMAN -> entry?.let {
+                                                val kind = if (displayedRoute.page == Page.DIAGNOSTIC) TreeChallenge.DIAGNOSTIC else TreeChallenge.FEYNMAN
+                                                ChallengeScreen(it, kind, assessments[it.id]?.passed == true, app, assessmentModel(container, it.id))
+                                            }
                                         }
-                                        PersonalScreen(app, personalModel(container), statistics, active, dark, usage)
-                                    }
-                                    Page.PROFILE_EDIT -> ProfileEditScreen(app, personalModel(container), active)
-                                    Page.DIRECTION -> entry?.let {
-                                        val issuedCourseIds by container.certificates.issuedCourseIds.collectAsStateWithLifecycle(emptySet())
-                                        DirectionScreen(it, displayedLibrary, latestStudySkill?.parentId, issuedCourseIds, app, addition)
-                                    }
-                                    Page.TREE -> entry?.let {
-                                        val unlock = unlocks.firstOrNull { unlock -> unlock.treeId == it.id }
-                                        SkillTreeScreen(it, displayedLibrary, latestStudySkillId, app, unlock, active, addition,
-                                            assessments[it.id] ?: TreeAssessmentSummary(), usage.courses[it.id], usage.generation[it.id],
-                                            onExportConversation = { exportConversation(it.id) })
-                                    }
-                                    Page.SKILL -> entry?.let { SkillScreen(it, displayedLibrary, app, usage.lessons[it.id]) }
-                                    Page.SETTINGS -> {
-                                        val model: SettingsViewModel = viewModel(
-                                            factory = remember(container) {
-                                                viewModelFactory { initializer { SettingsViewModel(container) } }
-                                            },
-                                        )
-                                        SettingsScreen(app, model)
-                                    }
-                                    Page.GENERATE, Page.TUTOR -> {
-                                        val mode = if (displayedRoute.page == Page.GENERATE) ChatMode.GENERATE else ChatMode.TUTOR
-                                        val scope = ChatScope(mode, displayedRoute.id)
-                                        val onExport = scope.ownerId?.takeIf { mode == ChatMode.TUTOR }
-                                            ?.let { id -> { exportConversation(id) } }
-                                        ChatScreen(scope, displayedLibrary, app, conversationModel(container, scope), active,
-                                            onExport, usage.lessons[scope.ownerId])
-                                    }
-                                    Page.EXAM -> entry?.let {
-                                        ExamScreen(it, displayedLibrary.examAvailable(it.id), app,
-                                            assessmentModel(container, it.id), active, usage.courses[it.id])
-                                    }
-                                    Page.DIAGNOSTIC, Page.FEYNMAN -> entry?.let {
-                                        val kind = if (displayedRoute.page == Page.DIAGNOSTIC) TreeChallenge.DIAGNOSTIC else TreeChallenge.FEYNMAN
-                                        ChallengeScreen(it, kind, assessments[it.id]?.passed == true, app, assessmentModel(container, it.id))
                                     }
                                 }
                             }
+                            if (showTabs) {
+                                FloatingHomeTabs(route.page, tabBackdrop, dark, app::selectTab, Modifier.align(Alignment.BottomCenter))
+                            }
+                            editor?.let { EditorDialog(it, current, app) }
+                            deletion?.let { DeletionDialog(it, current, deleting, app) }
                         }
                     }
-                    if (showTabs) {
-                        FloatingHomeTabs(route.page, tabBackdrop, dark, app::selectTab, Modifier.align(Alignment.BottomCenter))
-                    }
-                    editor?.let { EditorDialog(it, current, app) }
-                    deletion?.let { DeletionDialog(it, current, deleting, app) }
                 }
             }
+        // 启动页叠在应用之上淡出：首帧不再从「Logo + 进度条」硬切到首页，而是同一块画面接力。
+        AnimatedVisibility(
+            visible = launching,
+            enter = EnterTransition.None,
+            exit = fadeOut(motion(Motion.Base)),
+            label = "启动页退场",
+        ) { LaunchLoading(launchBackground) }
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -7,10 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +53,7 @@ internal fun TeachingFlipCardContent(
     val density = LocalDensity.current
     val rotation by animateFloatAsState(
         targetValue = if (back) 180f else 0f,
-        animationSpec = tween(520, easing = FastOutSlowInEasing),
+        animationSpec = motion(Motion.Hero),
         label = "知识翻卡",
     )
     val hintLevels = block.hintLevels
@@ -139,7 +139,8 @@ internal fun TeachingSortingContent(
         val item = block.items.first { it.id == itemId }
         key(item.id) {
             ReorderableItem {
-                val elevation by animateDpAsState(if (isDragging) 10.dp else 0.dp, label = "排序拖动高度")
+                // 拖动时抬起的影子跟手变，松手后慢慢落回，配合拖动跟手感。
+    val elevation by animateDpAsState(if (isDragging) 10.dp else 0.dp, motion(Motion.Quick), label = "排序拖动高度")
                 Surface(
                     modifier = Modifier.fillMaxWidth().testTag("sort-item-${item.id}")
                         .semantics { contentDescription = "第${index + 1}项，${item.text}；按住拖动点可排序" },
@@ -200,31 +201,38 @@ internal fun TeachingHotspotContent(
 ) {
     Text(block.prompt, color = Ink, style = MaterialTheme.typography.bodyMedium)
     PlantCellHotspotImage(block, state, enabled) { onAction(TeachingAction.Select(it)) }
-    if (state.revealed) {
+    // 点热点 → 看单个解释 → 看全部：两次换内容用同一条淡入淡出，高度交给卡片。
+    AnimatedContent(
+        targetState = state.revealed,
+        transitionSpec = { contentSwap(sizeAnimation = false) },
+        label = "热点详情",
+    ) { revealed ->
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            block.hotspots.forEach { hotspot ->
-                Text("${hotspot.label} · ${hotspot.detail}", color = Ink, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        OutlinedButton(onClick = { onAction(TeachingAction.Reset) }, enabled = enabled,
-            modifier = Modifier.fillMaxWidth()) {
-            Text("重新探索")
-        }
-    } else {
-        block.hotspots.find { it.id == state.selection }?.let { hotspot ->
-            Surface(
-                Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-                shape = ControlShape,
-                color = aiColors.chip,
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(hotspot.label, color = aiColors.accent, style = MaterialTheme.typography.titleSmall)
-                    Text(hotspot.detail, color = Ink, style = MaterialTheme.typography.bodyMedium)
+            if (revealed) {
+                block.hotspots.forEach { hotspot ->
+                    Text("${hotspot.label} · ${hotspot.detail}", color = Ink, style = MaterialTheme.typography.bodyMedium)
                 }
+                OutlinedButton(onClick = { onAction(TeachingAction.Reset) }, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("重新探索")
+                }
+            } else {
+                block.hotspots.find { it.id == state.selection }?.let { hotspot ->
+                    Surface(
+                        Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                        shape = ControlShape,
+                        color = aiColors.chip,
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(hotspot.label, color = aiColors.accent, style = MaterialTheme.typography.titleSmall)
+                            Text(hotspot.detail, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                TextButton(onClick = { onAction(TeachingAction.Reveal) }, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth()) { Text("查看全部热点") }
             }
         }
-        TextButton(onClick = { onAction(TeachingAction.Reveal) }, enabled = enabled,
-            modifier = Modifier.fillMaxWidth()) { Text("查看全部热点") }
     }
 }
 
@@ -276,7 +284,7 @@ private fun PlantCellHotspotImage(
                 .coerceIn(0.dp, (maxHeight - 48.dp).coerceAtLeast(0.dp))
             val active = state.selection == hotspot.id
             val markerColor by animateColorAsState(if (active) Gold else aiColors.accent,
-                tween(180), label = "热点选中颜色")
+                motion(Motion.Quick), label = "热点选中颜色")
             Surface(
                 onClick = { onSelect(hotspot.id) },
                 enabled = enabled,
@@ -311,18 +319,21 @@ private fun AssessmentFeedback(
     tag: String, submitted: Boolean, correct: Boolean, revealed: Boolean, hint: String, explanation: String,
     onReveal: () -> Unit, enabled: Boolean,
 ) {
-    if (!submitted) return
-    Surface(Modifier.fillMaxWidth().testTag(tag), shape = ControlShape, color = aiColors.chip) {
-        Column(Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite },
-            verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Text(if (correct) "理解正确" else "再想一步", color = aiColors.accent,
-                style = MaterialTheme.typography.titleSmall)
-            Text(if (correct || revealed) explanation else hint, color = Ink,
-                style = MaterialTheme.typography.bodyMedium)
-            if (!correct && !revealed) {
-                TextButton(onClick = onReveal, enabled = enabled,
-                    modifier = Modifier.fillMaxWidth().testTag("$tag-reveal")) {
-                    Text("查看完整答案")
+    // 判分结果是“提交之后才知道的事”：由卡片高度把它带出来，文字淡入，
+    // 而不是让一整块色块瞬间出现把下面的按钮顶下去。
+    AnimatedVisibility(visible = submitted, enter = appearFade(), exit = disappearFade()) {
+        Surface(Modifier.fillMaxWidth().testTag(tag), shape = ControlShape, color = aiColors.chip) {
+            Column(Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(if (correct) "理解正确" else "再想一步", color = aiColors.accent,
+                    style = MaterialTheme.typography.titleSmall)
+                Text(if (correct || revealed) explanation else hint, color = Ink,
+                    style = MaterialTheme.typography.bodyMedium)
+                if (!correct && !revealed) {
+                    TextButton(onClick = onReveal, enabled = enabled,
+                        modifier = Modifier.fillMaxWidth().testTag("$tag-reveal")) {
+                        Text("查看完整答案")
+                    }
                 }
             }
         }

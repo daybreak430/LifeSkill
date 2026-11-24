@@ -1,6 +1,14 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -27,14 +36,18 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -60,9 +73,13 @@ internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
 internal fun DialogRadioChoice(
     label: String, selected: Boolean, enabled: Boolean = true, badge: String? = null, onClick: () -> Unit,
 ) {
+    // 选中底色跟着点按走过去，而不是一格一格闪；单选圆点本身由 Material 自带过渡。
+    val fill by androidx.compose.animation.animateColorAsState(
+        if (selected) GoldGround else Ground, motion(Motion.Quick), label = "选项底色",
+    )
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(ControlShape)
-            .background(if (selected) GoldGround else Ground)
+            .background(fill)
             .selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
@@ -132,11 +149,17 @@ internal fun Action(
         Mark(glyph, color, Modifier.size(17.dp))
         Text(label, Modifier.padding(start = 7.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
+    // 主操作按下时轻微回弹，给出“按到了”的手感；列表行仍只用水波，避免整屏都在动。
+    val source = remember { MutableInteractionSource() }
+    val press by rememberPressScale(source)
     Button(
-        onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = ControlShape,
+        onClick,
+        modifier = modifier.heightIn(min = 48.dp).graphicsLayer { scaleX = press; scaleY = press },
+        enabled = enabled, shape = ControlShape,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         colors = if (primary) ButtonDefaults.buttonColors()
         else ButtonDefaults.buttonColors(containerColor = Raised, contentColor = Ink),
+        interactionSource = source,
         content = content,
     )
 }
@@ -171,5 +194,34 @@ internal fun EmptyState(
 internal fun Loading(modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         CircularProgressIndicator(Modifier.width(26.dp), strokeWidth = 2.dp)
+    }
+}
+
+/**
+ * 会“换一次”的文字。
+ *
+ * 进度、计数、状态词变化时不再硬跳：旧值快速淡出，新值从下方轻推入位。
+ * 宽度变化交给尺寸过渡，同一个数字从 9 变成 10 时旁边的元素不会突然挪位。
+ */
+@Composable
+internal fun ChangingText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = LocalTextStyle.current,
+    color: Color = Color.Unspecified,
+    maxLines: Int = 1,
+    textAlign: TextAlign? = null,
+) {
+    AnimatedContent(
+        targetState = text,
+        modifier = modifier,
+        transitionSpec = {
+            ((fadeIn(motionIn<Float>(Motion.Quick)) + slideInVertically(motionIn(Motion.Quick)) { it / 3 }) togetherWith
+                (fadeOut(motionOut(Motion.Instant)) + slideOutVertically(motionOut(Motion.Instant)) { -it / 3 }))
+                .using(SizeTransform(clip = false) { _, _ -> motion(Motion.Quick) })
+        },
+        label = "文字换值",
+    ) { value ->
+        Text(value, style = style, color = color, maxLines = maxLines, textAlign = textAlign)
     }
 }

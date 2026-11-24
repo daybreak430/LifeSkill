@@ -1,5 +1,6 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -218,16 +219,7 @@ internal fun ExamCertificateDialog(
                     Text("上滑拆开", color = CertificatePaper, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            if (enteringNickname && !exiting) {
-                CertificateNicknameForm(nickname, { nickname = it }, status, cancel = { enteringNickname = false }) {
-                    requested = true
-                    onCollect?.invoke(it)
-                }
-            } else if (confirmingDestruction && controls != null) {
-                CertificateDestructionConfirmation(isSample, controls.status, controls.destroy) {
-                    confirmingDestruction = false
-                }
-            } else if (showCertificate) {
+            val certificateBody: @Composable () -> Unit = {
                 Column(
                     Modifier.widthIn(max = 360.dp).fillMaxWidth().graphicsLayer {
                         val reveal = motionPhase(opening.value, .32f, 1f)
@@ -262,6 +254,30 @@ internal fun ExamCertificateDialog(
                                 }
                             }, Modifier.fillMaxWidth(), primary = true, enabled = canCollect && !exiting && !status.busy)
                         }
+                    }
+                }
+            }
+            // 证书 → 填写署名 → 删除确认是一次换内容：旧面板淡出、新面板淡入，尺寸一起过渡，
+            // 不会出现两层卡片叠在一起或按钮瞬间换位置的错觉。
+            val panel = when {
+                enteringNickname && !exiting -> 2
+                confirmingDestruction && controls != null -> 3
+                showCertificate -> 1
+                else -> 0
+            }
+            AnimatedContent(
+                targetState = panel,
+                transitionSpec = { contentSwap() },
+                label = "证书面板",
+            ) { shown ->
+                when (shown) {
+                    1 -> certificateBody()
+                    2 -> CertificateNicknameForm(nickname, { nickname = it }, status, cancel = { enteringNickname = false }) {
+                        requested = true
+                        onCollect?.invoke(it)
+                    }
+                    3 -> controls?.let {
+                        CertificateDestructionConfirmation(isSample, it.status, it.destroy) { confirmingDestruction = false }
                     }
                 }
             }

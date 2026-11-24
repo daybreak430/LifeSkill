@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
@@ -77,32 +78,42 @@ internal fun ChatAttachmentSources(chat: ChatViewModel, expanded: Boolean, onClo
     }
     val documents = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { chat.addAttachments(it) }
 
-    if (!expanded) return
-    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        AttachmentSource("拍照", Glyph.CAMERA, Modifier.weight(1f), enabled) {
-            try {
-                val directory = File(context.cacheDir, "chat-camera").apply { mkdirs() }
-                val expiry = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-                directory.listFiles()?.filter { it.lastModified() < expiry }?.forEach { it.delete() }
-                val file = File.createTempFile("photo-", ".jpg", directory)
-                cameraFile = file.absolutePath
-                camera.launch(cameraUri(context, file))
-                onClose()
-            } catch (_: Exception) {
-                cameraFile?.let { File(it).delete() }
-                cameraFile = null
-                chat.showAttachmentMessage("无法打开相机，请试试从相册选择。")
+    // 三个来源是输入框下方的临时区块：展开时高度一起长出来，收起时更快，
+    // 让用户看清“多出来的东西是这里给的”，而不是一按就凭空多出一排按钮。
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandFade(Motion.Base),
+        exit = shrinkFade(Motion.Quick),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AttachmentSource("拍照", Glyph.CAMERA, Modifier.weight(1f), enabled) {
+                try {
+                    val directory = File(context.cacheDir, "chat-camera").apply { mkdirs() }
+                    val expiry = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                    directory.listFiles()?.filter { it.lastModified() < expiry }?.forEach { it.delete() }
+                    val file = File.createTempFile("photo-", ".jpg", directory)
+                    cameraFile = file.absolutePath
+                    camera.launch(cameraUri(context, file))
+                    onClose()
+                } catch (_: Exception) {
+                    cameraFile?.let { File(it).delete() }
+                    cameraFile = null
+                    chat.showAttachmentMessage("无法打开相机，请试试从相册选择。")
+                    onClose()
+                }
+            }
+            AttachmentSource("相册", Glyph.PHOTO, Modifier.weight(1f), enabled) {
+                photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 onClose()
             }
-        }
-        AttachmentSource("相册", Glyph.PHOTO, Modifier.weight(1f), enabled) {
-            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            onClose()
-        }
-        AttachmentSource("文件", Glyph.ATTACHMENT, Modifier.weight(1f), enabled) {
-            documents.launch(arrayOf("image/*", "application/pdf",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/*"))
-            onClose()
+            AttachmentSource("文件", Glyph.ATTACHMENT, Modifier.weight(1f), enabled) {
+                documents.launch(arrayOf("image/*", "application/pdf",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/*"))
+                onClose()
+            }
         }
     }
 }
@@ -138,7 +149,7 @@ internal fun ChatAttachmentStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(attachments, key = ChatAttachment::id) { item ->
-            Box {
+            Box(Modifier.animateItem()) {
                 Surface(
                     onClick = { onPreview(item) }, shape = ControlShape, color = aiColors.chip,
                     modifier = Modifier.testTag("attachment-card-${item.id}"),

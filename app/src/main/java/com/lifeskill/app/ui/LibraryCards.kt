@@ -1,11 +1,12 @@
 package com.lifeskill.app.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -76,6 +78,9 @@ internal val LibraryTitle = TextStyle(
 
 private val DirectionCardVerticalPadding = 5.dp
 
+/** 首页卡片上会换挡的文案。只带参与动画的字段，进度变化不会触发重播。 */
+private data class StudyCopy(val stage: HomeStudyState?, val title: String, val context: String?)
+
 @Composable
 private fun directionHeaderHeight(): Dp = with(LocalDensity.current) {
     maxOf(48.dp, MaterialTheme.typography.titleMedium.lineHeight.toDp() * 2 + 2.dp)
@@ -99,6 +104,9 @@ internal fun HomeStudyCard(
     val cornerRadius = 26.dp
     val heroShape = RoundedCornerShape(cornerRadius)
     val tilt = rememberHomeCardTilt(tiltEnabled)
+    // 卡片内容随学习进度换挡：新学 → 继续 → 已完成。用状态而不是文案做键，
+    // 文案排版变化时不会误触发动画。
+    val stage = study?.state
     val title = when (study?.state) {
         null -> "想学什么？"
         HomeStudyState.COMPLETED -> study.tree.name
@@ -117,6 +125,7 @@ internal fun HomeStudyCard(
         HomeStudyState.COMPLETED -> "查看课程"
         HomeStudyState.RESUME -> "继续学习"
     }
+    val copy = remember(stage, title, context) { StudyCopy(stage, title, context) }
     Box(modifier.fillMaxWidth()) {
         Box(Modifier.matchParentSize().clipToBounds()) {
             Box(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(top = colors.heroLayerTopInset, bottom = 16.dp)
@@ -149,15 +158,24 @@ internal fun HomeStudyCard(
                     Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        if (context != null && study != null) {
-                            val highlighted = study.state == HomeStudyState.NEXT || study.state == HomeStudyState.COMPLETED
-                            Text(
-                                context, style = MaterialTheme.typography.bodyMedium, color = if (highlighted) Gold else Muted,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            )
+                    AnimatedContent(
+                        targetState = copy,
+                        modifier = Modifier.weight(1f),
+                        transitionSpec = { contentSwap() },
+                        contentAlignment = Alignment.CenterStart,
+                        label = "首页学习卡文案",
+                    ) { shown ->
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            if (shown.context != null) {
+                                val highlighted = shown.stage == HomeStudyState.NEXT || shown.stage == HomeStudyState.COMPLETED
+                                Text(
+                                    shown.context, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (highlighted) Gold else Muted,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Text(shown.title, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        Text(title, style = LibraryTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     if (compactArt) {
                         // 小插图只与标题同排，进度和按钮仍能使用整张卡片的宽度。
@@ -171,14 +189,21 @@ internal fun HomeStudyCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SegmentedProgress(study.progress, Modifier.weight(1f), active = colors.route)
-                        Text(study.progress.label, style = MaterialTheme.typography.labelMedium, color = Muted)
+                        ChangingText(study.progress.label, style = MaterialTheme.typography.labelMedium, color = Muted)
                     }
                 }
-                LibraryAction(
-                    action, null, onAction,
-                    Modifier.padding(top = 4.dp).widthIn(max = 178.dp * fontScale),
-                    primary = true, trailing = true, primaryColor = Gold,
-                )
+                // 按钮文案会随状态换挡，换的时候整颗按钮一起淡入淡出，读者能看出“主操作变了”。
+                AnimatedContent(
+                    targetState = action,
+                    modifier = Modifier.padding(top = 4.dp).widthIn(max = 178.dp * fontScale),
+                    transitionSpec = { contentSwap() },
+                    contentAlignment = Alignment.CenterStart,
+                    label = "首页主操作",
+                ) { shown ->
+                    LibraryAction(
+                        shown, null, onAction, primary = true, trailing = true, primaryColor = Gold,
+                    )
+                }
             }
         }
     }
@@ -196,9 +221,13 @@ internal fun LibraryAction(
 ) {
     val content = if (primary) Panel else Ink
     val icon = if (primary) content else Gold
+    // 卡片上的主操作是“会真的把人带走”的按钮，按下给一点回弹，比只有水波更有落点。
+    val source = remember { MutableInteractionSource() }
+    val press by rememberPressScale(source)
     Surface(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.Button },
+        modifier = modifier.heightIn(min = 48.dp).graphicsLayer { scaleX = press; scaleY = press }
+            .semantics { role = Role.Button },
         shape = ControlShape,
         color = when {
             primary -> primaryColor
@@ -206,6 +235,7 @@ internal fun LibraryAction(
             else -> Panel
         },
         contentColor = content,
+        interactionSource = source,
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -263,24 +293,36 @@ internal fun DirectionCard(
                 )
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
-                when {
-                    createTree != null -> TextButton(onClick = createTree, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                        Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
-                        Text(
-                            "新建课程",
-                            Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}新建课程" },
-                            style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                // 卡片底部会在“新建课程 / 进度 / 尚未添加”之间换内容，展开与换内容都走同一条节奏。
+                AnimatedContent(
+                    targetState = when {
+                        createTree != null -> 0
+                        progress.total > 0 -> 1
+                        else -> 2
+                    },
+                    transitionSpec = { contentSwap() },
+                    contentAlignment = Alignment.CenterStart,
+                    label = "方向卡底部",
+                ) { slot ->
+                    when (slot) {
+                        0 -> TextButton(onClick = { createTree?.invoke() }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                            Mark(Glyph.ADD, Gold, Modifier.padding(end = 5.dp).size(15.dp))
+                            Text(
+                                "新建课程",
+                                Modifier.clearAndSetSemantics { contentDescription = "为${entry.name}新建课程" },
+                                style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        1 -> {
+                            val track = studyColors.progressTrack
+                            // 自选色也轻染未完成刻度，零进度时仍能看出配色。
+                            DirectionProgress(progress, tint, if (entry.directionColor == null) track else lerp(track, tint, .25f))
+                        }
+                        else -> Text(
+                            "尚未添加课时", Modifier.padding(start = 41.dp),
+                            color = Muted, style = MaterialTheme.typography.labelMedium,
                         )
                     }
-                    progress.total > 0 -> {
-                        val track = studyColors.progressTrack
-                        // 自选色也轻染未完成刻度，零进度时仍能看出配色。
-                        DirectionProgress(progress, tint, if (entry.directionColor == null) track else lerp(track, tint, .25f))
-                    }
-                    else -> Text(
-                        "尚未添加课时", Modifier.padding(start = 41.dp),
-                        color = Muted, style = MaterialTheme.typography.labelMedium,
-                    )
                 }
             }
         }
@@ -294,14 +336,13 @@ private fun DirectionProgress(progress: Progress, tint: Color, track: Color) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        ChangingText(
             "${progress.lit}/${progress.total}",
             style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontFeatureSettings = "tnum"),
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         SegmentedProgress(
             progress, Modifier.weight(1f), active = tint, track = track,
-            barHeight = 4.dp, animate = true,
+            barHeight = 4.dp,
         )
     }
 }
@@ -362,7 +403,7 @@ internal fun SkillTreeCard(
                 }
                 Text(tree.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (progress.total > 0) SegmentedProgress(progress)
-                Text(
+                ChangingText(
                     if (progress.total > 0) progress.label else "尚未添加课时",
                     style = MaterialTheme.typography.labelMedium, color = Muted,
                 )
@@ -394,26 +435,24 @@ private fun CourseBadge(label: String) {
 @Composable
 private fun SegmentedProgress(
     progress: Progress, modifier: Modifier = Modifier, active: Color = Gold, track: Color = Line,
-    barHeight: Dp = 5.dp, animate: Boolean = false,
+    barHeight: Dp = 5.dp,
 ) {
     val segments = progress.total.coerceAtMost(12)
     if (segments == 0) return
     // 节点较多时按比例压缩成至多 12 段，精确数量仍由文字呈现。
     val filled = (progress.lit.toLong() * segments / progress.total).toFloat()
-    val motion = if (animate) {
-        // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度。
-        var seenFill by rememberSaveable { mutableFloatStateOf(filled) }
-        val fill = remember { Animatable(seenFill) }
-        LaunchedEffect(filled) {
-            if (fill.value != filled) fill.animateTo(filled, tween(260))
-            seenFill = filled
-        }
-        fill
-    } else null
+    // 返回首页时从这张卡上次呈现的进度起播，首次出现直接显示现有进度；
+    // 同一元素在任何卡片里都用同一条曲线，完成任务时进度是“长上去”的。
+    var seenFill by rememberSaveable { mutableFloatStateOf(filled) }
+    val fill = remember { Animatable(seenFill) }
+    LaunchedEffect(filled) {
+        if (fill.value != filled) fill.animateTo(filled, motion(Motion.Gentle))
+        seenFill = filled
+    }
     Canvas(modifier.fillMaxWidth().height(barHeight)) {
         val gap = 3.dp.toPx().coerceAtMost(size.width / (2 * segments))
         val segmentWidth = (size.width - gap * (segments - 1)) / segments
-        val shownFill = motion?.value ?: filled
+        val shownFill = fill.value
         repeat(segments) { index ->
             drawRoundRect(
                 color = lerp(track, active, (shownFill - index).coerceIn(0f, 1f)),
@@ -467,7 +506,15 @@ private fun StudyMotif(glyph: Glyph, modifier: Modifier, emblemSize: Dp = 66.dp)
             Modifier.size(diameter).background(Brush.linearGradient(colors.heroEmblem), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Mark(glyph, Color.White, Modifier.size(31.dp * scale))
+            // 图标随学习状态换（树 → 勾 → 课时图标）。只换图标本身，外圈与卫星点保持不动，
+            // 这样换挡读起来是“同一张卡更新了状态”，而不是整块插画重画。
+            AnimatedContent(
+                targetState = glyph,
+                transitionSpec = { contentSwap(sizeAnimation = false) },
+                label = "首页插图图标",
+            ) { shown ->
+                Mark(shown, Color.White, Modifier.size(31.dp * scale))
+            }
         }
     }
 }
