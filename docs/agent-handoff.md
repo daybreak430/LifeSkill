@@ -21,21 +21,21 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 
 | 项目 | 当前值 |
 | --- | --- |
-| 快照日期 | 2026-11-22，Asia/Shanghai |
+| 快照日期 | 2026-11-24，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `c8d3058`（完整哈希见 `git rev-parse v0.15.38`） |
-| 最新版本 | `0.15.38` |
-| `versionCode` | `125` |
-| 标签 | `v0.15.38` |
-| Release | [LifeSkill 0.15.38](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.38) |
-| APK 文件名 | `LifeSkill-0.15.38-release.apk` |
-| APK 大小 | `18,315,751` bytes |
-| APK SHA-256 | `df08b31c8c819b6d33e5813211f00a9c6556ada03d8984b5032d4be4466eecd2` |
+| 最新产品与发布提交 | `5874d6a`（完整哈希见 `git rev-parse v0.15.39`） |
+| 最新版本 | `0.15.39` |
+| `versionCode` | `126` |
+| 标签 | `v0.15.39` |
+| Release | [LifeSkill 0.15.39](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.39) |
+| APK 文件名 | `LifeSkill-0.15.39-release.apk` |
+| APK 大小 | `18,332,135` bytes |
+| APK SHA-256 | `d80ee19376bd23210e2177dbfd892ab498f61b85c8d5a53f7480b54c832363c6` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.38..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.39..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.38` 已发布：标签指向 `c8d3058`，Release 附件大小与 SHA-256 和本地 APK 一致。本次只改提示词与资料要点长度，未做覆盖升级安装验证，也未用真实模型抽样确认它是否按原文出课。
+`0.15.39` 已发布：标签指向 `5874d6a`，Release 附件大小与 SHA-256 和本地 APK 一致，签名证书与 0.15.38 相同（`ad01e104…7630a`），已完成覆盖升级安装验证。本次只改界面动效与文档，不涉及数据、提示词和依赖；动效规则见[动效语言](motion.md)。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
@@ -71,6 +71,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 | 版本 | 主要变化 |
 | --- | --- |
+| `v0.15.39` | 全应用动效统一到 `Motion.kt` 一套语言（五档时长、三条曲线）；首页学习卡换挡、方向卡底部、考试阶段、证书面板、判分与展开区不再硬跳；启动页淡出接力；新动效只动透明度与变换，尺寸动画不叠加。 |
 | `v0.15.38` | 课程生成与讲解以原文为准：先通读再规划、sourceNotes 写到可复述原文（上限 800 字）、补充内容须标明、搜索与深度思考只补背景；追加课时同样适用。 |
 | `v0.15.37` | 「查漏补缺」改名「自以为是检测」；费曼复述由 AI 从课程指定具体概念/过程/方法论作为复述目标。 |
 | `v0.15.36` | 实验台参数放宽到 1–4 个；奇数参数时最后一个滑块占满整行，不再留空槽。 |
@@ -111,6 +112,7 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 
 | 版本 | 提交 |
 | --- | --- |
+| `v0.15.39` | `5874d6a` |
 | `v0.15.38` | `c8d3058` |
 | `v0.15.37` | `6a0737f` |
 | `v0.15.36` | `e17b5f1` |
@@ -150,6 +152,18 @@ LifeSkill 是单模块原生 Android 学习应用，使用 Kotlin、Jetpack Comp
 | `v0.15.2` | `a60d257` |
 | `v0.15.1` | `8f0acbb` |
 | `v0.15.0` | `9810b48` |
+
+## 0.15.39 的验证证据
+
+- 目标：把界面里"状态一变就硬切"的地方按苹果那种细腻、克制的标准补齐，同时保证一套语言、跟手可打断、不付性能代价、不引入新问题。
+- 语言：新增 [Motion.kt](../app/src/main/java/com/lifeskill/app/ui/Motion.kt)，五档时长（90/150/220/320/520ms）+ 三条曲线（标准/减速/加速），提供 `contentSwap`（换内容）、`expandFade`/`shrinkFade`（展开收起）、`appearFade`/`disappearFade`（父级已管高度时只淡入淡出）、`rememberPressScale`（主操作按压回弹）。原有散落的 120–720ms 自定时长与 `FastOutSlowInEasing` 全部改取令牌，规则写入 [动效语言](motion.md)。
+- 补齐的换场：首页学习卡换挡（未开始/继续/已完成，文案+插图图标+主操作）、方向卡底部三态、聊天选项作答后收起、考试四阶段、证书三面板、练习页尾换题、判分与热点详情、附件来源、表单展开区、余额查询状态链、启动页退场。
+- 修掉的瞬跳：底部标签选中色、选项与单选/勾选底色、进度条（任一卡片统一补齐）、进度与统计数字（`ChangingText`）、放大图示与重学遮罩无进场动画、地图/证书/附件列表增行。
+- 约束验证：新动效只用 alpha 与 `graphicsLayer` 变换；换内容的尺寸动画只保留一个主人（`animateContentSize` 与 `SizeTransform` 不叠加）；所有 tween/spring 走 Compose 动画时钟，系统「移除动画」时直接落终态。
+- 性能：长内容滚动（交互教学页内滚动，Pixel 9 Pro 模拟器 + Apple GPU/Metal）改动前后同机对比——改造后 212 帧 / jank 4.72% / p50 17ms / p95 23ms；基线 210 帧 / jank 6.19% / p50 17ms / p95 23ms。软件渲染（SwiftShader）下只能做相对比较，未作绝对帧率结论。
+- 测试：`assembleDebug`、`testDebugUnitTest`、`lintDebug` 通过。仪器测试全量 152 项中 11 项失败，基线同一环境为 16 项失败，失败集合为本项目既有的顺序依赖问题（每个用例单独运行均通过，例：`homeCreatesTreeAndLeadsToNextSkillThenCompletedMap`、`directionColorChangesItsIconAndProgressTogether`）；`TeachingUiTest` 14 项全通过；改动相关 8 项定向回归 7 项通过，`showsFourCertificateThemesWithoutScores` 在基线上同样失败（销毁证书禁重签的断言），与本次无关。
+- 安装：`release/LifeSkill-0.15.39-release.apk` 覆盖安装到 0.15.38 之上成功（`versionCode=126`、`versionName=0.15.39`），首页、方向、地图、课时、对话、教学组件、我的、设置逐屏截图核对无裁切与错位。
+- 未覆盖：真机（非模拟器）验证；深色主题下逐屏核对；小游戏 WebView 内的动效未改动。
 
 ## 0.15.38 的验证证据
 
