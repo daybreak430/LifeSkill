@@ -120,30 +120,22 @@ internal fun LifeSkillApp(
         if (launching) SideEffect { onSystemBars(systemDark, launchBackground) }
         Box(Modifier.fillMaxSize()) {
             if (!launching) {
-                val gradient = when (route.page) {
-                    Page.TUTOR, Page.GENERATE, Page.DIAGNOSTIC, Page.FEYNMAN -> aiColors.backdrop
-                    else -> studyColors.backdrop
+                val scene = when (route.page) {
+                    Page.TUTOR, Page.GENERATE, Page.DIAGNOSTIC, Page.FEYNMAN -> aiColors.scene
+                    else -> studyColors.scene
                 }
-                val backdrop = key(dark) {
-                    // 页面底色跟着页面走：换到 AI 会话时整片背景一起过渡，避免白/蓝底色硬切。
-                    val top by animateColorAsState(gradient.first(), motion(Motion.Base), label = "页面顶部")
-                    val middle by animateColorAsState(
-                        if (gradient.size == 3) gradient[1] else lerp(gradient.first(), gradient.last(), .5f),
-                        motion(Motion.Base), label = "页面中部",
-                    )
-                    val bottom by animateColorAsState(gradient.last(), motion(Motion.Base), label = "页面底部")
-                    val brush = { Brush.verticalGradient(listOf(top, middle, bottom)) }
-                    brush
-                }
-                SideEffect { onSystemBars(dark, gradient.first()) }
+                // 页面底色跟着页面走：换到 AI 会话时整片背景（底 + 四团雾）一起过渡，避免色温硬切。
+                val backdrop = key(dark) { animatedBackdrop(scene) }
+                val grain = rememberBackdropGrain()
+                SideEffect { onSystemBars(dark, scene.base.first()) }
                 val showTabs = library != null && (route.page == Page.HOME || route.page == Page.ME)
                 val tabBackdrop = rememberLayerBackdrop()
                 // 玻璃层记录它下方的页面和渐变，标签栏作为独立浮层绘制，滚动内容可以从下面经过。
                 val recording = if (showTabs && liveTabGlass) Modifier.layerBackdrop(tabBackdrop)
-                    .drawBehind { drawRect(backdrop()) } else Modifier
+                    .mistyBackdrop(backdrop, grain, if (dark) .55f else 1f) else Modifier
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
-                        .drawBehind { drawRect(backdrop()) }.safeDrawingPadding(),
+                        .mistyBackdrop(backdrop, grain, if (dark) .55f else 1f).safeDrawingPadding(),
                     containerColor = Color.Transparent, contentColor = Ink, contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (showTabs) HomeTabClearance else 0.dp)) },
                 ) { padding ->

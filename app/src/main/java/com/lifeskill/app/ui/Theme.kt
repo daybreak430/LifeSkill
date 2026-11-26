@@ -80,7 +80,7 @@ internal data class MapNodePalette(
 )
 
 internal data class StudyColors(
-    val backdrop: List<Color>,
+    val scene: BackdropSpec,
     val cardShadow: Color,
     val progressTrack: Color,
     val hero: List<Color>,
@@ -104,7 +104,16 @@ internal data class StudyColors(
 )
 
 private val LightStudyColors = StudyColors(
-    backdrop = listOf(Color(0xFFF7F9FC), Color(0xFFF3F7FB), Color(0xFFEDF3FB)),
+    // 方案 A「原味」：底色是中性灰，层次全靠四团雾；色值取自参考图采样，饱和度不到 2%
+    scene = mistyScene(
+        base = listOf(Color(0xFFDFDEDD), Color(0xFFDAD9D8), Color(0xFFD5D4D3)),
+        glows = listOf(
+            Color(0xE6FCFBFA),
+            Color(0xB3DAD9DD),
+            Color(0xCCEDE8E0),
+            Color(0x8CE3DFE0),
+        ),
+    ),
     cardShadow = Color(0xFF869BAF),
     progressTrack = Color(0xFFE4E8F1),
     hero = listOf(Color(0xFFDDF3E6), Color(0xFFDCEFF1), Color(0xFFD2E1F7)),
@@ -133,7 +142,16 @@ private val LightStudyColors = StudyColors(
 )
 
 private val DarkStudyColors = StudyColors(
-    backdrop = listOf(DarkPalette.background, Color(0xFF161E2C)),
+    // 夜间沿用蓝黑基调，雾换成极低对比的冷灰，结构不变
+    scene = mistyScene(
+        base = listOf(Color(0xFF10141B), Color(0xFF161E2C), Color(0xFF0C1016)),
+        glows = listOf(
+            Color(0x4D6E6A7A),
+            Color(0x45505A68),
+            Color(0x3D3A4048),
+            Color(0x29070A10),
+        ),
+    ),
     cardShadow = Color.Black,
     progressTrack = DarkPalette.outlineVariant,
     hero = listOf(Color(0xFF203A35), Color(0xFF22354D)),

@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal data class AiColors(
-    val backdrop: List<Color>,
+    val scene: BackdropSpec,
     val outgoing: List<Color>,
     val panel: Color,
     val chip: Color,
@@ -40,7 +40,16 @@ internal data class AiColors(
 )
 
 internal val lightAiColors = AiColors(
-    backdrop = listOf(Color(0xFFE5F1F6), Color(0xFFF0F7FA), Color(0xFFEAF5F9)),
+    // 与学习页同一套结构，只把色温换成冷蓝：聊天页的雾偏青，和灰调首页区分开
+    scene = mistyScene(
+        base = listOf(Color(0xFFDAE4EA), Color(0xFFE2EBF0), Color(0xFFD1DCE3)),
+        glows = listOf(
+            Color(0xF2F6FBFD),
+            Color(0xD9C6DAE4),
+            Color(0xF2E9EFF2),
+            Color(0xCCC0D0D9),
+        ),
+    ),
     outgoing = listOf(Color(0xFF407E8F), Color(0xFF19617A)),
     panel = Color(0xFFFCFDFE), chip = Color(0xFFDDEFF5), accent = Color(0xFF225A70),
     outline = Color(0xFFCBDDE7),
@@ -49,7 +58,15 @@ internal val lightAiColors = AiColors(
 )
 
 internal val darkAiColors = AiColors(
-    backdrop = listOf(Color(0xFF142633), Color(0xFF141D28), Color(0xFF172732)),
+    scene = mistyScene(
+        base = listOf(Color(0xFF142633), Color(0xFF141D28), Color(0xFF12202B)),
+        glows = listOf(
+            Color(0x4D6C8AA0),
+            Color(0x3D506B80),
+            Color(0x3D2A3D50),
+            Color(0x29080C12),
+        ),
+    ),
     outgoing = listOf(Color(0xFF327488), Color(0xFF21536D)),
     panel = Color(0xFF213442), chip = Color(0xFF244756), accent = Color(0xFFB5E5F2),
     outline = Color(0xFF3B5667),

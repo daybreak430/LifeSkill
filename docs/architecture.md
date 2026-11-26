@@ -21,6 +21,7 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 
 | 功能 | 入口文件 |
 | --- | --- |
+| 全屏背景（中性灰雾与颗粒） | [Backdrop.kt](../app/src/main/java/com/lifeskill/app/ui/Backdrop.kt)，色值在 [Theme.kt](../app/src/main/java/com/lifeskill/app/ui/Theme.kt) 与 [AiVisuals.kt](../app/src/main/java/com/lifeskill/app/ui/AiVisuals.kt) |
 | 动效语言与统一时长曲线 | [Motion.kt](../app/src/main/java/com/lifeskill/app/ui/Motion.kt)，规则见[动效语言](motion.md) |
 | 首页、导航和「学习 / 我的」 | [LifeSkillApp.kt](../app/src/main/java/com/lifeskill/app/ui/LifeSkillApp.kt)、[ViewModels.kt](../app/src/main/java/com/lifeskill/app/ui/ViewModels.kt) |
 | 课程、先修关系和课程大纲 | [LibraryRepository.kt](../app/src/main/java/com/lifeskill/app/data/LibraryRepository.kt)、[Library.kt](../app/src/main/java/com/lifeskill/app/model/Library.kt)、[SkillMapLayout.kt](../app/src/main/java/com/lifeskill/app/model/SkillMapLayout.kt)、[SkillTreeScreen.kt](../app/src/main/java/com/lifeskill/app/ui/SkillTreeScreen.kt) |
@@ -50,6 +51,8 @@ LifeSkill 是单模块原生 Android 应用。Kotlin 和 Compose 负责客户端
 演示课程被删除后保持删除状态。用户可在「新领域」主动选择「恢复演示课」；仓库只清除该内置课程自己的安装标记并重建四个分类会话，其他方向、课程、进度、对话和证书不参与删除或覆盖。
 
 **证书。** 正式证书是领取时冻结的课程名、昵称、头像、主题和领取日期。证书档案独立于课程，删除课程后仍可查看。隐藏只影响展柜展示，销毁则替换档案内容并保留禁止重签的标记。示例证书带展示日期，可隐藏和销毁。课程列表的「已领证书」与已领取证书统计均基于未销毁的正式证书。
+
+**背景。** 全屏背景由 [Backdrop.kt](../app/src/main/java/com/lifeskill/app/ui/Backdrop.kt) 统一绘制：3 色斜向底 + 4 团固定构图的柔光斑，先渲染进 72×156 的小图再放大，绘制时只剩一次纹理填充（直接用全屏渐变会让滚动掉帧），颗粒 1:1 叠加。构图是共享常量，换主题只改 `mistyScene` 的色值；学习页是中性灰，AI 页是同结构的冷蓝。启动页 `launch_background` 必须与首页顶部同色，否则淡出接力会出现亮块。
 
 **动效。** 时长、曲线与各场景做法统一取 [Motion.kt](../app/src/main/java/com/lifeskill/app/ui/Motion.kt) 的令牌，规格见[动效语言](motion.md)。同一类状态变化只允许一种节奏；换内容、展开区块、全屏浮层的尺寸动画只保留一个主人（`animateContentSize` 或 `SizeTransform`，不叠加）；新动效只动透明度与变换，不触发重新测量。
 
