@@ -21,21 +21,21 @@ gh release view --json tagName,isDraft,isPrerelease,url,assets
 
 | 项目 | 当前值 |
 | --- | --- |
-| 快照日期 | 2026-11-24，Asia/Shanghai |
+| 快照日期 | 2026-11-26，Asia/Shanghai |
 | 分支 | `main` |
-| 最新产品与发布提交 | `5874d6a`（完整哈希见 `git rev-parse v0.15.39`） |
-| 最新版本 | `0.15.39` |
-| `versionCode` | `126` |
-| 标签 | `v0.15.39` |
-| Release | [LifeSkill 0.15.39](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.39) |
-| APK 文件名 | `LifeSkill-0.15.39-release.apk` |
+| 最新产品与发布提交 | `b11cdfb`（完整哈希见 `git rev-parse v0.15.41`） |
+| 最新版本 | `0.15.41` |
+| `versionCode` | `128` |
+| 标签 | `v0.15.41` |
+| Release | [LifeSkill 0.15.41](https://github.com/daybreak430/LifeSkill/releases/tag/v0.15.41) |
+| APK 文件名 | `LifeSkill-0.15.41-release.apk` |
 | APK 大小 | `18,332,135` bytes |
-| APK SHA-256 | `d80ee19376bd23210e2177dbfd892ab498f61b85c8d5a53f7480b54c832363c6` |
+| APK SHA-256 | `5ec989bc397f14fd27de162929a0b5aa213cebb6134d095a11f45eb92026266a` |
 | SDK | `minSdk 26`、`targetSdk 36`、`compileSdk 37` |
 
-本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.39..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
+本交接文档可能位于多个仅文档提交之后。查询 `git log v0.15.41..HEAD --oneline` 可确认发布后是否只有文档维护，还是已有新的代码变更。
 
-`0.15.39` 已发布：标签指向 `5874d6a`，Release 附件大小与 SHA-256 和本地 APK 一致，签名证书与 0.15.38 相同（`ad01e104…7630a`），已完成覆盖升级安装验证。本次只改界面动效与文档，不涉及数据、提示词和依赖；动效规则见[动效语言](motion.md)。
+`0.15.41` 已发布：标签指向 `b11cdfb`，Release 附件大小与 SHA-256 和本地 APK 一致，签名证书与历史发布相同（`ad01e104…7630a`），已从 0.15.40 覆盖升级安装验证。本次是 `0.15.40` 背景改动的整体回退，产物与 `0.15.39` 完全等价（同样 `18,332,135` bytes）；动效规则见[动效语言](motion.md)，背景规则见[架构与代码导航](architecture.md)。
 
 `release/*.apk` 被 Git 忽略，克隆仓库后本地不保证存在 APK。需要安装时从 GitHub Release 下载，或按 [贡献指南](../CONTRIBUTING.md#构建发布包) 从同一源码提交重建、签名并校验。
 
